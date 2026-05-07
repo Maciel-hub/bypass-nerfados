@@ -1,0 +1,38 @@
+using System.Text.RegularExpressions;
+
+namespace BypassNerfados.Scanner.Core;
+
+public class ScanConfig
+{
+    private string _targetDrive = "C:";
+
+    public string TargetDrive
+    {
+        get => _targetDrive;
+        set
+        {
+            if (!IsValidDrive(value))
+                throw new ArgumentException($"Drive inválido: '{value}'. Use formato letra: (ex: C:)");
+            _targetDrive = value.ToUpperInvariant().TrimEnd('\\');
+        }
+    }
+
+    public string? InvestigatorName { get; set; }
+    public string? SuspectName { get; set; }
+    public string? CaseId { get; set; }
+    public DateTime? BanDate { get; set; }
+    public bool VerboseOutput { get; set; } = false;
+    public bool SaveReport { get; set; } = true;
+    public string ReportOutputPath { get; set; } = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+    public bool ScanAllUsers { get; set; } = true;
+    public bool DeepMemoryScan { get; set; } = true;
+    public bool ScanNetworkUsage { get; set; } = true;
+    public bool RunUsnJournal { get; set; } = true;
+    public TimeSpan EventWindowLookback { get; set; } = TimeSpan.FromDays(30);
+
+    public string ReportFileName =>
+        $"Bypass_Nerfados_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}";
+
+    public static bool IsValidDrive(string drive) =>
+        Regex.IsMatch(drive?.Trim() ?? "", @"^[A-Za-z]:[\\/]?$");
+}

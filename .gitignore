@@ -1,0 +1,48 @@
+# Build output
+bin/
+obj/
+build/
+publish/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+*.sln.iml
+
+# Logs e relatórios gerados (não versionar)
+*.html
+*.txt
+Bypass_Nerfados_*.html
+Bypass_Nerfados_*.txt
+evidence-manifest*.json
+
+# NuGet
+*.nupkg
+*.snupkg
+packages.lock.json
+nuget.config
+
+# Ambiente local
+.env
+*.env.local
+launchSettings.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Documentos sensíveis
+*.docx
+*.pdf
+
+# Temporários
+*.tmp
+*.temp
+*.log
