@@ -17,6 +17,9 @@ for (int i = 0; i < args.Length; i++)
         case "--suspect" when i + 1 < args.Length:
             config.SuspectName = args[++i];
             break;
+        case "--case-id" when i + 1 < args.Length:
+            config.CaseId = args[++i];
+            break;
         case "--drive" when i + 1 < args.Length:
             config.TargetDrive = args[++i];
             break;
@@ -87,6 +90,7 @@ static void PrintHelp()
     AnsiConsole.MarkupLine("[bold]OPÇÕES:[/]");
     AnsiConsole.MarkupLine("  --investigator <nome>   Nome do investigador (para o relatório)");
     AnsiConsole.MarkupLine("  --suspect <nome>        Nome do suspeito (para o relatório)");
+    AnsiConsole.MarkupLine("  --case-id <id>          ID do caso/investigação");
     AnsiConsole.MarkupLine("  --drive <letra>         Drive a ser analisado (padrão: C:)");
     AnsiConsole.MarkupLine("  --output <caminho>      Pasta de saída do relatório");
     AnsiConsole.MarkupLine("  --no-usn                Pular análise do USN Journal");
@@ -97,7 +101,7 @@ static void PrintHelp()
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[bold]EXEMPLOS:[/]");
     AnsiConsole.MarkupLine("  BypassNerfados.exe");
-    AnsiConsole.MarkupLine("  BypassNerfados.exe --investigator \"Fulano\" --suspect \"Ciclano\"");
+    AnsiConsole.MarkupLine("  BypassNerfados.exe --investigator \"Fulano\" --suspect \"Ciclano\" --case-id \"CASO-001\"");
     AnsiConsole.MarkupLine("  BypassNerfados.exe --no-memory --output C:\\Relatorios");
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[grey]IMPORTANTE: Execute como Administrador para acesso completo.[/]");

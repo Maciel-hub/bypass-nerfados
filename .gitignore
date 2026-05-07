@@ -25,8 +25,11 @@ evidence-manifest*.json
 # NuGet
 *.nupkg
 *.snupkg
-packages.lock.json
 nuget.config
+# packages.lock.json deve ser versionado para builds reproduzíveis
+
+# Claude Code (configurações locais de IA — não versionar)
+.claude/
 
 # Ambiente local
 .env

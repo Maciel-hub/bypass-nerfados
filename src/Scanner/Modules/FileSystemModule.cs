@@ -106,7 +106,7 @@ public class FileSystemModule : BaseModule
                             "File System",
                             $"CHEAT NA PASTA TEMP: {cheat.Name}",
                             $"Executável de cheat na pasta temporária.\nArquivo: {file}",
-                            $"SHA1: {GetFileHash(file) ?? "N/A"}"
+                            $"SHA256: {GetFileHash(file) ?? "N/A"}"
                         ));
                         continue;
                     }
@@ -152,7 +152,7 @@ public class FileSystemModule : BaseModule
                         "File System",
                         $"CHEAT NOS DOWNLOADS: {cheat.Name}",
                         $"Arquivo de cheat encontrado na pasta de Downloads.\nArquivo: {file}",
-                        $"SHA1: {GetFileHash(file) ?? "N/A"}"
+                        $"SHA256: {GetFileHash(file) ?? "N/A"}"
                     ));
                     continue;
                 }

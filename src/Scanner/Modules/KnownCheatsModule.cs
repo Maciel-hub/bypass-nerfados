@@ -63,7 +63,7 @@ public class KnownCheatsModule : BaseModule
                         "Known Cheats",
                         $"CHEAT ENCONTRADO NO DISCO: {cheat.Name}",
                         $"Arquivo: {file}\n{cheat.Description}",
-                        $"SHA1: {hash ?? "N/A"} | Tamanho: {new FileInfo(file).Length} bytes"
+                        $"SHA256: {hash ?? "N/A"} | Tamanho: {new FileInfo(file).Length} bytes"
                     ));
                 }
             }
@@ -83,7 +83,7 @@ public class KnownCheatsModule : BaseModule
                         "Known Cheats",
                         $"CHEAT DLL ENCONTRADA: {cheat.Name} ({fileName})",
                         $"Arquivo: {file}\n{cheat.Description}",
-                        $"Tamanho: {sizeKb} KB | SHA1: {GetFileHash(file) ?? "N/A"}"
+                        $"Tamanho: {sizeKb} KB | SHA256: {GetFileHash(file) ?? "N/A"}"
                     ));
                 }
             }
@@ -100,8 +100,9 @@ public class KnownCheatsModule : BaseModule
 
         if (File.Exists(fakeWhatsApp))
         {
-            var hash = GetFileHash(fakeWhatsApp);
-            var isConfirmed = string.Equals(hash, "a7d04fdbc41fe2165a4cbc8e0657052ec3fb334f",
+            var sha256 = GetFileHash(fakeWhatsApp);           // for evidence label
+            var sha1   = GetFileSha1(fakeWhatsApp);           // for db comparison (known hash is SHA1)
+            var isConfirmed = string.Equals(sha1, "a7d04fdbc41fe2165a4cbc8e0657052ec3fb334f",
                 StringComparison.OrdinalIgnoreCase);
             findings.Add(new Finding(
                 RiskLevel.Critical,
@@ -111,7 +112,7 @@ public class KnownCheatsModule : BaseModule
                     ? "GOSTH LOADER CONFIRMADO: WhatsApp Installer.exe em System32"
                     : "WhatsApp Installer.exe suspeito em System32\\WinBioDatabase",
                 "Executável malicioso disfarçado de WhatsApp Installer encontrado em System32\\WinBioDatabase.",
-                $"Caminho: {fakeWhatsApp} | SHA1: {hash ?? "N/A"}"
+                $"Caminho: {fakeWhatsApp} | SHA256: {sha256 ?? "N/A"}"
             ));
         }
 
@@ -133,7 +134,7 @@ public class KnownCheatsModule : BaseModule
                         "Known Cheats",
                         $"GOSTH LOADER: {Path.GetFileName(file)} em AppData\\Programs\\Common",
                         $"Caminho típico do loader GOSTH detectado.\nArquivo: {file}",
-                        $"SHA1: {GetFileHash(file) ?? "N/A"}"
+                        $"SHA256: {GetFileHash(file) ?? "N/A"}"
                     ));
                 }
             }
@@ -174,7 +175,7 @@ public class KnownCheatsModule : BaseModule
                         "Known Cheats",
                         $"PADRÃO GOSTH em System32: {Path.GetFileName(f)}",
                         $"Arquivo com nome aleatório de 8-10 chars na System32 — padrão característico do GOSTH.\nCaminho: {f}",
-                        $"Tamanho: {size} bytes | SHA1: {(size > 0 ? GetFileHash(f) ?? "N/A" : "vazio")}"
+                        $"Tamanho: {size} bytes | SHA256: {(size > 0 ? GetFileHash(f) ?? "N/A" : "vazio")}"
                     ));
                 }
             }
@@ -204,7 +205,7 @@ public class KnownCheatsModule : BaseModule
                     "Known Cheats",
                     $"CHEAT DLL FiveM: d3d10.dll nos Plugins ({sizeKb} KB)",
                     $"DLL de cheat encontrada na pasta de Plugins do FiveM. Tamanho típico: ~1MB.\nArquivo: {file}",
-                    $"SHA1: {GetFileHash(file) ?? "N/A"} | Tamanho: {sizeKb} KB"
+                    $"SHA256: {GetFileHash(file) ?? "N/A"} | Tamanho: {sizeKb} KB"
                 ));
                 continue;
             }

@@ -107,7 +107,8 @@ public static class CheatDatabase
         return SuspiciousKeywords.Any(k => lower.Contains(k));
     }
 
-    public static CheatInfo? FindByHash(string sha1)
+    // Hashes stored in the database are SHA1 — callers must pass GetFileSha1() result
+    public static CheatInfo? FindBySha1(string sha1)
     {
         foreach (var cheat in KnownExecutables.Values)
             if (cheat.Hashes?.Contains(sha1, StringComparer.OrdinalIgnoreCase) == true)
