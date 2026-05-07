@@ -7,8 +7,10 @@ namespace BypassNerfados.Scanner.Modules;
 
 public class RegistryArtifactsModule : BaseModule
 {
-    public override string Name => "Registry Artifacts";
+    public override string Name => ModuleName;
     public override string Description => "Store, MuiCache, RecentDocs, 7-Zip, ArcHistory, MountedDevices";
+
+    private const string ModuleName = "Registry Artifacts";
 
     protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
@@ -51,7 +53,7 @@ public class RegistryArtifactsModule : BaseModule
                     findings.Add(new Finding(
                         RiskLevel.Critical,
                         FindingCategory.Cheat,
-                        Name,
+                        ModuleName,
                         $"CHEAT NA STORE: {cheat.Name} ({fileName})",
                         $"Executável encontrado na chave PCA Store.\n{cheat.Description}",
                         $"Caminho: {valueName} | {pca}"
@@ -64,7 +66,7 @@ public class RegistryArtifactsModule : BaseModule
                     findings.Add(new Finding(
                         RiskLevel.High,
                         FindingCategory.RegistryArtifact,
-                        Name,
+                        ModuleName,
                         $"Execução suspeita na Store: {fileName}",
                         $"Caminho: {valueName}",
                         pca
@@ -98,7 +100,7 @@ public class RegistryArtifactsModule : BaseModule
                     findings.Add(new Finding(
                         RiskLevel.Critical,
                         FindingCategory.Cheat,
-                        Name,
+                        ModuleName,
                         $"CHEAT NO MUICACHE: {cheat.Name}",
                         $"Executável registrado no MuiCache (confirma execução).\n{cheat.Description}",
                         $"Caminho: {exePath}"
@@ -111,7 +113,7 @@ public class RegistryArtifactsModule : BaseModule
                     findings.Add(new Finding(
                         RiskLevel.High,
                         FindingCategory.RegistryArtifact,
-                        Name,
+                        ModuleName,
                         $"Execução suspeita no MuiCache: {fileName}",
                         $"Caminho: {exePath}"
                     ));
@@ -172,7 +174,7 @@ public class RegistryArtifactsModule : BaseModule
                     findings.Add(new Finding(
                         RiskLevel.High,
                         FindingCategory.RegistryArtifact,
-                        Name,
+                        ModuleName,
                         $"Arquivo suspeito nos Docs Recentes: {name}",
                         $"Arquivo {ext} suspeito acessado recentemente.",
                         $"Nome: {name}"
@@ -203,7 +205,7 @@ public class RegistryArtifactsModule : BaseModule
                     findings.Add(new Finding(
                         RiskLevel.Medium,
                         FindingCategory.RegistryArtifact,
-                        Name,
+                        ModuleName,
                         $"7-Zip: arquivo suspeito acessado",
                         $"Caminho/arquivo acessado pelo 7-Zip: {val}"
                     ));
@@ -228,7 +230,7 @@ public class RegistryArtifactsModule : BaseModule
                     findings.Add(new Finding(
                         RiskLevel.Medium,
                         FindingCategory.RegistryArtifact,
-                        Name,
+                        ModuleName,
                         $"WinRAR: arquivo suspeito: {Path.GetFileName(val)}",
                         $"Arquivo acessado recentemente pelo WinRAR: {val}"
                     ));
@@ -254,7 +256,7 @@ public class RegistryArtifactsModule : BaseModule
                 findings.Add(new Finding(
                     RiskLevel.Medium,
                     FindingCategory.DeviceAnomaly,
-                    Name,
+                    ModuleName,
                     $"Múltiplos volumes montados: {driveCount} dispositivos",
                     "Histórico de discos conectados ao sistema. Verificar se há volumes suspeitos.",
                     $"Total de dispositivos: {driveCount}"
@@ -290,7 +292,7 @@ public class RegistryArtifactsModule : BaseModule
                         findings.Add(new Finding(
                             RiskLevel.High,
                             FindingCategory.SuspiciousExecution,
-                            Name,
+                            ModuleName,
                             $"Inicialização suspeita ({label}): {valueName}",
                             $"Entrada de inicialização automática suspeita.\nComando: {value}",
                             $"Chave: {label}\\{valueName}"
