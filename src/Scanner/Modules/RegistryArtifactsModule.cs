@@ -10,15 +10,20 @@ public class RegistryArtifactsModule : BaseModule
     public override string Name => "Registry Artifacts";
     public override string Description => "Store, MuiCache, RecentDocs, 7-Zip, ArcHistory, MountedDevices";
 
-    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config)
+    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
 
         ScanCompatibilityStore(findings);
+        cancellationToken.ThrowIfCancellationRequested();
         ScanMuiCache(findings);
+        cancellationToken.ThrowIfCancellationRequested();
         ScanRecentDocs(findings);
+        cancellationToken.ThrowIfCancellationRequested();
         ScanArchiveHistory(findings);
+        cancellationToken.ThrowIfCancellationRequested();
         ScanMountedDevices(findings);
+        cancellationToken.ThrowIfCancellationRequested();
         ScanStartupEntries(findings);
 
         return Task.FromResult(findings);

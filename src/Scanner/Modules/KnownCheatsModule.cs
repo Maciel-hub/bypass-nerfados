@@ -16,7 +16,7 @@ public class KnownCheatsModule : BaseModule
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "FiveM"),
     ];
 
-    protected override async Task<List<Finding>> ExecuteAsync(ScanConfig config)
+    protected override async Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
 
@@ -25,33 +25,36 @@ public class KnownCheatsModule : BaseModule
         {
             foreach (var root in SearchRoots)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!Directory.Exists(root)) continue;
-                SearchDirectory(root, findings);
+                SearchDirectory(root, findings, cancellationToken);
             }
 
             // Specific path checks from the document
-            CheckSpecificPaths(findings);
-        });
+            CheckSpecificPaths(findings, cancellationToken);
+        }, cancellationToken);
 
         // Check GOSTH pattern: random 8-10 char filename in System32
-        CheckGosthPattern(findings);
+        CheckGosthPattern(findings, cancellationToken);
 
         // Check d3d10.dll in FiveM Plugins
-        CheckFiveMPlugins(findings);
+        CheckFiveMPlugins(findings, cancellationToken);
 
         // Check PSReadLine history
-        CheckPsReadLine(findings);
+        CheckPsReadLine(findings, cancellationToken);
 
         return findings;
     }
 
-    private static void SearchDirectory(string root, List<Finding> findings)
+    private static void SearchDirectory(string root, List<Finding> findings, CancellationToken cancellationToken)
     {
         try
         {
             foreach (var file in Directory.EnumerateFiles(root, "*.exe",
                 new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, MaxRecursionDepth = 5 }))
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var fileName = Path.GetFileName(file).ToLowerInvariant();
 
                 if (CheatDatabase.KnownExecutables.TryGetValue(fileName, out var cheat))
@@ -72,6 +75,8 @@ public class KnownCheatsModule : BaseModule
             foreach (var file in Directory.EnumerateFiles(root, "*.dll",
                 new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, MaxRecursionDepth = 5 }))
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var fileName = Path.GetFileName(file).ToLowerInvariant();
                 if (CheatDatabase.KnownDlls.TryGetValue(fileName, out var cheat))
                 {
@@ -88,12 +93,15 @@ public class KnownCheatsModule : BaseModule
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { }
     }
 
-    private static void CheckSpecificPaths(List<Finding> findings)
+    private static void CheckSpecificPaths(List<Finding> findings, CancellationToken cancellationToken)
     {
         // WhatsApp Installer falso em System32\WinBioDatabase
+        cancellationToken.ThrowIfCancellationRequested();
+
         var fakeWhatsApp = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.System),
             "WinBioDatabase", "WhatsApp Installer.exe");
@@ -125,6 +133,8 @@ public class KnownCheatsModule : BaseModule
         {
             foreach (var file in Directory.GetFiles(dxsetupPath, "*", SearchOption.AllDirectories))
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var lower = Path.GetFileName(file).ToLowerInvariant();
                 if (lower.Contains("dxsetup") || lower.Contains("launcher"))
                 {
@@ -141,12 +151,14 @@ public class KnownCheatsModule : BaseModule
         }
     }
 
-    private static void CheckGosthPattern(List<Finding> findings)
+    private static void CheckGosthPattern(List<Finding> findings, CancellationToken cancellationToken)
     {
         // GOSTH gera arquivo de 8-10 chars aleatórios (apenas letras/números) na System32
         // e um arquivo com 8-10 dígitos numéricos com 0 KB
         try
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var system32 = Environment.GetFolderPath(Environment.SpecialFolder.System);
             var files = Directory.GetFiles(system32, "*")
                 .Where(f =>
@@ -168,6 +180,8 @@ public class KnownCheatsModule : BaseModule
             {
                 foreach (var f in files)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     var size = new FileInfo(f).Length;
                     findings.Add(new Finding(
                         RiskLevel.Critical,
@@ -180,10 +194,11 @@ public class KnownCheatsModule : BaseModule
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { }
     }
 
-    private static void CheckFiveMPlugins(List<Finding> findings)
+    private static void CheckFiveMPlugins(List<Finding> findings, CancellationToken cancellationToken)
     {
         var fivemData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -193,6 +208,8 @@ public class KnownCheatsModule : BaseModule
 
         foreach (var file in Directory.GetFiles(fivemData, "*.dll", SearchOption.AllDirectories))
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var info = new FileInfo(file);
             var sizeKb = info.Length / 1024;
 
@@ -225,7 +242,7 @@ public class KnownCheatsModule : BaseModule
         }
     }
 
-    private static void CheckPsReadLine(List<Finding> findings)
+    private static void CheckPsReadLine(List<Finding> findings, CancellationToken cancellationToken)
     {
         var psHistory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -238,6 +255,8 @@ public class KnownCheatsModule : BaseModule
             var lines = File.ReadAllLines(psHistory);
             foreach (var line in lines)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var lower = line.ToLowerInvariant();
 
                 if (lower.Contains("wevtutil") && (lower.Contains(" cl ") || lower.Contains("clear-log")))
@@ -275,6 +294,7 @@ public class KnownCheatsModule : BaseModule
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { }
     }
 }

@@ -17,21 +17,23 @@ public class ProcessMemoryModule : BaseModule
     private static readonly string[] SuspiciousParentProcesses =
         ["cmd", "powershell", "wscript", "cscript", "mshta", "regsvr32", "rundll32"];
 
-    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config)
+    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
 
-        ScanRunningProcesses(findings);
-        ScanMemoryRegions(findings);
-        ScanProcessTree(findings);
+        ScanRunningProcesses(findings, cancellationToken);
+        ScanMemoryRegions(findings, cancellationToken);
+        ScanProcessTree(findings, cancellationToken);
 
         return Task.FromResult(findings);
     }
 
-    private static void ScanRunningProcesses(List<Finding> findings)
+    private static void ScanRunningProcesses(List<Finding> findings, CancellationToken cancellationToken)
     {
         foreach (var proc in Process.GetProcesses())
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             try
             {
                 var nameLower = proc.ProcessName.ToLowerInvariant();
@@ -64,28 +66,34 @@ public class ProcessMemoryModule : BaseModule
                     ));
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch { }
         }
     }
 
-    private static void ScanMemoryRegions(List<Finding> findings)
+    private static void ScanMemoryRegions(List<Finding> findings, CancellationToken cancellationToken)
     {
         // Scan FiveM and target game processes for memory anomalies
         foreach (var targetName in TargetProcessNames)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var procs = Process.GetProcessesByName(targetName);
             foreach (var proc in procs)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 try
                 {
-                    ScanProcessMemoryRegions(proc, findings);
+                    ScanProcessMemoryRegions(proc, findings, cancellationToken);
                 }
+                catch (OperationCanceledException) { throw; }
                 catch { }
             }
         }
     }
 
-    private static void ScanProcessMemoryRegions(Process proc, List<Finding> findings)
+    private static void ScanProcessMemoryRegions(Process proc, List<Finding> findings, CancellationToken cancellationToken)
     {
         var handle = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, (uint)proc.Id);
         if (handle == IntPtr.Zero) return;
@@ -97,6 +105,8 @@ public class ProcessMemoryModule : BaseModule
 
             while (VirtualQueryEx(handle, address, out var mbi, (uint)Marshal.SizeOf<MEMORY_BASIC_INFORMATION>()) > 0)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 // Look for executable private memory not backed by a file
                 if (mbi.State == MEM_COMMIT &&
                     mbi.Type == MEM_PRIVATE &&
@@ -163,7 +173,7 @@ public class ProcessMemoryModule : BaseModule
         }
     }
 
-    private static void ScanProcessTree(List<Finding> findings)
+    private static void ScanProcessTree(List<Finding> findings, CancellationToken cancellationToken)
     {
         // Check FiveM parent process — should be FiveM_GTAProcess or similar, not cmd/powershell
         var fivemProcesses = Process.GetProcessesByName("fivem");
@@ -171,6 +181,8 @@ public class ProcessMemoryModule : BaseModule
 
         foreach (var fivem in fivemProcesses)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             try
             {
                 var ppid = GetParentProcessId((uint)fivem.Id);
@@ -192,6 +204,7 @@ public class ProcessMemoryModule : BaseModule
                     ));
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch { }
         }
     }

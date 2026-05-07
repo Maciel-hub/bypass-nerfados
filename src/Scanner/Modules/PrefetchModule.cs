@@ -12,7 +12,7 @@ public class PrefetchModule : BaseModule
     private static readonly string PrefetchPath =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Prefetch");
 
-    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config)
+    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
 
@@ -47,6 +47,8 @@ public class PrefetchModule : BaseModule
 
         foreach (var pfFile in pfFiles)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var fileName = Path.GetFileNameWithoutExtension(pfFile);
             // Prefetch format: EXENAME-HASH.pf — extract executable name
             // P0.5 fix: fileName may be "LAUNCHER.EXE-A1B2C3D4"; after splitting we get "LAUNCHER.EXE"

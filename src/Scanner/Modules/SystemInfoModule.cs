@@ -9,14 +9,18 @@ public class SystemInfoModule : BaseModule
     public override string Name => "System Info";
     public override string Description => "Informações do sistema, data de instalação e proteção DMA";
 
-    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config)
+    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
 
         GetSystemInfo(findings);
+        cancellationToken.ThrowIfCancellationRequested();
         CheckInstallDate(findings);
-        CheckDmaProtection(findings);
-        CheckUnknownPcieDevices(findings);
+        cancellationToken.ThrowIfCancellationRequested();
+        CheckDmaProtection(findings, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        CheckUnknownPcieDevices(findings, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         CheckVirtualization(findings);
 
         return Task.FromResult(findings);
@@ -87,7 +91,7 @@ public class SystemInfoModule : BaseModule
         catch { }
     }
 
-    private static void CheckDmaProtection(List<Finding> findings)
+    private static void CheckDmaProtection(List<Finding> findings, CancellationToken cancellationToken)
     {
         // Check Kernel DMA Protection status
         try
@@ -130,6 +134,8 @@ public class SystemInfoModule : BaseModule
 
             while ((record = reader.ReadEvent()) != null && count < 10)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 using (record)
                 {
                     count++;
@@ -153,17 +159,19 @@ public class SystemInfoModule : BaseModule
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { }
     }
 
-    private static void CheckUnknownPcieDevices(List<Finding> findings)
+    private static void CheckUnknownPcieDevices(List<Finding> findings, CancellationToken cancellationToken)
     {
         // Use SetupAPI via WMI to look for unknown or recently added PCIe/Thunderbolt devices
         try
         {
             var output = RunCmd("cmd.exe",
                 @"/c pnputil /enum-devices /class Display 2>nul & pnputil /enum-devices /class USB 2>nul",
-                10000);
+                10000,
+                cancellationToken);
 
             if (string.IsNullOrEmpty(output)) return;
 
@@ -172,6 +180,8 @@ public class SystemInfoModule : BaseModule
 
             foreach (var line in lines)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 if (line.Contains("Unknown", StringComparison.OrdinalIgnoreCase) ||
                     line.Contains("Desconhecido", StringComparison.OrdinalIgnoreCase))
                 {
@@ -191,6 +201,7 @@ public class SystemInfoModule : BaseModule
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { }
     }
 

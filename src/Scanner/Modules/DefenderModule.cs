@@ -10,18 +10,18 @@ public class DefenderModule : BaseModule
     public override string Name => "Windows Defender";
     public override string Description => "Histórico de detecções e alterações de configuração do Defender";
 
-    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config)
+    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
 
-        ScanProtectionHistory(findings);
-        ScanDefenderConfigChanges(findings);
+        ScanProtectionHistory(findings, cancellationToken);
+        ScanDefenderConfigChanges(findings, cancellationToken);
         CheckDefenderStatus(findings);
 
         return Task.FromResult(findings);
     }
 
-    private static void ScanProtectionHistory(List<Finding> findings)
+    private static void ScanProtectionHistory(List<Finding> findings, CancellationToken cancellationToken)
     {
         // Event IDs for Defender:
         // 1116 = malware detected
@@ -42,6 +42,8 @@ public class DefenderModule : BaseModule
 
             while ((record = reader.ReadEvent()) != null)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 using (record)
                 {
                     try
@@ -76,10 +78,11 @@ public class DefenderModule : BaseModule
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { /* Defender log unavailable */ }
     }
 
-    private static void ScanDefenderConfigChanges(List<Finding> findings)
+    private static void ScanDefenderConfigChanges(List<Finding> findings, CancellationToken cancellationToken)
     {
         try
         {
@@ -93,6 +96,8 @@ public class DefenderModule : BaseModule
 
             while ((record = reader.ReadEvent()) != null)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 using (record)
                 {
                     try
@@ -122,6 +127,7 @@ public class DefenderModule : BaseModule
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { }
     }
 

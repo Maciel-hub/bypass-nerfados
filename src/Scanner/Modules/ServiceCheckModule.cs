@@ -27,12 +27,14 @@ public class ServiceCheckModule : BaseModule
         new("mpssvc",     "Windows Firewall",                          true),
     ];
 
-    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config)
+    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
 
         foreach (var svc in MonitoringServices)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             try
             {
                 using var sc = new ServiceController(svc.Name);
@@ -73,6 +75,7 @@ public class ServiceCheckModule : BaseModule
                     ));
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch { /* access denied or other */ }
         }
 

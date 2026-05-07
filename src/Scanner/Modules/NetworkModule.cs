@@ -10,23 +10,25 @@ public class NetworkModule : BaseModule
     public override string Name => "Network Usage";
     public override string Description => "Conexões ativas e histórico de uso de dados por executável";
 
-    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config)
+    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
 
-        ScanActiveTcpConnections(findings);
-        ScanNetworkDataUsage(findings);
+        ScanActiveTcpConnections(findings, cancellationToken);
+        ScanNetworkDataUsage(findings, cancellationToken);
 
         return Task.FromResult(findings);
     }
 
-    private static void ScanActiveTcpConnections(List<Finding> findings)
+    private static void ScanActiveTcpConnections(List<Finding> findings, CancellationToken cancellationToken)
     {
         var connections = GetTcpConnections();
         var processConnections = connections.GroupBy(c => c.ProcessId).ToList();
 
         foreach (var group in processConnections)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             try
             {
                 var proc = System.Diagnostics.Process.GetProcessById(group.Key);
@@ -65,6 +67,8 @@ public class NetworkModule : BaseModule
                 // Detect suspicious executables connecting to non-standard ports
                 foreach (var conn in group.Where(c => !IsLocalAddress(c.RemoteAddress)))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     if (conn.RemotePort is >= 4444 and <= 9999 &&
                         !IsKnownSafeProcess(nameLower))
                     {
@@ -79,16 +83,17 @@ public class NetworkModule : BaseModule
                     }
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch { }
         }
     }
 
-    private static void ScanNetworkDataUsage(List<Finding> findings)
+    private static void ScanNetworkDataUsage(List<Finding> findings, CancellationToken cancellationToken)
     {
         // Supplement with netstat output for running connections
         try
         {
-            var netstatOutput = RunCmd("cmd.exe", "/c netstat -bno 2>nul", 15000);
+            var netstatOutput = RunCmd("cmd.exe", "/c netstat -bno 2>nul", 15000, cancellationToken);
             if (string.IsNullOrEmpty(netstatOutput)) return;
 
             var lines = netstatOutput.Split('\n');
@@ -96,6 +101,8 @@ public class NetworkModule : BaseModule
 
             foreach (var line in lines)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var trimmed = line.Trim();
                 if (trimmed.StartsWith("[") && trimmed.EndsWith("]"))
                 {
@@ -120,6 +127,7 @@ public class NetworkModule : BaseModule
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { }
     }
 

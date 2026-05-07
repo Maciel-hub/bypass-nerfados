@@ -24,30 +24,33 @@ public class EventViewerModule : BaseModule
         new("Application", 1000, RiskLevel.Medium, FindingCategory.SystemTampering, "Aplicação crashou (1000)"),
     ];
 
-    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config)
+    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
         var since = DateTime.UtcNow - config.EventWindowLookback;
 
         foreach (var spec in Specs)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             try
             {
-                QueryEventLog(spec, findings, since);
+                QueryEventLog(spec, findings, since, cancellationToken);
             }
+            catch (OperationCanceledException) { throw; }
             catch { /* log not available or access denied */ }
         }
 
         // Check for USN reset event (ID 3079 in Application log - NTFS)
-        ScanUsnResetEvent(findings);
+        ScanUsnResetEvent(findings, cancellationToken);
 
         // Check 4688 for suspicious process creation
-        ScanProcessCreationEvents(findings);
+        ScanProcessCreationEvents(findings, cancellationToken);
 
         return Task.FromResult(findings);
     }
 
-    private static void QueryEventLog(EventSpec spec, List<Finding> findings, DateTime since)
+    private static void QueryEventLog(EventSpec spec, List<Finding> findings, DateTime since, CancellationToken cancellationToken)
     {
         // Use time window to show recent events first (ReverseDirection)
         var sinceStr = since.ToString("yyyy-MM-ddTHH:mm:ss.000Z");
@@ -67,6 +70,8 @@ public class EventViewerModule : BaseModule
 
         while ((record = reader.ReadEvent()) != null && count < 20)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             using (record)
             {
                 count++;
@@ -98,7 +103,7 @@ public class EventViewerModule : BaseModule
         }
     }
 
-    private static void ScanUsnResetEvent(List<Finding> findings)
+    private static void ScanUsnResetEvent(List<Finding> findings, CancellationToken cancellationToken)
     {
         // ID 3079 in Application log = NTFS volume reset (possible USN journal bypass)
         try
@@ -112,6 +117,8 @@ public class EventViewerModule : BaseModule
             EventRecord? record;
             while ((record = reader.ReadEvent()) != null)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 using (record)
                 {
                     string description;
@@ -130,10 +137,11 @@ public class EventViewerModule : BaseModule
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { }
     }
 
-    private static void ScanProcessCreationEvents(List<Finding> findings)
+    private static void ScanProcessCreationEvents(List<Finding> findings, CancellationToken cancellationToken)
     {
         // ID 4688 = Process created. Look for suspicious cmd/powershell patterns
         try
@@ -149,6 +157,8 @@ public class EventViewerModule : BaseModule
 
             while ((record = reader.ReadEvent()) != null && count < 200)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 using (record)
                 {
                     count++;
@@ -203,6 +213,7 @@ public class EventViewerModule : BaseModule
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { }
     }
 

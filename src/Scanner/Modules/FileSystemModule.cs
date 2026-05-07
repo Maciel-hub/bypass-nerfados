@@ -9,20 +9,20 @@ public class FileSystemModule : BaseModule
     public override string Name => "File System";
     public override string Description => "Lixeira, Temp, Downloads, CrashDumps e arquivos suspeitos";
 
-    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config)
+    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
 
-        ScanRecycleBin(findings);
-        ScanTempFolders(findings);
-        ScanDownloads(findings);
-        ScanCrashDumps(findings);
-        ScanAppDataSuspicious(findings);
+        ScanRecycleBin(findings, cancellationToken);
+        ScanTempFolders(findings, cancellationToken);
+        ScanDownloads(findings, cancellationToken);
+        ScanCrashDumps(findings, cancellationToken);
+        ScanAppDataSuspicious(findings, cancellationToken);
 
         return Task.FromResult(findings);
     }
 
-    private static void ScanRecycleBin(List<Finding> findings)
+    private static void ScanRecycleBin(List<Finding> findings, CancellationToken cancellationToken)
     {
         var recyclePath = @"C:\$Recycle.Bin";
         if (!Directory.Exists(recyclePath)) return;
@@ -31,9 +31,13 @@ public class FileSystemModule : BaseModule
         {
             foreach (var userDir in Directory.GetDirectories(recyclePath))
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 foreach (var file in Directory.EnumerateFiles(userDir, "$I*",
                     new EnumerationOptions { IgnoreInaccessible = true }))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     try
                     {
                         // $I files contain original path info
@@ -72,14 +76,16 @@ public class FileSystemModule : BaseModule
                             ));
                         }
                     }
+                    catch (OperationCanceledException) { throw; }
                     catch { }
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { }
     }
 
-    private static void ScanTempFolders(List<Finding> findings)
+    private static void ScanTempFolders(List<Finding> findings, CancellationToken cancellationToken)
     {
         var tempPaths = new[]
         {
@@ -89,6 +95,7 @@ public class FileSystemModule : BaseModule
 
         foreach (var temp in tempPaths)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!Directory.Exists(temp)) continue;
 
             try
@@ -96,6 +103,8 @@ public class FileSystemModule : BaseModule
                 foreach (var file in Directory.EnumerateFiles(temp, "*.exe",
                     new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = true, MaxRecursionDepth = 2 }))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     var name = Path.GetFileName(file).ToLowerInvariant();
 
                     if (CheatDatabase.KnownExecutables.TryGetValue(name, out var cheat))
@@ -123,11 +132,12 @@ public class FileSystemModule : BaseModule
                     }
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch { }
         }
     }
 
-    private static void ScanDownloads(List<Finding> findings)
+    private static void ScanDownloads(List<Finding> findings, CancellationToken cancellationToken)
     {
         var downloads = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
@@ -139,6 +149,8 @@ public class FileSystemModule : BaseModule
             foreach (var file in Directory.EnumerateFiles(downloads, "*",
                 new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = true, MaxRecursionDepth = 2 }))
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var ext = Path.GetExtension(file).ToLowerInvariant();
                 var name = Path.GetFileName(file).ToLowerInvariant();
 
@@ -169,10 +181,11 @@ public class FileSystemModule : BaseModule
                 }
             }
         }
+        catch (OperationCanceledException) { throw; }
         catch { }
     }
 
-    private static void ScanCrashDumps(List<Finding> findings)
+    private static void ScanCrashDumps(List<Finding> findings, CancellationToken cancellationToken)
     {
         var crashDumps = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -194,6 +207,8 @@ public class FileSystemModule : BaseModule
         var dmpFiles = Directory.GetFiles(crashDumps, "*.dmp", SearchOption.AllDirectories);
         foreach (var dmp in dmpFiles)
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var name = Path.GetFileName(dmp);
             var lower = name.ToLowerInvariant();
 
@@ -213,7 +228,7 @@ public class FileSystemModule : BaseModule
         }
     }
 
-    private static void ScanAppDataSuspicious(List<Finding> findings)
+    private static void ScanAppDataSuspicious(List<Finding> findings, CancellationToken cancellationToken)
     {
         var appDataPaths = new[]
         {
@@ -223,12 +238,16 @@ public class FileSystemModule : BaseModule
 
         foreach (var root in appDataPaths)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!Directory.Exists(root)) continue;
+
             try
             {
                 foreach (var file in Directory.EnumerateFiles(root, "*.exe",
                     new EnumerationOptions { IgnoreInaccessible = true, MaxRecursionDepth = 4, RecurseSubdirectories = true }))
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     var name = Path.GetFileName(file).ToLowerInvariant();
 
                     if (CheatDatabase.KnownExecutables.TryGetValue(name, out var cheat))
@@ -243,6 +262,7 @@ public class FileSystemModule : BaseModule
                     }
                 }
             }
+            catch (OperationCanceledException) { throw; }
             catch { }
         }
     }

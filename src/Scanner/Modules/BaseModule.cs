@@ -18,7 +18,7 @@ public abstract class BaseModule
 
         try
         {
-            var findings = await ExecuteAsync(config);
+            var findings = await ExecuteAsync(config, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             return findings;
         }
@@ -30,7 +30,7 @@ public abstract class BaseModule
         }
     }
 
-    protected abstract Task<List<Finding>> ExecuteAsync(ScanConfig config);
+    protected abstract Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken);
 
     protected static string ConvertDevicePath(string devicePath)
     {
@@ -91,14 +91,16 @@ public abstract class BaseModule
         catch (OperationCanceledException)
         {
             try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
+            cancellationToken.ThrowIfCancellationRequested();
             return string.Empty;
         }
         catch { return string.Empty; }
     }
 
     // Sync wrapper kept for simple callers — internally uses the async version
-    protected static string RunCmd(string command, string arguments, int timeoutMs = 30000) =>
-        RunCmdAsync(command, arguments, timeoutMs).GetAwaiter().GetResult();
+    protected static string RunCmd(string command, string arguments, int timeoutMs = 30000,
+        CancellationToken cancellationToken = default) =>
+        RunCmdAsync(command, arguments, timeoutMs, cancellationToken).GetAwaiter().GetResult();
 
     // P0.6 fix: SHA256 as primary hash
     protected static string? GetFileHash(string path)

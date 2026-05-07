@@ -10,23 +10,29 @@ public class BamDamModule : BaseModule
     public override string Name => "BAM/DAM";
     public override string Description => "Background/Desktop Activity Moderator — histórico de execução";
 
-    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config)
+    protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
 
         foreach (var svcName in new[] { "bam", "dam" })
         {
+            cancellationToken.ThrowIfCancellationRequested();
+
             var hivePath = $@"SYSTEM\CurrentControlSet\Services\{svcName}\State\UserSettings";
             using var hive = Registry.LocalMachine.OpenSubKey(hivePath);
             if (hive == null) continue;
 
             foreach (var sid in hive.GetSubKeyNames())
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 using var userKey = hive.OpenSubKey(sid);
                 if (userKey == null) continue;
 
                 foreach (var valueName in userKey.GetValueNames())
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+
                     if (string.IsNullOrEmpty(valueName) || valueName == "Version" || valueName == "SequenceNumber")
                         continue;
 
