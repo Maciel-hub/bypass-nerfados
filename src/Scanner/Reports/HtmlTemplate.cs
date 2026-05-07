@@ -19,7 +19,23 @@ public static class HtmlTemplate
             _                  => "#6b7280"
         };
 
-        sb.Append($"""
+        // Pre-extract complex expressions so they can be used in $$""" raw strings
+        var machineName      = Esc(result.MachineName);
+        var currentUser      = Esc(result.CurrentUser);
+        var scanTime         = result.ScanTime.ToString("dd/MM/yyyy HH:mm:ss");
+        var totalScore       = result.TotalScore;
+        var riskLabel        = result.OverallRiskLabel;
+        var findingsCount    = result.Findings.Count;
+        var modulesCount     = result.ModulesRun.Count;
+        var suspectHtml      = config.SuspectName != null
+            ? $"""<div><span class="label">Suspeito</span><span class="value">{Esc(config.SuspectName)}</span></div>"""
+            : "";
+        var investigatorHtml = config.InvestigatorName != null
+            ? $"""<div><span class="label">Investigador</span><span class="value">{Esc(config.InvestigatorName)}</span></div>"""
+            : "";
+
+        // $$""" raw string: CSS braces are literal { }, C# interpolations use {{ }}
+        sb.Append($$"""
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -27,53 +43,53 @@ public static class HtmlTemplate
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Bypass Nerfados Shield XDR — Relatório</title>
 <style>
-  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ background: #0f0f0f; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }}
-  .header {{ background: linear-gradient(135deg, #1a1a2e, #16213e); border-bottom: 2px solid #dc2626; padding: 24px 32px; }}
-  .header h1 {{ font-size: 28px; font-weight: 800; color: #dc2626; letter-spacing: 2px; }}
-  .header h1 span {{ color: #fff; }}
-  .header .sub {{ color: #94a3b8; margin-top: 4px; font-size: 13px; }}
-  .header .meta {{ display: flex; gap: 32px; margin-top: 16px; flex-wrap: wrap; }}
-  .header .meta div {{ display: flex; flex-direction: column; }}
-  .header .meta .label {{ color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }}
-  .header .meta .value {{ color: #e2e8f0; font-weight: 600; margin-top: 2px; }}
-  .score-bar {{ background: #1e293b; border-bottom: 1px solid #334155; padding: 20px 32px; display: flex; align-items: center; gap: 32px; }}
-  .score-circle {{ width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-direction: column; border: 4px solid {riskColor}; background: #0f172a; flex-shrink: 0; }}
-  .score-circle .num {{ font-size: 24px; font-weight: 800; color: {riskColor}; }}
-  .score-circle .pts {{ font-size: 10px; color: #64748b; }}
-  .risk-badge {{ padding: 6px 16px; border-radius: 6px; font-weight: 800; font-size: 16px; background: {riskColor}22; color: {riskColor}; border: 1px solid {riskColor}44; }}
-  .stat-row {{ display: flex; gap: 16px; flex-wrap: wrap; }}
-  .stat {{ background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 20px; text-align: center; min-width: 80px; }}
-  .stat .n {{ font-size: 22px; font-weight: 700; }}
-  .stat .l {{ font-size: 11px; color: #64748b; text-transform: uppercase; margin-top: 2px; }}
-  .content {{ padding: 24px 32px; }}
-  .section {{ margin-bottom: 32px; }}
-  .section-title {{ font-size: 16px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #1e293b; }}
-  .finding {{ background: #1a1a2e; border: 1px solid #334155; border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; border-left: 4px solid; }}
-  .finding.critical {{ border-left-color: #dc2626; }}
-  .finding.high {{ border-left-color: #ea580c; }}
-  .finding.medium {{ border-left-color: #ca8a04; }}
-  .finding.low {{ border-left-color: #16a34a; }}
-  .finding.info {{ border-left-color: #475569; }}
-  .finding-header {{ display: flex; align-items: flex-start; gap: 10px; }}
-  .badge {{ padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; flex-shrink: 0; }}
-  .badge.critical {{ background: #dc262622; color: #dc2626; }}
-  .badge.high {{ background: #ea580c22; color: #ea580c; }}
-  .badge.medium {{ background: #ca8a0422; color: #ca8a04; }}
-  .badge.low {{ background: #16a34a22; color: #16a34a; }}
-  .badge.info {{ background: #47556922; color: #94a3b8; }}
-  .mod-badge {{ background: #0f172a; border: 1px solid #334155; padding: 2px 8px; border-radius: 4px; font-size: 11px; color: #64748b; flex-shrink: 0; }}
-  .finding-title {{ font-weight: 700; color: #e2e8f0; font-size: 14px; }}
-  .finding-detail {{ color: #94a3b8; font-size: 13px; margin-top: 6px; line-height: 1.5; white-space: pre-wrap; }}
-  .finding-evidence {{ background: #0f172a; border: 1px solid #334155; border-radius: 4px; padding: 6px 10px; font-family: monospace; font-size: 12px; color: #64748b; margin-top: 6px; }}
-  .timeline-item {{ display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid #1e293b; align-items: flex-start; }}
-  .timeline-ts {{ color: #475569; font-family: monospace; font-size: 12px; flex-shrink: 0; width: 145px; }}
-  .timeline-mod {{ color: #64748b; font-size: 11px; flex-shrink: 0; width: 100px; }}
-  table {{ width: 100%; border-collapse: collapse; }}
-  th {{ text-align: left; padding: 8px 12px; background: #1e293b; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }}
-  td {{ padding: 8px 12px; border-bottom: 1px solid #1e293b; color: #e2e8f0; font-size: 13px; }}
-  tr:hover td {{ background: #1e293b44; }}
-  .footer {{ background: #0a0a0f; border-top: 1px solid #1e293b; padding: 16px 32px; color: #334155; font-size: 12px; display: flex; justify-content: space-between; }}
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f0f0f; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+  .header { background: linear-gradient(135deg, #1a1a2e, #16213e); border-bottom: 2px solid #dc2626; padding: 24px 32px; }
+  .header h1 { font-size: 28px; font-weight: 800; color: #dc2626; letter-spacing: 2px; }
+  .header h1 span { color: #fff; }
+  .header .sub { color: #94a3b8; margin-top: 4px; font-size: 13px; }
+  .header .meta { display: flex; gap: 32px; margin-top: 16px; flex-wrap: wrap; }
+  .header .meta div { display: flex; flex-direction: column; }
+  .header .meta .label { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+  .header .meta .value { color: #e2e8f0; font-weight: 600; margin-top: 2px; }
+  .score-bar { background: #1e293b; border-bottom: 1px solid #334155; padding: 20px 32px; display: flex; align-items: center; gap: 32px; }
+  .score-circle { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-direction: column; border: 4px solid {{riskColor}}; background: #0f172a; flex-shrink: 0; }
+  .score-circle .num { font-size: 24px; font-weight: 800; color: {{riskColor}}; }
+  .score-circle .pts { font-size: 10px; color: #64748b; }
+  .risk-badge { padding: 6px 16px; border-radius: 6px; font-weight: 800; font-size: 16px; background: {{riskColor}}22; color: {{riskColor}}; border: 1px solid {{riskColor}}44; }
+  .stat-row { display: flex; gap: 16px; flex-wrap: wrap; }
+  .stat { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 20px; text-align: center; min-width: 80px; }
+  .stat .n { font-size: 22px; font-weight: 700; }
+  .stat .l { font-size: 11px; color: #64748b; text-transform: uppercase; margin-top: 2px; }
+  .content { padding: 24px 32px; }
+  .section { margin-bottom: 32px; }
+  .section-title { font-size: 16px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #1e293b; }
+  .finding { background: #1a1a2e; border: 1px solid #334155; border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; border-left: 4px solid; }
+  .finding.critical { border-left-color: #dc2626; }
+  .finding.high { border-left-color: #ea580c; }
+  .finding.medium { border-left-color: #ca8a04; }
+  .finding.low { border-left-color: #16a34a; }
+  .finding.info { border-left-color: #475569; }
+  .finding-header { display: flex; align-items: flex-start; gap: 10px; }
+  .badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+  .badge.critical { background: #dc262622; color: #dc2626; }
+  .badge.high { background: #ea580c22; color: #ea580c; }
+  .badge.medium { background: #ca8a0422; color: #ca8a04; }
+  .badge.low { background: #16a34a22; color: #16a34a; }
+  .badge.info { background: #47556922; color: #94a3b8; }
+  .mod-badge { background: #0f172a; border: 1px solid #334155; padding: 2px 8px; border-radius: 4px; font-size: 11px; color: #64748b; flex-shrink: 0; }
+  .finding-title { font-weight: 700; color: #e2e8f0; font-size: 14px; }
+  .finding-detail { color: #94a3b8; font-size: 13px; margin-top: 6px; line-height: 1.5; white-space: pre-wrap; }
+  .finding-evidence { background: #0f172a; border: 1px solid #334155; border-radius: 4px; padding: 6px 10px; font-family: monospace; font-size: 12px; color: #64748b; margin-top: 6px; }
+  .timeline-item { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid #1e293b; align-items: flex-start; }
+  .timeline-ts { color: #475569; font-family: monospace; font-size: 12px; flex-shrink: 0; width: 145px; }
+  .timeline-mod { color: #64748b; font-size: 11px; flex-shrink: 0; width: 100px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; padding: 8px 12px; background: #1e293b; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
+  td { padding: 8px 12px; border-bottom: 1px solid #1e293b; color: #e2e8f0; font-size: 13px; }
+  tr:hover td { background: #1e293b44; }
+  .footer { background: #0a0a0f; border-top: 1px solid #1e293b; padding: 16px 32px; color: #334155; font-size: 12px; display: flex; justify-content: space-between; }
 </style>
 </head>
 <body>
@@ -81,22 +97,22 @@ public static class HtmlTemplate
   <h1>BYPASS NERFADOS <span>SHIELD XDR</span></h1>
   <div class="sub">Investigação Forense Anti-Cheat — Relatório de Screen-Share</div>
   <div class="meta">
-    <div><span class="label">Máquina</span><span class="value">{Esc(result.MachineName)}</span></div>
-    <div><span class="label">Usuário</span><span class="value">{Esc(result.CurrentUser)}</span></div>
-    <div><span class="label">Data/Hora</span><span class="value">{result.ScanTime:dd/MM/yyyy HH:mm:ss}</span></div>
-    {(config.SuspectName != null ? $@"<div><span class=""label"">Suspeito</span><span class=""value"">{Esc(config.SuspectName)}</span></div>" : "")}
-    {(config.InvestigatorName != null ? $@"<div><span class=""label"">Investigador</span><span class=""value"">{Esc(config.InvestigatorName)}</span></div>" : "")}
+    <div><span class="label">Máquina</span><span class="value">{{machineName}}</span></div>
+    <div><span class="label">Usuário</span><span class="value">{{currentUser}}</span></div>
+    <div><span class="label">Data/Hora</span><span class="value">{{scanTime}}</span></div>
+    {{suspectHtml}}
+    {{investigatorHtml}}
   </div>
 </div>
 
 <div class="score-bar">
   <div class="score-circle">
-    <span class="num">{result.TotalScore}</span>
+    <span class="num">{{totalScore}}</span>
     <span class="pts">/ 100</span>
   </div>
   <div>
-    <div class="risk-badge">{result.OverallRiskLabel}</div>
-    <div style="color:#64748b;margin-top:6px;font-size:12px">{result.Findings.Count} findings • {result.ModulesRun.Count} módulos</div>
+    <div class="risk-badge">{{riskLabel}}</div>
+    <div style="color:#64748b;margin-top:6px;font-size:12px">{{findingsCount}} findings • {{modulesCount}} módulos</div>
   </div>
   <div class="stat-row">
 """);
