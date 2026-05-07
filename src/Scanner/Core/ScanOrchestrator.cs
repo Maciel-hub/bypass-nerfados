@@ -1,4 +1,3 @@
-using Spectre.Console;
 using BypassNerfados.Scanner.Models;
 using BypassNerfados.Scanner.Modules;
 using BypassNerfados.Scanner.Reports;
@@ -9,113 +8,155 @@ public class ScanOrchestrator
 {
     private readonly ScanConfig _config;
     private readonly ScanResult _result;
+    private readonly IProgress<ScanProgressUpdate>? _progress;
 
-    public ScanOrchestrator(ScanConfig config)
+    public ScanOrchestrator(ScanConfig config, IProgress<ScanProgressUpdate>? progress = null)
     {
         _config = config;
+        _progress = progress;
         _result = new ScanResult
         {
             IsAdministrator = IsAdmin()
         };
     }
 
-    public async Task<ScanResult> RunAsync()
+    public async Task<ScanResult> RunAsync(CancellationToken cancellationToken = default)
     {
-        ConsoleUI.PrintBanner();
-
         if (!_result.IsAdministrator)
         {
-            ConsoleUI.PrintError("AVISO: Executando sem privilégios de Administrador. Alguns módulos serão limitados.");
-            AnsiConsole.WriteLine();
+            Report(new ScanProgressUpdate(
+                ScanProgressKind.Warning,
+                "Executando sem privilégios de Administrador. Alguns módulos serão limitados."));
         }
 
         var modules = BuildModuleList();
 
-        AnsiConsole.Write(new Rule($"[bold]INICIANDO VARREDURA[/] [grey]— {modules.Count} módulos[/]"));
-        AnsiConsole.WriteLine();
+        Report(new ScanProgressUpdate(
+            ScanProgressKind.ScanStarted,
+            $"Iniciando varredura com {modules.Count} módulos.",
+            ModuleCount: modules.Count));
 
-        await AnsiConsole.Progress()
-            .AutoClear(false)
-            .HideCompleted(false)
-            .Columns(
-                new TaskDescriptionColumn(),
-                new ProgressBarColumn(),
-                new PercentageColumn(),
-                new ElapsedTimeColumn(),
-                new SpinnerColumn())
-            .StartAsync(async ctx =>
+        for (int i = 0; i < modules.Count; i++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var module = modules[i];
+            Report(new ScanProgressUpdate(
+                ScanProgressKind.ModuleStarted,
+                $"Executando módulo {module.Name}.",
+                ModuleName: module.Name,
+                ModuleIndex: i + 1,
+                ModuleCount: modules.Count));
+
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            try
             {
-                var tasks = modules.Select(m =>
-                    ctx.AddTask($"[cyan]{m.Name}[/]", maxValue: 1)).ToList();
+                var findings = await module.RunAsync(_config, cancellationToken);
+                sw.Stop();
 
-                for (int i = 0; i < modules.Count; i++)
-                {
-                    var module = modules[i];
-                    var task = tasks[i];
-                    task.StartTask();
+                _result.Findings.AddRange(findings);
+                _result.ModulesRun.Add(module.Name);
+                _result.ModuleDurations[module.Name] = sw.Elapsed;
 
-                    var sw = System.Diagnostics.Stopwatch.StartNew();
-                    try
-                    {
-                        var findings = await module.RunAsync(_config);
-                        sw.Stop();
+                Report(new ScanProgressUpdate(
+                    ScanProgressKind.ModuleCompleted,
+                    $"Módulo {module.Name} concluído.",
+                    ModuleName: module.Name,
+                    ModuleIndex: i + 1,
+                    ModuleCount: modules.Count,
+                    Findings: findings,
+                    Duration: sw.Elapsed));
+            }
+            catch (OperationCanceledException)
+            {
+                sw.Stop();
+                throw;
+            }
+            catch (Exception ex)
+            {
+                sw.Stop();
+                _result.ModuleErrors.Add($"{module.Name}: {ex.Message}");
 
-                        _result.Findings.AddRange(findings);
-                        _result.ModulesRun.Add(module.Name);
-                        _result.ModuleDurations[module.Name] = sw.Elapsed;
-
-                        foreach (var f in findings.Where(f => f.Risk >= RiskLevel.Medium))
-                            ConsoleUI.PrintFinding(f);
-                    }
-                    catch (Exception ex)
-                    {
-                        sw.Stop();
-                        _result.ModuleErrors.Add($"{module.Name}: {ex.Message}");
-                        ConsoleUI.PrintModuleError(module.Name, ex.Message);
-                    }
-                    finally
-                    {
-                        task.Value = 1;
-                        task.StopTask();
-                    }
-                }
-            });
-
-        AnsiConsole.WriteLine();
+                Report(new ScanProgressUpdate(
+                    ScanProgressKind.ModuleFailed,
+                    $"Módulo {module.Name} falhou: {ex.Message}",
+                    ModuleName: module.Name,
+                    ModuleIndex: i + 1,
+                    ModuleCount: modules.Count,
+                    Duration: sw.Elapsed,
+                    Exception: ex));
+            }
+        }
 
         // Run correlation engine
-        AnsiConsole.MarkupLine("[bold cyan]▶[/] [bold]Correlação[/] [grey]— analisando padrões entre módulos...[/]");
-        Correlator.Correlate(_result);
-        AnsiConsole.MarkupLine($"  [green]✓[/] Correlação concluída");
+        cancellationToken.ThrowIfCancellationRequested();
+        Report(new ScanProgressUpdate(
+            ScanProgressKind.CorrelationStarted,
+            "Analisando padrões entre módulos."));
 
-        // Print summary
-        ConsoleUI.PrintSummary(_result);
+        Correlator.Correlate(_result);
+
+        Report(new ScanProgressUpdate(
+            ScanProgressKind.CorrelationCompleted,
+            "Correlação concluída."));
+
+        Report(new ScanProgressUpdate(
+            ScanProgressKind.ResultReady,
+            "Resultado de varredura pronto.",
+            Result: _result));
 
         // Generate report
         if (_config.SaveReport)
         {
-            AnsiConsole.WriteLine();
-            AnsiConsole.Write(new Rule("[bold]EXPORTANDO RELATÓRIO[/]"));
-
             var reportPath = Path.Combine(_config.ReportOutputPath, _config.ReportFileName + ".html");
             var txtPath = Path.Combine(_config.ReportOutputPath, _config.ReportFileName + ".txt");
 
+            Report(new ScanProgressUpdate(
+                ScanProgressKind.ReportStarted,
+                "Exportando relatório.",
+                HtmlReportPath: reportPath,
+                TextReportPath: txtPath,
+                Result: _result));
+
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 Directory.CreateDirectory(_config.ReportOutputPath);
                 ReportGenerator.GenerateHtml(_result, _config, reportPath);
                 ReportGenerator.GenerateTxt(_result, _config, txtPath);
-                AnsiConsole.MarkupLine($"[green]✓ HTML:[/] {Markup.Escape(reportPath)}");
-                AnsiConsole.MarkupLine($"[green]✓ TXT: [/] {Markup.Escape(txtPath)}");
+
+                Report(new ScanProgressUpdate(
+                    ScanProgressKind.ReportGenerated,
+                    "Relatório exportado.",
+                    HtmlReportPath: reportPath,
+                    TextReportPath: txtPath,
+                    Result: _result));
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
-                ConsoleUI.PrintError($"Erro ao gerar relatório: {ex.Message}");
+                Report(new ScanProgressUpdate(
+                    ScanProgressKind.ReportFailed,
+                    $"Erro ao gerar relatório: {ex.Message}",
+                    HtmlReportPath: reportPath,
+                    TextReportPath: txtPath,
+                    Result: _result,
+                    Exception: ex));
             }
         }
 
+        Report(new ScanProgressUpdate(
+            ScanProgressKind.ScanCompleted,
+            "Varredura concluída.",
+            Result: _result));
+
         return _result;
     }
+
+    private void Report(ScanProgressUpdate update) => _progress?.Report(update);
 
     private List<BaseModule> BuildModuleList()
     {

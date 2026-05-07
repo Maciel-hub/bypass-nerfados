@@ -1,5 +1,6 @@
 using Spectre.Console;
 using BypassNerfados.Scanner.Core;
+using BypassNerfados.Scanner.Models;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 Console.Title = "Bypass Nerfados Shield XDR v1.0";
@@ -46,8 +47,19 @@ for (int i = 0; i < args.Length; i++)
 
 try
 {
-    var orchestrator = new ScanOrchestrator(config);
-    var result = await orchestrator.RunAsync();
+    using var cts = new CancellationTokenSource();
+    Console.CancelKeyPress += (_, eventArgs) =>
+    {
+        eventArgs.Cancel = true;
+        cts.Cancel();
+        ConsoleUI.PrintError("Cancelamento solicitado. Finalizando módulo atual...");
+    };
+
+    ConsoleUI.PrintBanner();
+
+    var progress = new InlineProgress<ScanProgressUpdate>(PrintProgress);
+    var orchestrator = new ScanOrchestrator(config, progress);
+    var result = await orchestrator.RunAsync(cts.Token);
 
     AnsiConsole.WriteLine();
     AnsiConsole.Write(new Rule("[bold]VARREDURA CONCLUÍDA[/]"));
@@ -64,6 +76,11 @@ try
         _                                                 => 0
     };
 }
+catch (OperationCanceledException)
+{
+    ConsoleUI.PrintError("Varredura cancelada pelo usuário.");
+    return 98;
+}
 catch (Exception ex)
 {
     AnsiConsole.WriteException(ex);
@@ -78,6 +95,74 @@ static string GetRiskColor(int score) => score switch
     >= 1  => "green",
     _     => "grey"
 };
+
+static void PrintProgress(ScanProgressUpdate update)
+{
+    switch (update.Kind)
+    {
+        case ScanProgressKind.Warning:
+            ConsoleUI.PrintError($"AVISO: {update.Message}");
+            AnsiConsole.WriteLine();
+            break;
+
+        case ScanProgressKind.ScanStarted:
+            AnsiConsole.Write(new Rule($"[bold]INICIANDO VARREDURA[/] [grey]— {update.ModuleCount} módulos[/]"));
+            AnsiConsole.WriteLine();
+            break;
+
+        case ScanProgressKind.ModuleStarted:
+            ConsoleUI.PrintModuleStart(
+                $"{update.ModuleIndex}/{update.ModuleCount} {update.ModuleName}",
+                update.Message);
+            break;
+
+        case ScanProgressKind.ModuleCompleted:
+            ConsoleUI.PrintModuleOk(
+                update.ModuleName ?? "Módulo",
+                update.Findings?.Count ?? 0,
+                update.Duration ?? TimeSpan.Zero);
+
+            if (update.Findings != null)
+            {
+                foreach (var finding in update.Findings.Where(f => f.Risk >= RiskLevel.Medium))
+                    ConsoleUI.PrintFinding(finding);
+            }
+            break;
+
+        case ScanProgressKind.ModuleFailed:
+            ConsoleUI.PrintModuleError(update.ModuleName ?? "Módulo", update.Exception?.Message ?? update.Message);
+            break;
+
+        case ScanProgressKind.CorrelationStarted:
+            AnsiConsole.WriteLine();
+            AnsiConsole.MarkupLine("[bold cyan]▶[/] [bold]Correlação[/] [grey]— analisando padrões entre módulos...[/]");
+            break;
+
+        case ScanProgressKind.CorrelationCompleted:
+            AnsiConsole.MarkupLine("  [green]✓[/] Correlação concluída");
+            break;
+
+        case ScanProgressKind.ResultReady when update.Result != null:
+            ConsoleUI.PrintSummary(update.Result);
+            break;
+
+        case ScanProgressKind.ReportStarted:
+            AnsiConsole.WriteLine();
+            AnsiConsole.Write(new Rule("[bold]EXPORTANDO RELATÓRIO[/]"));
+            break;
+
+        case ScanProgressKind.ReportGenerated:
+            if (update.HtmlReportPath != null)
+                AnsiConsole.MarkupLine($"[green]✓ HTML:[/] {Markup.Escape(update.HtmlReportPath)}");
+            if (update.TextReportPath != null)
+                AnsiConsole.MarkupLine($"[green]✓ TXT: [/] {Markup.Escape(update.TextReportPath)}");
+            break;
+
+        case ScanProgressKind.ReportFailed:
+            ConsoleUI.PrintError(update.Message);
+            break;
+    }
+}
 
 static void PrintHelp()
 {
@@ -105,4 +190,9 @@ static void PrintHelp()
     AnsiConsole.MarkupLine("  BypassNerfados.exe --no-memory --output C:\\Relatorios");
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[grey]IMPORTANTE: Execute como Administrador para acesso completo.[/]");
+}
+
+internal sealed class InlineProgress<T>(Action<T> handler) : IProgress<T>
+{
+    public void Report(T value) => handler(value);
 }

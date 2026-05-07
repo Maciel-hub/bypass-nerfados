@@ -12,12 +12,17 @@ public abstract class BaseModule
     public abstract string Name { get; }
     public abstract string Description { get; }
 
-    public async Task<List<Finding>> RunAsync(ScanConfig config)
+    public async Task<List<Finding>> RunAsync(ScanConfig config, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         try
         {
-            return await ExecuteAsync(config);
+            var findings = await ExecuteAsync(config);
+            cancellationToken.ThrowIfCancellationRequested();
+            return findings;
         }
+        catch (OperationCanceledException) { throw; }
         catch (UnauthorizedAccessException)
         {
             return [new Finding(RiskLevel.Info, FindingCategory.SystemTampering, Name,
@@ -52,9 +57,11 @@ public abstract class BaseModule
     }
 
     // P0.4 fix: async reads of stdout AND stderr to avoid deadlock; explicit kill on timeout
-    protected static async Task<string> RunCmdAsync(string command, string arguments, int timeoutMs = 30000)
+    protected static async Task<string> RunCmdAsync(string command, string arguments, int timeoutMs = 30000,
+        CancellationToken cancellationToken = default)
     {
-        using var cts = new CancellationTokenSource(timeoutMs);
+        using var timeoutCts = new CancellationTokenSource(timeoutMs);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, cancellationToken);
         using var proc = new System.Diagnostics.Process();
         proc.StartInfo = new System.Diagnostics.ProcessStartInfo
         {
