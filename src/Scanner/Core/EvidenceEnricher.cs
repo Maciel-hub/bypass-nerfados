@@ -117,7 +117,7 @@ public static class EvidenceEnricher
 
             if (candidates.Count == 0) continue;
 
-            // Pick target: single match → use it; multiple → prefer temporal overlap
+            // Pick target: single match → use it; multiple → sha256-keyed first, then temporal
             EvidenceBundle target;
             if (candidates.Count == 1)
             {
@@ -125,6 +125,11 @@ public static class EvidenceEnricher
             }
             else
             {
+                // sha256-keyed bundle is the most specific identity — prefer it over path-keyed
+                var prioritized = candidates
+                    .OrderByDescending(c => c.ArtifactId.StartsWith("sha256:") ? 1 : 0)
+                    .ToList();
+
                 var orphanTs = orphan.Signals
                     .Where(s => s.Timestamp.HasValue)
                     .Select(s => s.Timestamp!.Value)
@@ -132,18 +137,18 @@ public static class EvidenceEnricher
 
                 if (orphanTs.Count == 0)
                 {
-                    target = candidates[0]; // no timestamp — pick highest-confidence candidate
+                    target = prioritized[0]; // no timestamp — take highest-priority candidate
                 }
                 else
                 {
                     var earliest = orphanTs.Min().AddHours(-2);
                     var latest   = orphanTs.Max().AddHours(2);
-                    target = candidates.FirstOrDefault(c =>
+                    target = prioritized.FirstOrDefault(c =>
                         c.Timeline.Any(t =>
                             t.Timestamp.HasValue &&
                             t.Timestamp.Value >= earliest &&
                             t.Timestamp.Value <= latest))
-                        ?? candidates[0];
+                        ?? prioritized[0];
                 }
             }
 
@@ -313,13 +318,16 @@ public static class EvidenceEnricher
         };
     }
 
-    // Finds bypass/anti-forensic signals that are temporally close to the cheat artifact.
-    // Covers: AntiForensics, ServiceTampering, Defender disable/exclusion,
-    // suspicious services, and high-risk SystemTampering events.
+    // Finds bypass/anti-forensic signals near the cheat artifact.
+    // Deduplicates by title, applies priority ordering, and restricts untimed events
+    // to high-impact categories only (avoids 7045 noise across all dossiers).
     private static List<string> FindBypassIndicators(List<Finding> cheatGroup, List<Finding> allFindings)
     {
+        // Deduplicate by title so the same event doesn't repeat across artifacts
         var bypassFindings = allFindings
             .Where(IsRelevantBypassSignal)
+            .GroupBy(f => f.Title)
+            .Select(g => g.OrderByDescending(f => f.Risk).First())
             .ToList();
 
         if (bypassFindings.Count == 0) return [];
@@ -335,19 +343,36 @@ public static class EvidenceEnricher
             var earliest = timestamps.Min().AddHours(-1);
             var latest   = timestamps.Max().AddHours(1);
             relevant = bypassFindings.Where(f =>
-                !f.Timestamp.HasValue ||
-                (f.Timestamp.Value >= earliest && f.Timestamp.Value <= latest));
+                f.Timestamp.HasValue
+                    // Timed: within ±1h window
+                    ? f.Timestamp.Value >= earliest && f.Timestamp.Value <= latest
+                    // Untimed: only high-impact categories (no generic 7045/5007 noise)
+                    : f.Category is FindingCategory.AntiForensics or FindingCategory.ServiceTampering);
         }
         else
         {
-            // No cheat timestamps — include any high-confidence bypass signal
-            relevant = bypassFindings.Where(f => f.Risk >= RiskLevel.High);
+            // No cheat timestamps — only AntiForensics/ServiceTampering critical events
+            relevant = bypassFindings.Where(f =>
+                f.Category is FindingCategory.AntiForensics or FindingCategory.ServiceTampering &&
+                f.Risk >= RiskLevel.High);
         }
 
         return relevant
+            .OrderBy(BypassPriority)
+            .ThenByDescending(f => f.Risk)
             .Take(5)
             .Select(f => $"[{f.RiskLabel}] {f.Module}: {f.Title}")
             .ToList();
+    }
+
+    // Lower number = higher priority in bypass display
+    private static int BypassPriority(Finding f)
+    {
+        if (f.Category == FindingCategory.AntiForensics)    return 0; // log clear, USN, Prefetch gone
+        if (f.Category == FindingCategory.ServiceTampering) return 1; // protection service stopped
+        if (f.RuleId is "DEFENDER_DISABLED_5007" or "DEFENDER_EXCLUSION_5007") return 2;
+        if (f.Category == FindingCategory.SystemTampering)  return 3;
+        return 4; // SuspiciousExecution (7045, etc.)
     }
 
     private static bool IsRelevantBypassSignal(Finding f)
