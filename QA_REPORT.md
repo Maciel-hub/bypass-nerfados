@@ -325,7 +325,8 @@ O smoke test requer execução manual com console interativo real. Executar nas 
 **Verificar:**
 - [ ] Nenhum UAC prompt aparece (app.manifest = asInvoker)
 - [ ] Console exibe "Executando sem privilégios de Administrador"
-- [ ] Módulos ShimCache, LNK Recent, RegistryPersistence, BAM/DAM, Prefetch, EventViewer, Defender, KnownCheats, FileSystem, Network, Services executam normalmente
+- [ ] Módulos ShimCache, LNK Recent, RegistryPersistence, BAM/DAM, Prefetch, KnownCheats, FileSystem, Network, Services executam normalmente
+- [ ] EventViewer e Defender podem aparecer como PARCIAL (Security log pode ser inacessível sem admin); qualquer limitação aparece como PARCIAL — não FALHOU — na tabela de cobertura
 - [ ] Tabela "COBERTURA DA VARREDURA" no console mostra Amcache = PULADO, UserAssist = PULADO (com motivo)
 - [ ] Pasta timestamped criada na área de trabalho
 - [ ] `report.html` abre no browser — seção "COBERTURA DA VARREDURA" visível
@@ -361,7 +362,8 @@ O smoke test requer execução manual com console interativo real. Executar nas 
 
 **Verificação do manifesto (Windows PowerShell):**
 ```powershell
-$folder = Get-ChildItem $env:USERPROFILE\Desktop\Echo_Nerfados_* | Sort LastWriteTime | Select -Last 1
+$desktop = [Environment]::GetFolderPath("Desktop")
+$folder = Get-ChildItem "$desktop\Echo_Nerfados_*" | Sort LastWriteTime | Select -Last 1
 cd $folder.FullName
 $ref = (Get-Content manifest.sha256 -Raw).Split("  ")[0].Trim()
 $actual = (Get-FileHash manifest.json -Algorithm SHA256).Hash.ToLower()
@@ -378,11 +380,14 @@ git clone <repo>
 cd BypassNerfados
 git checkout cbf2c23
 .\publish.ps1
-
-# SHA256 esperado: 65dc08a942585c193f1314cc62545bafbce62f77f67cdd3bc1f5276734ad6b80
 ```
 
-**Nota:** O hash do EXE varia com cada build (metadados de timestamp no PE). O hash acima é da build de referência `cbf2c23` gerada em 2026-05-09.
+**SHA256 do artefato entregue (build cbf2c23):**
+```
+65dc08a942585c193f1314cc62545bafbce62f77f67cdd3bc1f5276734ad6b80
+```
+
+**Nota:** Este hash identifica o artefato `EchoNerfados.exe` entregue para QA — gerado em 2026-05-09. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` e fixar `SourceRevisionId` no `.csproj` (fora do escopo desta release).
 
 ---
 
