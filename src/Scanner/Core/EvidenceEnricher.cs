@@ -81,9 +81,105 @@ public static class EvidenceEnricher
             });
         }
 
-        return bundles
+        // Annex Prefetch/BAM orphan signals (filename-only key) into the matching path/hash bundle
+        return AnnexOrphanSignals(bundles)
             .OrderByDescending(b => b.Confidence)
             .ThenByDescending(b => b.Risk)
+            .ToList();
+    }
+
+    // Absorbs filename-only bundles (e.g., Prefetch "launcher.exe") into the richer path/hash
+    // bundle for the same artifact when names match and timestamps are compatible.
+    // Unmatched orphans (no rich bundle found, or ambiguous with multiple candidates and no
+    // temporal overlap) are kept as independent bundles.
+    private static List<EvidenceBundle> AnnexOrphanSignals(List<EvidenceBundle> bundles)
+    {
+        var richBundles   = bundles
+            .Where(b => b.ArtifactId.StartsWith("sha256:") || b.ArtifactId.StartsWith("path:"))
+            .ToList();
+        var orphanBundles = bundles
+            .Where(b => !b.ArtifactId.StartsWith("sha256:") && !b.ArtifactId.StartsWith("path:"))
+            .ToList();
+
+        if (orphanBundles.Count == 0 || richBundles.Count == 0)
+            return bundles;
+
+        var mergedOrphanIds = new HashSet<string>();
+
+        foreach (var orphan in orphanBundles)
+        {
+            var name = orphan.ArtifactName.ToLowerInvariant();
+
+            // Candidates: rich bundles whose display name is the same file
+            var candidates = richBundles
+                .Where(r => r.ArtifactName.ToLowerInvariant() == name)
+                .ToList();
+
+            if (candidates.Count == 0) continue;
+
+            // Pick target: single match → use it; multiple → prefer temporal overlap
+            EvidenceBundle target;
+            if (candidates.Count == 1)
+            {
+                target = candidates[0];
+            }
+            else
+            {
+                var orphanTs = orphan.Signals
+                    .Where(s => s.Timestamp.HasValue)
+                    .Select(s => s.Timestamp!.Value)
+                    .ToList();
+
+                if (orphanTs.Count == 0)
+                {
+                    target = candidates[0]; // no timestamp — pick highest-confidence candidate
+                }
+                else
+                {
+                    var earliest = orphanTs.Min().AddHours(-2);
+                    var latest   = orphanTs.Max().AddHours(2);
+                    target = candidates.FirstOrDefault(c =>
+                        c.Timeline.Any(t =>
+                            t.Timestamp.HasValue &&
+                            t.Timestamp.Value >= earliest &&
+                            t.Timestamp.Value <= latest))
+                        ?? candidates[0];
+                }
+            }
+
+            // Reconstruct the target bundle with the orphan's signals merged in
+            var mergedSignals  = target.Signals.Concat(orphan.Signals).ToList();
+            var mergedTimeline = target.Timeline.Concat(orphan.Timeline)
+                .OrderBy(t => t.Timestamp ?? DateTime.MaxValue)
+                .ToList();
+            var mergedValidation = target.ValidationSteps.Concat(orphan.ValidationSteps)
+                .Distinct()
+                .ToList();
+
+            var idx = richBundles.IndexOf(target);
+            richBundles[idx] = new EvidenceBundle
+            {
+                ArtifactId       = target.ArtifactId,
+                ArtifactName     = target.ArtifactName,
+                FullPath         = target.FullPath,
+                Verdict          = target.Verdict,
+                Risk             = target.Risk,
+                Confidence       = target.Confidence,
+                Summary          = string.Join(" + ", mergedSignals.Select(s => s.SourceModule).Distinct()),
+                Sha256           = target.Sha256,
+                Sha1             = target.Sha1 ?? orphan.Sha1,
+                Signals          = mergedSignals,
+                Timeline         = mergedTimeline,
+                BypassIndicators = target.BypassIndicators,
+                ValidationSteps  = mergedValidation
+            };
+
+            mergedOrphanIds.Add(orphan.ArtifactId);
+        }
+
+        // Keep any orphan that had no matching rich bundle (ambiguous or novel artifact)
+        return richBundles
+            .Concat(orphanBundles.Where(o => !mergedOrphanIds.Contains(o.ArtifactId)))
             .ToList();
     }
 
