@@ -37,7 +37,7 @@ public static class ReportGenerator
         sb.AppendLine(dash);
         foreach (var group in result.Findings.GroupBy(f => f.Risk).OrderByDescending(g => g.Key))
         {
-            sb.AppendLine($"  {group.Key.ToString().ToUpper(),-12}: {group.Count()} finding(s)  (+{group.Sum(f => f.Score)} pts)");
+            sb.AppendLine($"  {group.Key.ToString().ToUpper(),-12}: {group.Count()} finding(s)  (+{(int)group.Sum(f => f.WeightedScore)} pts)");
         }
         sb.AppendLine();
 

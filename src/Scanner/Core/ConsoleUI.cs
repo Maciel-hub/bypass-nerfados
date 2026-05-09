@@ -80,7 +80,7 @@ public static class ConsoleUI
             statsTable.AddRow(
                 $"[{color}]{group.Key.ToString().ToUpper()}[/]",
                 $"[bold]{group.Count()}[/]",
-                $"+{group.Sum(f => f.Score)}"
+                $"+{(int)group.Sum(f => f.WeightedScore)}"
             );
         }
         AnsiConsole.Write(statsTable);
