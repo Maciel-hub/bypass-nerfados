@@ -27,7 +27,8 @@ public static class EvidenceExporter
             TotalScore      = result.TotalScore,
             OverallRisk     = result.OverallRiskLabel,
             Findings        = result.Findings.Select(FindingDto.From).ToList(),
-            EvidenceBundles = result.EvidenceBundles.Select(BundleDto.From).ToList()
+            EvidenceBundles = result.EvidenceBundles.Select(BundleDto.From).ToList(),
+            ModuleCoverage  = result.ModuleCoverage.Select(ModuleCoverageDto.From).ToList()
         };
         WriteJson(Path.Combine(runFolder, "evidence.json"), dto);
 
@@ -129,8 +130,9 @@ file sealed class EvidenceExportDto
     public int      LookbackDays    { get; init; }
     public int      TotalScore      { get; init; }
     public string   OverallRisk     { get; init; } = "";
-    public List<FindingDto> Findings        { get; init; } = [];
-    public List<BundleDto>  EvidenceBundles { get; init; } = [];
+    public List<FindingDto>         Findings        { get; init; } = [];
+    public List<BundleDto>          EvidenceBundles { get; init; } = [];
+    public List<ModuleCoverageDto>  ModuleCoverage  { get; init; } = [];
 }
 
 file sealed class ModuleExportDto
@@ -172,6 +174,22 @@ file sealed class FindingDto
         RuleId         = f.RuleId,
         Entity         = f.Entity,
         ValidationHint = f.ValidationHint
+    };
+}
+
+file sealed class ModuleCoverageDto
+{
+    public string Name   { get; init; } = "";
+    public string Status { get; init; } = "";
+    public string Reason { get; init; } = "";
+    public string Impact { get; init; } = "";
+
+    public static ModuleCoverageDto From(Models.ModuleCoverageEntry e) => new()
+    {
+        Name   = e.Name,
+        Status = e.Status.ToString(),
+        Reason = e.Reason,
+        Impact = e.ForensicImpact
     };
 }
 

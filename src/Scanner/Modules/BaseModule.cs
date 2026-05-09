@@ -185,12 +185,18 @@ public abstract class BaseModule
 
     // Loads an offline hive copy under HKLM\<tempKeyName>. Returns the RegistryKey
     // (caller must dispose it before calling UnloadOfflineHive).
+    // RegLoadKey requires SeBackupPrivilege and SeRestorePrivilege to be explicitly
+    // enabled in the process token — being an Administrator is not sufficient.
     protected static RegistryKey? LoadOfflineHive(string hivePath, string tempKeyName, out string tempFile)
     {
         tempFile = string.Empty;
         var copy = CopyLockedFile(hivePath);
         if (copy == null) return null;
         tempFile = copy;
+
+        EnablePrivilege("SeBackupPrivilege");
+        EnablePrivilege("SeRestorePrivilege");
+
         if (RegLoadKey(HklmHandle, tempKeyName, copy) != 0)
         {
             try { File.Delete(copy); } catch { }
@@ -210,6 +216,60 @@ public abstract class BaseModule
     // Converts a Windows FILETIME (100-ns intervals since 1601-01-01) to DateTime?
     protected static DateTime? FileTimeToDateTime(long ft) =>
         ft > 0 ? DateTime.FromFileTimeUtc(ft).ToLocalTime() : null;
+
+    // ── Privilege management (AdjustTokenPrivileges) ──────────────────────────────
+
+    private const uint   SePrivilegeEnabled    = 0x00000002;
+    private const int    TokenAdjustPrivileges = 0x0020;
+    private const int    TokenQuery            = 0x0008;
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Luid { public uint LowPart; public int HighPart; }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct LuidAndAttributes { public Luid Luid; public uint Attributes; }
+
+    // Single-entry variant of TOKEN_PRIVILEGES (variable-length struct from Win32)
+    [StructLayout(LayoutKind.Sequential)]
+    private struct TokenPrivileges1 { public uint PrivilegeCount; public LuidAndAttributes Privilege; }
+
+    [DllImport("kernel32.dll", ExactSpelling = true)]
+    private static extern IntPtr GetCurrentProcess();
+
+    [DllImport("advapi32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern bool OpenProcessToken(IntPtr process, int access, out IntPtr token);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool CloseHandle(IntPtr handle);
+
+    [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern bool LookupPrivilegeValue(string? system, string name, out Luid luid);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    private static extern bool AdjustTokenPrivileges(
+        IntPtr token, bool disableAll, ref TokenPrivileges1 newState,
+        uint bufLen, IntPtr prev, IntPtr retLen);
+
+    // Enables a named privilege in the current process token.
+    // Best-effort — silently returns if any step fails (e.g. privilege not held).
+    protected static void EnablePrivilege(string privilegeName)
+    {
+        if (!OpenProcessToken(GetCurrentProcess(), TokenAdjustPrivileges | TokenQuery, out var token))
+            return;
+        try
+        {
+            if (!LookupPrivilegeValue(null, privilegeName, out var luid)) return;
+            var tp = new TokenPrivileges1
+            {
+                PrivilegeCount = 1,
+                Privilege = new LuidAndAttributes { Luid = luid, Attributes = SePrivilegeEnabled }
+            };
+            AdjustTokenPrivileges(token, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+        }
+        finally { CloseHandle(token); }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────────
 
     private static readonly IntPtr HklmHandle = new IntPtr(unchecked((int)0x80000002));
 
