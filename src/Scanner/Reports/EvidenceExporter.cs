@@ -32,9 +32,15 @@ public static class EvidenceExporter
         WriteJson(Path.Combine(runFolder, "evidence.json"), dto);
 
         // Always export per-source files — even when empty, so the investigator can verify coverage
-        WriteModuleJson(result, runFolder, "Event Viewer",   "eventviewer_60d.json", lookback);
-        WriteModuleJson(result, runFolder, "Windows Defender","defender_60d.json",   lookback);
-        WriteModuleJson(result, runFolder, "Services",       "services_60d.json",    lookback);
+        WriteModuleJson(result, runFolder, "Event Viewer",        "eventviewer_60d.json",  lookback);
+        WriteModuleJson(result, runFolder, "Windows Defender",    "defender_60d.json",     lookback);
+        WriteModuleJson(result, runFolder, "Services",            "services_60d.json",     lookback);
+
+        // Artifact-trail modules: no event-log coverage backing; coverage estimated from findings
+        WriteModuleJson(result, runFolder, "Amcache",             "amcache_60d.json",      lookback);
+        WriteModuleJson(result, runFolder, "UserAssist",          "userassist_60d.json",   lookback);
+        WriteModuleJson(result, runFolder, "ShimCache",           "shimcache_60d.json",    lookback);
+        WriteModuleJson(result, runFolder, "LNK Recent",          "lnk_60d.json",          lookback);
     }
 
     private static void WriteModuleJson(

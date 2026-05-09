@@ -197,6 +197,10 @@ public class ScanOrchestrator
             list.Add(new UserAssistModule());
         }
 
+        // LNK and registry persistence — accessible without admin
+        list.Add(new LnkRecentModule());
+        list.Add(new RegistryPersistenceModule());
+
         if (_config.RunUsnJournal && _result.IsAdministrator)
             list.Add(new UsnJournalModule());
 

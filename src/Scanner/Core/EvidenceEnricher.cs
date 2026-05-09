@@ -410,14 +410,19 @@ public static class EvidenceEnricher
 
     private static string ModuleToSignalType(string module) => module switch
     {
-        "Known Cheats"       => "FileSystem",
-        "Prefetch"           => "Prefetch",
-        "File System"        => "FileSystem",
-        "Registry Artifacts" => "Registry",
-        "BAM/DAM"            => "BAM",
-        "Event Viewer"       => "EventLog",
-        "Defender"           => "Defender",
-        _                    => module
+        "Known Cheats"          => "FileSystem",
+        "Prefetch"              => "Prefetch",
+        "File System"           => "FileSystem",
+        "Registry Artifacts"    => "Registry",
+        "BAM/DAM"               => "BAM",
+        "Event Viewer"          => "EventLog",
+        "Defender"              => "Defender",
+        "Amcache"               => "Amcache",
+        "UserAssist"            => "UserAssist",
+        "ShimCache"             => "ShimCache",
+        "LNK Recent"            => "LNK",
+        "RegistryPersistence"   => "Registry",
+        _                       => module
     };
 
     private static string ClassifyAction(Finding f)
