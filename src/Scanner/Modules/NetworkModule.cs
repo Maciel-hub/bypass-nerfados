@@ -25,6 +25,8 @@ public class NetworkModule : BaseModule
         var connections = GetTcpConnections();
         var processConnections = connections.GroupBy(c => c.ProcessId).ToList();
 
+        var failCount = 0;
+
         foreach (var group in processConnections)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -89,8 +91,11 @@ public class NetworkModule : BaseModule
                 }
             }
             catch (OperationCanceledException) { throw; }
-            catch { }
+            catch { failCount++; }
         }
+
+        if (failCount > 0)
+            LogPartialError($"{failCount} conexão(ões) sem proprietário identificável");
     }
 
     private void ScanNetworkDataUsage(List<Finding> findings, CancellationToken cancellationToken)

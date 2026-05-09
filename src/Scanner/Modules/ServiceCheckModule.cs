@@ -31,6 +31,9 @@ public class ServiceCheckModule : BaseModule
     {
         var findings = new List<Finding>();
 
+        var noStartTypeCount = 0;
+        var inaccessibleCount = 0;
+
         foreach (var svc in MonitoringServices)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -43,7 +46,7 @@ public class ServiceCheckModule : BaseModule
                 bool isStopped = status == ServiceControllerStatus.Stopped;
                 bool isDisabled = false;
                 try { isDisabled = sc.StartType == ServiceStartMode.Disabled; }
-                catch { /* StartType unavailable on some services */ }
+                catch { noStartTypeCount++; /* StartType unavailable on some services */ }
 
                 bool shouldFlag = isStopped || isDisabled;
                 if (shouldFlag)
@@ -76,8 +79,13 @@ public class ServiceCheckModule : BaseModule
                 }
             }
             catch (OperationCanceledException) { throw; }
-            catch { /* access denied or other */ }
+            catch { inaccessibleCount++; }
         }
+
+        if (noStartTypeCount > 0)
+            LogPartialError($"{noStartTypeCount} serviço(s) sem StartType acessível");
+        if (inaccessibleCount > 0)
+            LogPartialError($"{inaccessibleCount} serviço(s) inacessíveis durante varredura");
 
         // Check for the UmRdpService (normal to be stopped - as noted in the guide)
         // Do NOT flag UmRdpService as suspicious

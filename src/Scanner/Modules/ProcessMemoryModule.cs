@@ -28,8 +28,10 @@ public class ProcessMemoryModule : BaseModule
         return Task.FromResult(findings);
     }
 
-    private static void ScanRunningProcesses(List<Finding> findings, CancellationToken cancellationToken)
+    private void ScanRunningProcesses(List<Finding> findings, CancellationToken cancellationToken)
     {
+        var failCount = 0;
+
         foreach (var proc in Process.GetProcesses())
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -67,12 +69,17 @@ public class ProcessMemoryModule : BaseModule
                 }
             }
             catch (OperationCanceledException) { throw; }
-            catch { }
+            catch { failCount++; }
         }
+
+        if (failCount > 0)
+            LogPartialError($"{failCount} processo(s) inacessíveis durante varredura de memória");
     }
 
-    private static void ScanMemoryRegions(List<Finding> findings, CancellationToken cancellationToken)
+    private void ScanMemoryRegions(List<Finding> findings, CancellationToken cancellationToken)
     {
+        var failCount = 0;
+
         // Scan FiveM and target game processes for memory anomalies
         foreach (var targetName in TargetProcessNames)
         {
@@ -88,9 +95,12 @@ public class ProcessMemoryModule : BaseModule
                     ScanProcessMemoryRegions(proc, findings, cancellationToken);
                 }
                 catch (OperationCanceledException) { throw; }
-                catch { }
+                catch { failCount++; }
             }
         }
+
+        if (failCount > 0)
+            LogPartialError($"{failCount} regiões de memória não puderam ser lidas");
     }
 
     private static void ScanProcessMemoryRegions(Process proc, List<Finding> findings, CancellationToken cancellationToken)

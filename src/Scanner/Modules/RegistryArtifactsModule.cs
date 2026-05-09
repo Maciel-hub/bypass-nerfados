@@ -179,8 +179,10 @@ public class RegistryArtifactsModule : BaseModule
         catch (Exception ex) { LogPartialError("RecentDocs registry inacessível", ex); }
     }
 
-    private static void CheckRecentDocsSubkey(RegistryKey key, string ext, List<Finding> findings)
+    private void CheckRecentDocsSubkey(RegistryKey key, string ext, List<Finding> findings)
     {
+        var failCount = 0;
+
         foreach (var valueName in key.GetValueNames())
         {
             if (valueName == "MRUListEx") continue;
@@ -207,8 +209,11 @@ public class RegistryArtifactsModule : BaseModule
                     ));
                 }
             }
-            catch { }
+            catch { failCount++; }
         }
+
+        if (failCount > 0)
+            LogPartialError($"{failCount} entrada(s) de registry inacessíveis/ignoradas");
     }
 
     private void ScanArchiveHistory(List<Finding> findings)
@@ -292,7 +297,7 @@ public class RegistryArtifactsModule : BaseModule
         catch (Exception ex) { LogPartialError("MountedDevices registry inacessível", ex); }
     }
 
-    private static void ScanStartupEntries(List<Finding> findings)
+    private void ScanStartupEntries(List<Finding> findings)
     {
         var startupKeys = new[]
         {
@@ -300,6 +305,8 @@ public class RegistryArtifactsModule : BaseModule
             (@"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", Registry.LocalMachine, "HKLM Run"),
             (@"SOFTWARE\Microsoft\Windows\CurrentVersion\RunOnce", Registry.CurrentUser, "HKCU RunOnce"),
         };
+
+        var failCount = 0;
 
         foreach (var (path, hive, label) in startupKeys)
         {
@@ -333,7 +340,10 @@ public class RegistryArtifactsModule : BaseModule
                     }
                 }
             }
-            catch { }
+            catch { failCount++; }
         }
+
+        if (failCount > 0)
+            LogPartialError($"{failCount} entrada(s) de registry inacessíveis/ignoradas");
     }
 }

@@ -91,13 +91,15 @@ public class FileSystemModule : BaseModule
         catch (Exception ex) { LogPartialError("Lixeira inacessível", ex); }
     }
 
-    private static void ScanTempFolders(List<Finding> findings, CancellationToken cancellationToken)
+    private void ScanTempFolders(List<Finding> findings, CancellationToken cancellationToken)
     {
         var tempPaths = new[]
         {
             Path.GetTempPath(),
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Temp"),
         };
+
+        var failCount = 0;
 
         foreach (var temp in tempPaths)
         {
@@ -139,8 +141,11 @@ public class FileSystemModule : BaseModule
                 }
             }
             catch (OperationCanceledException) { throw; }
-            catch { }
+            catch { failCount++; }
         }
+
+        if (failCount > 0)
+            LogPartialError($"{failCount} pasta(s) Temp inacessíveis");
     }
 
     private void ScanDownloads(List<Finding> findings, CancellationToken cancellationToken)
@@ -234,13 +239,15 @@ public class FileSystemModule : BaseModule
         }
     }
 
-    private static void ScanAppDataSuspicious(List<Finding> findings, CancellationToken cancellationToken)
+    private void ScanAppDataSuspicious(List<Finding> findings, CancellationToken cancellationToken)
     {
         var appDataPaths = new[]
         {
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         };
+
+        var failCount = 0;
 
         foreach (var root in appDataPaths)
         {
@@ -269,7 +276,10 @@ public class FileSystemModule : BaseModule
                 }
             }
             catch (OperationCanceledException) { throw; }
-            catch { }
+            catch { failCount++; }
         }
+
+        if (failCount > 0)
+            LogPartialError($"{failCount} pasta(s) AppData inacessíveis");
     }
 }

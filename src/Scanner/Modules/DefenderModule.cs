@@ -39,6 +39,7 @@ public class DefenderModule : BaseModule
 
             using var reader = new EventLogReader(query);
             EventRecord? record;
+            var failCount = 0;
 
             while ((record = reader.ReadEvent()) != null)
             {
@@ -74,9 +75,12 @@ public class DefenderModule : BaseModule
                             ts
                         ));
                     }
-                    catch { /* skip malformed records */ }
+                    catch { failCount++; }
                 }
             }
+
+            if (failCount > 0)
+                LogPartialError($"{failCount} evento(s) do Defender malformados/ignorados");
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) { LogPartialError("Log do Defender (Protection History) inacessível", ex); }
@@ -101,6 +105,7 @@ public class DefenderModule : BaseModule
             // Deduplicate by changed registry key — one finding per key
             var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             int genericCount = 0;
+            var failCount = 0;
 
             while ((record = reader.ReadEvent()) != null)
             {
@@ -182,9 +187,12 @@ public class DefenderModule : BaseModule
                             ));
                         }
                     }
-                    catch { }
+                    catch { failCount++; }
                 }
             }
+
+            if (failCount > 0)
+                LogPartialError($"{failCount} evento(s) do Defender malformados/ignorados");
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex) { LogPartialError("Log de alterações de configuração do Defender inacessível", ex); }

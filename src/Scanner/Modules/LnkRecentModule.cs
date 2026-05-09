@@ -72,29 +72,41 @@ public class LnkRecentModule : BaseModule
     /// <summary>
     /// Scans *.lnk files in %USERPROFILE%\AppData\Microsoft\Windows\Recent.
     /// </summary>
-    private static void ScanRecentFolder(string userDir, List<Finding> findings, CancellationToken ct)
+    private void ScanRecentFolder(string userDir, List<Finding> findings, CancellationToken ct)
     {
         var recentPath = Path.Combine(userDir, @"AppData\Roaming\Microsoft\Windows\Recent");
         if (!Directory.Exists(recentPath)) return;
 
+        var failCount = 0;
+
         foreach (var lnkPath in Directory.EnumerateFiles(recentPath, "*.lnk", SearchOption.TopDirectoryOnly))
         {
             ct.ThrowIfCancellationRequested();
-            ProcessLnkFile(lnkPath, findings);
+            try
+            {
+                ProcessLnkFile(lnkPath, findings);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { failCount++; }
         }
+
+        if (failCount > 0)
+            LogPartialError($"{failCount} arquivo(s) LNK inacessíveis ou corrompidos");
     }
 
     /// <summary>
     /// Scans AutomaticDestinations JumpList files for known cheat exe names via raw byte regex.
     /// OLE structured storage parsing is skipped — a raw text scan is sufficient for name extraction.
     /// </summary>
-    private static void ScanAutomaticDestinations(string userDir, List<Finding> findings, CancellationToken ct)
+    private void ScanAutomaticDestinations(string userDir, List<Finding> findings, CancellationToken ct)
     {
         var destPath = Path.Combine(
             userDir,
             @"AppData\Roaming\Microsoft\Windows\Recent\AutomaticDestinations");
 
         if (!Directory.Exists(destPath)) return;
+
+        var failCount = 0;
 
         foreach (var file in Directory.EnumerateFiles(destPath, "*.automaticDestinations-ms"))
         {
@@ -145,8 +157,12 @@ public class LnkRecentModule : BaseModule
                     }
                 }
             }
-            catch { /* acesso negado ou arquivo corrompido */ }
+            catch (OperationCanceledException) { throw; }
+            catch { failCount++; }
         }
+
+        if (failCount > 0)
+            LogPartialError($"{failCount} JumpList(s) inacessíveis ou corrompidos");
     }
 
     /// <summary>
