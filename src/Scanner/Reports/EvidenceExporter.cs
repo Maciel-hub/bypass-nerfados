@@ -16,32 +16,53 @@ public static class EvidenceExporter
 
     public static void Export(ScanResult result, ScanConfig config, string runFolder)
     {
+        var lookback = (int)config.EventWindowLookback.TotalDays;
+
         var dto = new EvidenceExportDto
         {
-            Machine          = result.MachineName,
-            User             = result.CurrentUser,
-            ScanTime         = result.ScanTime,
-            LookbackDays     = (int)config.EventWindowLookback.TotalDays,
-            TotalScore       = result.TotalScore,
-            OverallRisk      = result.OverallRiskLabel,
-            Findings         = result.Findings.Select(FindingDto.From).ToList(),
-            EvidenceBundles  = result.EvidenceBundles.Select(BundleDto.From).ToList()
+            Machine         = result.MachineName,
+            User            = result.CurrentUser,
+            ScanTime        = result.ScanTime,
+            LookbackDays    = lookback,
+            TotalScore      = result.TotalScore,
+            OverallRisk     = result.OverallRiskLabel,
+            Findings        = result.Findings.Select(FindingDto.From).ToList(),
+            EvidenceBundles = result.EvidenceBundles.Select(BundleDto.From).ToList()
         };
         WriteJson(Path.Combine(runFolder, "evidence.json"), dto);
 
-        WriteModuleJson(result, runFolder, "Event Viewer", "eventviewer_60d.json");
-        WriteModuleJson(result, runFolder, "Defender",     "defender_60d.json");
-        WriteModuleJson(result, runFolder, "ServiceCheck", "services_60d.json");
+        // Always export per-source files — even when empty, so the investigator can verify coverage
+        WriteModuleJson(result, runFolder, "Event Viewer",   "eventviewer_60d.json", lookback);
+        WriteModuleJson(result, runFolder, "Windows Defender","defender_60d.json",   lookback);
+        WriteModuleJson(result, runFolder, "Services",       "services_60d.json",    lookback);
     }
 
-    private static void WriteModuleJson(ScanResult result, string runFolder, string module, string fileName)
+    private static void WriteModuleJson(
+        ScanResult result, string runFolder,
+        string module, string fileName, int lookbackDays)
     {
         var findings = result.Findings
             .Where(f => f.Module == module)
-            .Select(FindingDto.From)
             .ToList();
-        if (findings.Count > 0)
-            WriteJson(Path.Combine(runFolder, fileName), findings);
+
+        var timed = findings.Where(f => f.Timestamp.HasValue).ToList();
+        DateTime? oldest = timed.Count > 0 ? timed.Min(f => f.Timestamp!.Value) : null;
+        DateTime? newest = timed.Count > 0 ? timed.Max(f => f.Timestamp!.Value) : null;
+        var coverageDays  = oldest.HasValue ? (int)(DateTime.Now - oldest.Value).TotalDays : 0;
+        var coverageOk    = coverageDays >= lookbackDays;
+
+        var dto = new ModuleExportDto
+        {
+            Module       = module,
+            LookbackDays = lookbackDays,
+            OldestEvent  = oldest,
+            NewestEvent  = newest,
+            CoverageDays = coverageDays,
+            CoverageOk   = coverageOk,
+            FindingCount = findings.Count,
+            Findings     = findings.Select(FindingDto.From).ToList()
+        };
+        WriteJson(Path.Combine(runFolder, fileName), dto);
     }
 
     private static void WriteJson<T>(string path, T data) =>
@@ -50,14 +71,26 @@ public static class EvidenceExporter
 
 file sealed class EvidenceExportDto
 {
-    public string Machine  { get; init; } = "";
-    public string User     { get; init; } = "";
-    public DateTime ScanTime     { get; init; }
-    public int LookbackDays      { get; init; }
-    public int TotalScore        { get; init; }
-    public string OverallRisk    { get; init; } = "";
+    public string   Machine         { get; init; } = "";
+    public string   User            { get; init; } = "";
+    public DateTime ScanTime        { get; init; }
+    public int      LookbackDays    { get; init; }
+    public int      TotalScore      { get; init; }
+    public string   OverallRisk     { get; init; } = "";
     public List<FindingDto> Findings        { get; init; } = [];
     public List<BundleDto>  EvidenceBundles { get; init; } = [];
+}
+
+file sealed class ModuleExportDto
+{
+    public string    Module       { get; init; } = "";
+    public int       LookbackDays { get; init; }
+    public DateTime? OldestEvent  { get; init; }
+    public DateTime? NewestEvent  { get; init; }
+    public int       CoverageDays { get; init; }
+    public bool      CoverageOk   { get; init; }
+    public int       FindingCount { get; init; }
+    public List<FindingDto> Findings { get; init; } = [];
 }
 
 file sealed class FindingDto
