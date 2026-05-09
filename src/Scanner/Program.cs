@@ -156,6 +156,11 @@ static void PrintProgress(ScanProgressUpdate update)
                 AnsiConsole.MarkupLine($"[green]✓ HTML:[/] {Markup.Escape(update.HtmlReportPath)}");
             if (update.TextReportPath != null)
                 AnsiConsole.MarkupLine($"[green]✓ TXT: [/] {Markup.Escape(update.TextReportPath)}");
+            if (update.HtmlReportPath != null)
+            {
+                var evidencePath = Path.Combine(Path.GetDirectoryName(update.HtmlReportPath)!, "evidence.json");
+                AnsiConsole.MarkupLine($"[green]✓ JSON:[/] {Markup.Escape(evidencePath)}");
+            }
             break;
 
         case ScanProgressKind.ReportFailed:

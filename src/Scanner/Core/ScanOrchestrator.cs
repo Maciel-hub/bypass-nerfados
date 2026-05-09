@@ -114,11 +114,12 @@ public class ScanOrchestrator
             "Resultado de varredura pronto.",
             Result: _result));
 
-        // Generate report
+        // Generate report — all outputs go into a timestamped run folder
         if (_config.SaveReport)
         {
-            var reportPath = Path.Combine(_config.ReportOutputPath, _config.ReportFileName + ".html");
-            var txtPath = Path.Combine(_config.ReportOutputPath, _config.ReportFileName + ".txt");
+            var runFolder  = Path.Combine(_config.ReportOutputPath, _config.ReportFileName);
+            var reportPath = Path.Combine(runFolder, "report.html");
+            var txtPath    = Path.Combine(runFolder, "report.txt");
 
             Report(new ScanProgressUpdate(
                 ScanProgressKind.ReportStarted,
@@ -130,13 +131,14 @@ public class ScanOrchestrator
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                Directory.CreateDirectory(_config.ReportOutputPath);
+                Directory.CreateDirectory(runFolder);
                 ReportGenerator.GenerateHtml(_result, _config, reportPath);
                 ReportGenerator.GenerateTxt(_result, _config, txtPath);
+                EvidenceExporter.Export(_result, _config, runFolder);
 
                 Report(new ScanProgressUpdate(
                     ScanProgressKind.ReportGenerated,
-                    "Relatório exportado.",
+                    $"Relatório exportado em {runFolder}",
                     HtmlReportPath: reportPath,
                     TextReportPath: txtPath,
                     Result: _result));

@@ -47,6 +47,9 @@ public class EventViewerModule : BaseModule
         // Check 4688 for suspicious process creation
         ScanProcessCreationEvents(findings, cancellationToken);
 
+        // Warn if any critical log has less than the required lookback coverage
+        CheckLogCoverage(findings, since, config.EventWindowLookback);
+
         return Task.FromResult(findings);
     }
 
@@ -261,5 +264,47 @@ public class EventViewerModule : BaseModule
             return end > 0 ? rest[..end].Trim() : rest.Length > 50 ? rest[..50] : rest;
         }
         return description.Length > 50 ? description[..50] : description;
+    }
+
+    // For each critical log, queries the oldest available record and emits a warning
+    // finding when coverage is less than the configured lookback window.
+    private static void CheckLogCoverage(List<Finding> findings, DateTime since, TimeSpan lookback)
+    {
+        var requiredDays = (int)lookback.TotalDays;
+        foreach (var logName in new[] { "Security", "System", "Application" })
+        {
+            try
+            {
+                var query = new EventLogQuery(logName, PathType.LogName, "*")
+                {
+                    ReverseDirection = false // oldest first
+                };
+                using var reader = new EventLogReader(query);
+                using var record = reader.ReadEvent();
+                if (record?.TimeCreated == null) continue;
+
+                var oldestLocal = record.TimeCreated.Value.ToLocalTime();
+                var coverageDays = (int)(DateTime.Now - oldestLocal).TotalDays;
+
+                if (record.TimeCreated.Value > since.AddDays(1))
+                {
+                    findings.Add(new Finding(
+                        RiskLevel.Low,
+                        FindingCategory.SystemTampering,
+                        "Event Viewer",
+                        $"AVISO: Log {logName} com cobertura insuficiente ({coverageDays} dias disponíveis)",
+                        $"Retenção mínima de {requiredDays} dias não pôde ser confirmada. " +
+                        $"O log {logName} possui registros a partir de {oldestLocal:dd/MM/yyyy}. " +
+                        "O log pode ter sido limpo ou a política de retenção é curta.",
+                        $"Registro mais antigo: {oldestLocal:dd/MM/yyyy HH:mm:ss} | Cobertura: {coverageDays} dias de {requiredDays} dias necessários",
+                        timestamp: null,
+                        confidence: Confidence.Medium,
+                        ruleId: $"LOG_COVERAGE_{logName.ToUpperInvariant()}",
+                        entity: logName
+                    ));
+                }
+            }
+            catch { /* log inacessível — sem aviso */ }
+        }
     }
 }
