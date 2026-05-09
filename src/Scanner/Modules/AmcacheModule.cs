@@ -8,7 +8,7 @@ namespace BypassNerfados.Scanner.Modules;
 public class AmcacheModule : BaseModule
 {
     public override string Name        => "Amcache";
-    public override string Description => "Histórico persistente de executáveis — confirma execução mesmo após deleção";
+    public override string Description => "Histórico persistente de executáveis — confirma presença/registro; execução requer correlação com Prefetch/BAM";
 
     private const string HivePath   = @"C:\Windows\appcompat\Programs\Amcache.hve";
     private const string TempKeyName = "ECHO_AMCACHE_SCAN";
@@ -72,8 +72,8 @@ public class AmcacheModule : BaseModule
                 FindingCategory.Cheat,
                 "Amcache",
                 $"AMCACHE: {label ?? fileName}{(deleted ? " [ARQUIVO DELETADO]" : "")}",
-                $"Executável registrado no Amcache — evidência de presença na máquina." +
-                (deleted ? " O arquivo foi removido após execução — possível tentativa de ocultação." : "") +
+                $"Executável registrado no Amcache — confirma presença/registro no sistema." +
+                (deleted ? " Arquivo removido após registro — possível tentativa de ocultação; eleva confiança." : " Correlacionar com Prefetch, BAM/DAM ou UserAssist para confirmar execução.") +
                 (publisher != "" ? $" Publisher: {publisher}." : ""),
                 $"SHA1: {(sha1 != "" ? sha1 : "N/A")} | LinkDate: {linkDate} | Caminho: {path}",
                 timestamp: null,

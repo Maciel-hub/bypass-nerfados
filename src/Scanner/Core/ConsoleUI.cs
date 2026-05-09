@@ -8,7 +8,7 @@ public static class ConsoleUI
 {
     public static void PrintBanner()
     {
-        AnsiConsole.Clear();
+        if (!Console.IsOutputRedirected) AnsiConsole.Clear();
         AnsiConsole.Write(new FigletText("ECHO NERFADOS").Centered().Color(Color.Red));
         AnsiConsole.Write(new Rule("[bold red]Shield XDR v1.0 — Anti-Cheat Investigation Platform[/]"));
         AnsiConsole.MarkupLine("[grey]Investigação Forense · Detecção de Cheats · Screen-Share Analysis[/]");
@@ -238,7 +238,7 @@ public static class ConsoleUI
     // Returns true if the user authenticates successfully within maxAttempts tries.
     public static bool PromptLogin(int maxAttempts = 3)
     {
-        AnsiConsole.Clear();
+        if (!Console.IsOutputRedirected) AnsiConsole.Clear();
         AnsiConsole.Write(new Rule("[bold red]Echo Nerfados Shield XDR — Acesso Restrito[/]"));
         AnsiConsole.WriteLine();
 

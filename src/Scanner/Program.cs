@@ -5,6 +5,21 @@ using BypassNerfados.Scanner.Models;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 Console.Title = "Echo Nerfados Shield XDR v1.0";
 
+// --help / -h: process before authentication — no login required, exit 0
+if (args.Any(a => a is "--help" or "-h"))
+{
+    PrintHelp();
+    return 0;
+}
+
+// Require interactive terminal — AnsiConsole.Clear() and prompts crash otherwise
+if (Console.IsInputRedirected || Console.IsOutputRedirected || Console.IsErrorRedirected)
+{
+    Console.Error.WriteLine("Echo Nerfados Shield XDR requires an interactive terminal.");
+    Console.Error.WriteLine("Usage: EchoNerfados.exe [--help]");
+    return 1;
+}
+
 // Authentication gate — must pass before any scan activity
 if (!ConsoleUI.PromptLogin())
     return 2; // exit code 2 = auth failed

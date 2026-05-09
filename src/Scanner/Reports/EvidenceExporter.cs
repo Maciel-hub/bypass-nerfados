@@ -40,7 +40,8 @@ public static class EvidenceExporter
         WriteModuleJson(result, runFolder, "Amcache",             "amcache_60d.json",      lookback);
         WriteModuleJson(result, runFolder, "UserAssist",          "userassist_60d.json",   lookback);
         WriteModuleJson(result, runFolder, "ShimCache",           "shimcache_60d.json",    lookback);
-        WriteModuleJson(result, runFolder, "LNK Recent",          "lnk_60d.json",          lookback);
+        WriteModuleJson(result, runFolder, "LNK Recent",            "lnk_60d.json",                    lookback);
+        WriteModuleJson(result, runFolder, "RegistryPersistence",  "registrypersistence_60d.json",    lookback);
     }
 
     private static void WriteModuleJson(

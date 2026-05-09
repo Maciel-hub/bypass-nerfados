@@ -135,18 +135,39 @@ public class RegistryPersistenceModule : BaseModule
                 var value = key.GetValue("AppInit_DLLs")?.ToString() ?? "";
                 if (string.IsNullOrWhiteSpace(value)) continue;
 
-                findings.Add(new Finding(
-                    RiskLevel.High,
-                    FindingCategory.SystemTampering,
-                    "RegistryPersistence",
-                    $"AppInit_DLLs configurado: {value}",
-                    $"DLLs listadas em AppInit_DLLs são carregadas em todos os processos que usam User32.dll. " +
-                    $"Técnica clássica de injeção de DLL. Chave: HKLM\\{regPath}",
-                    $"AppInit_DLLs = {value}",
-                    confidence: Confidence.High,
-                    ruleId: "APPINIT_DLLS",
-                    entity: value
-                ));
+                var loadAppInit = Convert.ToInt32(key.GetValue("LoadAppInit_DLLs") ?? 0);
+
+                if (loadAppInit == 0)
+                {
+                    // DLLs configured but LoadAppInit_DLLs=0 means they are NOT injected
+                    findings.Add(new Finding(
+                        RiskLevel.Medium,
+                        FindingCategory.SystemTampering,
+                        "RegistryPersistence",
+                        $"AppInit_DLLs configurado mas inativo: {value}",
+                        $"DLLs listadas em AppInit_DLLs mas LoadAppInit_DLLs=0 (desativado). " +
+                        $"A configuração existe porém as DLLs não estão sendo carregadas. Chave: HKLM\\{regPath}",
+                        $"AppInit_DLLs = {value} | LoadAppInit_DLLs = 0",
+                        confidence: Confidence.Low,
+                        ruleId: "APPINIT_DLLS_INACTIVE",
+                        entity: value
+                    ));
+                }
+                else
+                {
+                    findings.Add(new Finding(
+                        RiskLevel.High,
+                        FindingCategory.SystemTampering,
+                        "RegistryPersistence",
+                        $"AppInit_DLLs ativo — injeção em todos os processos: {value}",
+                        $"DLLs listadas em AppInit_DLLs são carregadas em todos os processos que usam User32.dll. " +
+                        $"Técnica clássica de injeção de DLL. Chave: HKLM\\{regPath}",
+                        $"AppInit_DLLs = {value} | LoadAppInit_DLLs = {loadAppInit}",
+                        confidence: Confidence.High,
+                        ruleId: "APPINIT_DLLS",
+                        entity: value
+                    ));
+                }
             }
             catch { }
         }

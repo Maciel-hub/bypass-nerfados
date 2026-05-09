@@ -184,21 +184,37 @@ public class LnkRecentModule : BaseModule
             // Parse LinkInfo block
             if (hasLinkInfo && offset + 28 <= data.Length)
             {
-                var linkInfoStart  = offset;
-                var linkInfoSize   = BitConverter.ToInt32(data, linkInfoStart);
-                var linkInfoFlags  = BitConverter.ToInt32(data, linkInfoStart + 8);
+                var linkInfoStart      = offset;
+                var linkInfoSize       = BitConverter.ToInt32(data, linkInfoStart);
+                var linkInfoHeaderSize = BitConverter.ToInt32(data, linkInfoStart + 4);
+                var linkInfoFlags      = BitConverter.ToInt32(data, linkInfoStart + 8);
                 var localBasePathOffset = BitConverter.ToInt32(data, linkInfoStart + 16);
 
                 // bit 0 of LinkInfoFlags = VolumeIDAndLocalBasePath present
                 if ((linkInfoFlags & 0x01) != 0 &&
                     linkInfoStart + localBasePathOffset < data.Length)
                 {
-                    // LocalBasePath is a null-terminated ASCII string
+                    // LocalBasePath: null-terminated ASCII string
                     var pathStart = linkInfoStart + localBasePathOffset;
                     var end = Array.IndexOf(data, (byte)0, pathStart);
                     if (end > pathStart)
-                    {
                         targetPath = Encoding.ASCII.GetString(data, pathStart, end - pathStart);
+                }
+
+                // Try Unicode path when header is extended (>= 0x24 / 36 bytes)
+                // LocalBasePathOffsetUnicode is at LinkInfo+28; CommonPathSuffixUnicode at +32
+                if ((linkInfoFlags & 0x01) != 0 && linkInfoHeaderSize >= 0x24 &&
+                    linkInfoStart + 32 <= data.Length)
+                {
+                    var unicodeOffset = BitConverter.ToInt32(data, linkInfoStart + 28);
+                    if (unicodeOffset > 0)
+                    {
+                        var uStart = linkInfoStart + unicodeOffset;
+                        var uEnd   = uStart;
+                        while (uEnd + 1 < data.Length && !(data[uEnd] == 0 && data[uEnd + 1] == 0))
+                            uEnd += 2;
+                        if (uEnd > uStart)
+                            targetPath = Encoding.Unicode.GetString(data, uStart, uEnd - uStart);
                     }
                 }
 

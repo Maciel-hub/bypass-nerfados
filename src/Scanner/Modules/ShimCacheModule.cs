@@ -50,9 +50,9 @@ public class ShimCacheModule : BaseModule
                 risk,
                 FindingCategory.Cheat,
                 "ShimCache",
-                $"SHIMCACHE: {label ?? fileName} — carregado pelo kernel",
-                "Executável carregado na memória registrado pelo AppCompatCache. " +
-                "Evidência de execução independente de logs do EventViewer.",
+                $"SHIMCACHE: {label ?? fileName} — indício de carregamento/presença",
+                "Executável registrado no AppCompatCache — indício de carregamento/presença no sistema. " +
+                "Não confirma execução isoladamente; correlacionar com Prefetch, BAM/DAM ou UserAssist.",
                 $"Caminho: {path}",
                 timestamp: lastWrite,
                 confidence: confidence,
