@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -24,48 +25,68 @@ public static class ManifestWriter
             ?? assembly.GetName().Version?.ToString()
             ?? "1.0.0";
 
-        var exePath  = Environment.ProcessPath;
-        var exeHash  = exePath != null && File.Exists(exePath) ? Sha256(exePath) : null;
+        var processPath  = Environment.ProcessPath;
+        var assemblyLoc  = assembly.Location;
+        // For single-file publish assemblyLocation is empty — fall back to processPath
+        if (string.IsNullOrEmpty(assemblyLoc)) assemblyLoc = processPath;
 
         var files = new Dictionary<string, FileManifestEntry>();
-        foreach (var file in Directory.EnumerateFiles(runFolder))
+        foreach (var file in Directory.EnumerateFiles(runFolder).OrderBy(f => f))
         {
             var name = Path.GetFileName(file);
-            if (name == "manifest.json") continue; // skip self
+            if (name is "manifest.json" or "manifest.sha256") continue;
             files[name] = new FileManifestEntry
             {
-                Sha256     = Sha256(file),
-                SizeBytes  = new FileInfo(file).Length
+                Sha256    = Sha256Of(file),
+                SizeBytes = new FileInfo(file).Length
             };
         }
 
+        var args = Environment.GetCommandLineArgs();
         var manifest = new ManifestDto
         {
-            Scanner      = "Bypass Nerfados Shield XDR",
-            Version      = version,
-            ScanStarted  = result.ScanTime,
+            Scanner       = "Bypass Nerfados Shield XDR",
+            Version       = version,
+            ScanStarted   = result.ScanTime,
             ScanCompleted = result.ScanCompleted ?? DateTime.Now,
-            Machine      = result.MachineName,
-            User         = result.CurrentUser,
-            RunAsAdmin   = result.IsAdministrator,
-            LookbackDays = (int)config.EventWindowLookback.TotalDays,
-            TotalScore   = result.TotalScore,
-            OverallRisk  = result.OverallRiskLabel,
-            Files        = files,
-            ScannerExecutable = exePath != null ? new ExecutableManifestEntry
+            Machine       = result.MachineName,
+            User          = result.CurrentUser,
+            IsElevated    = result.IsAdministrator,
+            ProcessId     = Environment.ProcessId,
+            CommandLine   = Environment.CommandLine,
+            Arguments     = args.Length > 1 ? args[1..] : [],
+            WorkingDirectory = Environment.CurrentDirectory,
+            OsVersion     = RuntimeInformation.OSDescription,
+            Timezone      = TimeZoneInfo.Local.Id,
+            LookbackDays  = (int)config.EventWindowLookback.TotalDays,
+            TotalScore    = result.TotalScore,
+            OverallRisk   = result.OverallRiskLabel,
+            Files         = files,
+            ScannerExecutable = new ExecutableManifestEntry
             {
-                Path   = exePath,
-                Sha256 = exeHash
-            } : null
+                ProcessPath         = processPath,
+                ProcessPathSha256   = processPath != null && File.Exists(processPath) ? Sha256Of(processPath) : null,
+                AssemblyLocation    = assemblyLoc != processPath ? assemblyLoc : null,
+                AssemblyLocationSha256 = assemblyLoc != processPath && assemblyLoc != null && File.Exists(assemblyLoc)
+                    ? Sha256Of(assemblyLoc) : null
+            }
         };
 
-        var path = Path.Combine(runFolder, "manifest.json");
-        File.WriteAllText(path, JsonSerializer.Serialize(manifest, Opts), System.Text.Encoding.UTF8);
+        var manifestPath = Path.Combine(runFolder, "manifest.json");
+        File.WriteAllText(manifestPath, JsonSerializer.Serialize(manifest, Opts), System.Text.Encoding.UTF8);
+
+        // manifest.sha256 — sha256sum-compatible format, verifiable by third parties:
+        // sha256sum -c manifest.sha256
+        var manifestHash = Sha256Of(manifestPath);
+        File.WriteAllText(
+            Path.Combine(runFolder, "manifest.sha256"),
+            $"{manifestHash}  manifest.json{Environment.NewLine}",
+            System.Text.Encoding.UTF8);
     }
 
-    private static string Sha256(string filePath)
+    private static string Sha256Of(string filePath)
     {
-        using var sha = System.Security.Cryptography.SHA256.Create();
+        using var sha = SHA256.Create();
         using var fs  = File.OpenRead(filePath);
         return Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
     }
@@ -73,18 +94,24 @@ public static class ManifestWriter
 
 file sealed class ManifestDto
 {
-    public string    Scanner       { get; init; } = "";
-    public string    Version       { get; init; } = "";
-    public DateTime  ScanStarted   { get; init; }
-    public DateTime  ScanCompleted { get; init; }
-    public string    Machine       { get; init; } = "";
-    public string    User          { get; init; } = "";
-    public bool      RunAsAdmin    { get; init; }
-    public int       LookbackDays  { get; init; }
-    public int       TotalScore    { get; init; }
-    public string    OverallRisk   { get; init; } = "";
+    public string   Scanner          { get; init; } = "";
+    public string   Version          { get; init; } = "";
+    public DateTime ScanStarted      { get; init; }
+    public DateTime ScanCompleted    { get; init; }
+    public string   Machine          { get; init; } = "";
+    public string   User             { get; init; } = "";
+    public bool     IsElevated       { get; init; }
+    public int      ProcessId        { get; init; }
+    public string   CommandLine      { get; init; } = "";
+    public string[] Arguments        { get; init; } = [];
+    public string   WorkingDirectory { get; init; } = "";
+    public string   OsVersion        { get; init; } = "";
+    public string   Timezone         { get; init; } = "";
+    public int      LookbackDays     { get; init; }
+    public int      TotalScore       { get; init; }
+    public string   OverallRisk      { get; init; } = "";
     public Dictionary<string, FileManifestEntry> Files { get; init; } = new();
-    public ExecutableManifestEntry? ScannerExecutable { get; init; }
+    public ExecutableManifestEntry ScannerExecutable   { get; init; } = new();
 }
 
 file sealed class FileManifestEntry
@@ -95,6 +122,8 @@ file sealed class FileManifestEntry
 
 file sealed class ExecutableManifestEntry
 {
-    public string  Path   { get; init; } = "";
-    public string? Sha256 { get; init; }
+    public string?  ProcessPath            { get; init; }
+    public string?  ProcessPathSha256      { get; init; }
+    public string?  AssemblyLocation       { get; init; }
+    public string?  AssemblyLocationSha256 { get; init; }
 }
