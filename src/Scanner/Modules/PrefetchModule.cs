@@ -59,17 +59,30 @@ public class PrefetchModule : BaseModule
 
             var lastWriteTime = File.GetLastWriteTime(pfFile);
 
-            // Known cheat executables
+            // Never flag the scanner itself
+            if (IsOwnProcess(exeName)) continue;
+
+            // Known cheat executables — apply same confidence logic as KnownCheatsModule
             if (CheatDatabase.KnownExecutables.TryGetValue(exeName, out var cheatInfo))
             {
+                var confidence = cheatInfo.IsGenericName ? Confidence.Low : Confidence.Medium;
+                var risk       = cheatInfo.IsGenericName ? RiskLevel.Medium : RiskLevel.High;
                 findings.Add(new Finding(
-                    RiskLevel.Critical,
+                    risk,
                     FindingCategory.Cheat,
                     Name,
-                    $"CHEAT NO PREFETCH: {cheatInfo.Name} ({exeName})",
-                    $"Arquivo Prefetch confirma execução do cheat.\n{cheatInfo.Description}",
+                    cheatInfo.IsGenericName
+                        ? $"Executável com nome de cheat no Prefetch (baixa confiança): {exeName}"
+                        : $"CHEAT NO PREFETCH: {cheatInfo.Name} ({exeName})",
+                    $"Arquivo Prefetch confirma execução.\n{cheatInfo.Description}",
                     $"Prefetch: {Path.GetFileName(pfFile)} | Última execução: {lastWriteTime:dd/MM/yyyy HH:mm:ss}",
-                    lastWriteTime
+                    lastWriteTime,
+                    confidence: confidence,
+                    ruleId: $"PREFETCH_{cheatInfo.Name.ToUpperInvariant().Replace(" ", "_")}",
+                    entity: exeName,
+                    validationHint: cheatInfo.IsGenericName
+                        ? "Confirmar caminho e hash — nome genérico pode ser launcher legítimo"
+                        : null
                 ));
                 continue;
             }

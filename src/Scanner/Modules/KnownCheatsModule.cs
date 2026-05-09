@@ -215,15 +215,17 @@ public class KnownCheatsModule : BaseModule
                 .Where(f =>
                 {
                     var name = Path.GetFileNameWithoutExtension(f);
-                    var ext = Path.GetExtension(f);
-                    // Match 8-10 random alphanum chars, no extension or .exe
-                    bool isRandomName = name.Length is >= 8 and <= 10 &&
-                                        name.All(char.IsLetterOrDigit);
-                    bool isNumericName = name.Length is >= 8 and <= 10 &&
-                                         name.All(char.IsDigit);
-                    bool isSmall = new FileInfo(f).Length == 0;
-                    return (isRandomName || (isNumericName && isSmall)) &&
-                           !string.Equals(ext, ".mui", StringComparison.OrdinalIgnoreCase);
+                    var ext  = Path.GetExtension(f).ToLowerInvariant();
+
+                    // GOSTH drops extensionless files or .exe — DLLs, SYS, DAT etc. are Windows artifacts
+                    if (ext is not ("" or ".exe")) return false;
+
+                    bool isSmall      = new FileInfo(f).Length == 0;
+                    bool isNumeric    = name.Length is >= 8 and <= 10 && name.All(char.IsDigit);
+                    bool isRandomAlph = name.Length is >= 8 and <= 10 && name.All(char.IsLetterOrDigit) && !isNumeric;
+
+                    // Both patterns require 0 KB — legitimate extensionless System32 files are never empty
+                    return isSmall && (isNumeric || isRandomAlph);
                 })
                 .ToList();
 
@@ -235,12 +237,16 @@ public class KnownCheatsModule : BaseModule
 
                     var size = new FileInfo(f).Length;
                     findings.Add(new Finding(
-                        RiskLevel.Critical,
+                        RiskLevel.Medium,
                         FindingCategory.Cheat,
                         "Known Cheats",
-                        $"PADRÃO GOSTH em System32: {Path.GetFileName(f)}",
-                        $"Arquivo com nome aleatório de 8-10 chars na System32 — padrão característico do GOSTH.\nCaminho: {f}",
-                        $"Tamanho: {size} bytes | SHA256: {(size > 0 ? GetFileHash(f) ?? "N/A" : "vazio")}"
+                        $"POSSÍVEL PADRÃO GOSTH em System32: {Path.GetFileName(f)}",
+                        $"Arquivo 0 KB com nome de 8-10 chars alfanuméricos na System32 — padrão do GOSTH.\nCaminho: {f}\nValidar com Prefetch de launcher.exe e hash SHA1 conhecido.",
+                        $"Tamanho: {size} bytes",
+                        confidence: Confidence.Low,
+                        ruleId: "GOSTH_PATTERN_SYSTEM32",
+                        entity: f,
+                        validationHint: "Confirmar com Prefetch de launcher.exe ou hash SHA1 do GOSTH"
                     ));
                 }
             }

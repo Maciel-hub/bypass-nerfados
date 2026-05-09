@@ -32,6 +32,20 @@ public abstract class BaseModule
 
     protected abstract Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken);
 
+    // Self-exclusion: never flag the scanner's own process or its build/run directory
+    private static readonly string _selfExeName =
+        Path.GetFileName(Environment.ProcessPath ?? "bypassnerfados.exe").ToLowerInvariant();
+    private static readonly string _selfDirLower =
+        (Path.GetDirectoryName(Environment.ProcessPath) ?? "").ToLowerInvariant();
+
+    protected static bool IsOwnProcess(string nameOrPath)
+    {
+        var lower = nameOrPath.ToLowerInvariant();
+        return lower == _selfExeName
+            || lower.EndsWith(Path.DirectorySeparatorChar + _selfExeName)
+            || (!string.IsNullOrEmpty(_selfDirLower) && lower.StartsWith(_selfDirLower));
+    }
+
     protected static string ConvertDevicePath(string devicePath)
     {
         foreach (var drive in DriveInfo.GetDrives())
