@@ -48,8 +48,12 @@ public static class EvidenceExporter
         var timed = findings.Where(f => f.Timestamp.HasValue).ToList();
         DateTime? oldest = timed.Count > 0 ? timed.Min(f => f.Timestamp!.Value) : null;
         DateTime? newest = timed.Count > 0 ? timed.Max(f => f.Timestamp!.Value) : null;
-        var coverageDays  = oldest.HasValue ? (int)(DateTime.Now - oldest.Value).TotalDays : 0;
-        var coverageOk    = coverageDays >= lookbackDays;
+
+        // Prefer coverage days from CheckLogCoverage findings (actual oldest record in the log)
+        // over estimating from finding timestamps (quiet periods undercount real log depth).
+        // When no coverage warning exists the log met the requirement — report full lookback.
+        var coverageDays = ResolveCoverageDays(result, module, oldest, lookbackDays);
+        var coverageOk   = coverageDays >= lookbackDays;
 
         var dto = new ModuleExportDto
         {
@@ -63,6 +67,47 @@ public static class EvidenceExporter
             Findings     = findings.Select(FindingDto.From).ToList()
         };
         WriteJson(Path.Combine(runFolder, fileName), dto);
+    }
+
+    // Maps each module export to the Windows logs that back it, then reads coverage days
+    // from the LOG_COVERAGE_* findings emitted by EventViewerModule.CheckLogCoverage.
+    // Those findings embed "Cobertura: N dias" in their Evidence field.
+    // When no coverage warning is present the log had sufficient data — return lookbackDays.
+    // When multiple logs are relevant, return the worst (minimum) coverage.
+    private static int ResolveCoverageDays(
+        ScanResult result, string module, DateTime? oldestFinding, int lookbackDays)
+    {
+        string[] relevantLogs = module switch
+        {
+            "Event Viewer"     => ["Security", "System", "Application"],
+            "Windows Defender" => ["Security"],
+            "Services"         => ["System"],
+            _                  => []
+        };
+
+        if (relevantLogs.Length == 0)
+            return oldestFinding.HasValue
+                ? (int)(DateTime.Now - oldestFinding.Value).TotalDays
+                : lookbackDays;
+
+        var coverageWarnings = result.Findings
+            .Where(f => f.RuleId?.StartsWith("LOG_COVERAGE_") == true &&
+                        f.Entity != null &&
+                        relevantLogs.Contains(f.Entity))
+            .ToList();
+
+        if (coverageWarnings.Count == 0)
+            return lookbackDays; // no warning = log has sufficient history
+
+        // Parse "Cobertura: N dias" from each relevant warning and return the worst
+        var regex = new System.Text.RegularExpressions.Regex(@"Cobertura: (\d+) dias");
+        return coverageWarnings
+            .Select(f =>
+            {
+                var m = regex.Match(f.Evidence ?? "");
+                return m.Success && int.TryParse(m.Groups[1].Value, out var d) ? d : lookbackDays;
+            })
+            .Min();
     }
 
     private static void WriteJson<T>(string path, T data) =>
