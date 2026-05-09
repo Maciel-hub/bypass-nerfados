@@ -319,16 +319,23 @@ public static class EvidenceEnricher
     }
 
     // Finds bypass/anti-forensic signals near the cheat artifact.
-    // Deduplicates by title, applies priority ordering, and restricts untimed events
-    // to high-impact categories only (avoids 7045 noise across all dossiers).
+    // Timed events are kept individually so each artifact's ±1h window filters them.
+    // Untimed events are deduped by title (no timestamp anchor, so one per signal type is enough).
     private static List<string> FindBypassIndicators(List<Finding> cheatGroup, List<Finding> allFindings)
     {
-        // Deduplicate by title so the same event doesn't repeat across artifacts
-        var bypassFindings = allFindings
-            .Where(IsRelevantBypassSignal)
+        var allBypass = allFindings.Where(IsRelevantBypassSignal).ToList();
+
+        // Timed findings: keep all — the ±1h window below decides relevance per artifact
+        var timed = allBypass.Where(f => f.Timestamp.HasValue).ToList();
+
+        // Untimed findings: dedup by title (same persistent state doesn't need N copies)
+        var untimed = allBypass
+            .Where(f => !f.Timestamp.HasValue)
             .GroupBy(f => f.Title)
             .Select(g => g.OrderByDescending(f => f.Risk).First())
             .ToList();
+
+        var bypassFindings = timed.Concat(untimed).ToList();
 
         if (bypassFindings.Count == 0) return [];
 
