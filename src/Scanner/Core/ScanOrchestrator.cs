@@ -132,9 +132,11 @@ public class ScanOrchestrator
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 Directory.CreateDirectory(runFolder);
+                _result.ScanCompleted = DateTime.Now;
                 ReportGenerator.GenerateHtml(_result, _config, reportPath);
                 ReportGenerator.GenerateTxt(_result, _config, txtPath);
                 EvidenceExporter.Export(_result, _config, runFolder);
+                ManifestWriter.Write(_result, _config, runFolder); // must run last (hashes all other files)
 
                 Report(new ScanProgressUpdate(
                     ScanProgressKind.ReportGenerated,

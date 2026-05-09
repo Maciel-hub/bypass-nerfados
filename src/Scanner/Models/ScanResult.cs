@@ -6,6 +6,7 @@ public class ScanResult
     public string CurrentUser { get; init; } = Environment.UserName;
     public string ScanMode { get; init; } = "Completo";
     public DateTime ScanTime { get; init; } = DateTime.Now;
+    public DateTime? ScanCompleted { get; set; }
     public string WindowsVersion { get; set; } = string.Empty;
     public string InstallDate { get; set; } = string.Empty;
     public string LastBoot { get; set; } = string.Empty;

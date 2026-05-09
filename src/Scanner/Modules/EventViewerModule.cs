@@ -288,13 +288,8 @@ public class EventViewerModule : BaseModule
 
                 if (record.TimeCreated.Value > since.AddDays(1))
                 {
-                    // Security log is the primary forensic source (auth, Defender 5007, privilege changes)
-                    // — insufficient coverage there is a medium-risk gap in the investigation chain
                     var risk = logName == "Security" ? RiskLevel.Medium : RiskLevel.Low;
-
-                    var defenderNote = logName == "Security"
-                        ? " Eventos do Windows Defender (5007) também dependem deste log."
-                        : "";
+                    var lostEvidence = LogLostEvidence(logName);
 
                     findings.Add(new Finding(
                         risk,
@@ -302,9 +297,9 @@ public class EventViewerModule : BaseModule
                         "Event Viewer",
                         $"AVISO: Log {logName} com cobertura insuficiente ({coverageDays} dias disponíveis)",
                         $"Retenção mínima de {requiredDays} dias não pôde ser confirmada. " +
-                        $"O log {logName} possui registros a partir de {oldestLocal:dd/MM/yyyy}." +
-                        defenderNote +
-                        " Possível limpeza de logs ou política de retenção insuficiente.",
+                        $"O log {logName} possui registros a partir de {oldestLocal:dd/MM/yyyy}. " +
+                        "Possível limpeza de log ou política de retenção insuficiente. " +
+                        $"Evidências que podem ter sido perdidas: {lostEvidence}",
                         $"Registro mais antigo: {oldestLocal:dd/MM/yyyy HH:mm:ss} | Cobertura: {coverageDays} dias de {requiredDays} dias necessários",
                         timestamp: null,
                         confidence: Confidence.Medium,
@@ -316,4 +311,19 @@ public class EventViewerModule : BaseModule
             catch { /* log inacessível — sem aviso */ }
         }
     }
+
+    private static string LogLostEvidence(string logName) => logName switch
+    {
+        "Security" =>
+            "autenticações (4624/4625), escalação de privilégio (4672), " +
+            "limpeza de log anterior (1102), alterações de política de auditoria (4719), " +
+            "Defender config (5007), criação de conta (4720), tarefas agendadas (4698)",
+        "System" =>
+            "instalação de serviços (7045), reinicializações, " +
+            "limpeza de log anterior (104), alteração de driver, falhas de sistema",
+        "Application" =>
+            "crashes de aplicativos (1000), erros de instalação/desinstalação, " +
+            "exceções de processos suspeitos",
+        _ => "eventos históricos do período não coberto"
+    };
 }

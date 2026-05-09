@@ -20,4 +20,16 @@
     <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
   </ItemGroup>
 
+  <!-- Embed git commit hash in InformationalVersion at build time -->
+  <Target Name="SetGitVersion" BeforeTargets="CoreCompile;GetAssemblyVersion">
+    <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitShortHash" />
+    </Exec>
+    <PropertyGroup>
+      <GitShortHash>$(GitShortHash.Trim())</GitShortHash>
+      <InformationalVersion Condition="'$(GitShortHash)' != ''">$(Version)+$(GitShortHash)</InformationalVersion>
+      <InformationalVersion Condition="'$(GitShortHash)' == ''">$(Version)+unknown</InformationalVersion>
+    </PropertyGroup>
+  </Target>
+
 </Project>
