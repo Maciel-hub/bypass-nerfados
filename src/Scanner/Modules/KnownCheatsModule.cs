@@ -122,6 +122,12 @@ public class KnownCheatsModule : BaseModule
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
+                // d3d10.dll in System32/SysWOW64 is the legitimate DirectX runtime
+                var parentDir = Path.GetDirectoryName(file) ?? "";
+                if (parentDir.Equals(Environment.GetFolderPath(Environment.SpecialFolder.System), StringComparison.OrdinalIgnoreCase) ||
+                    parentDir.Equals(Environment.GetFolderPath(Environment.SpecialFolder.SystemX86), StringComparison.OrdinalIgnoreCase))
+                    continue;
+
                 var fileName = Path.GetFileName(file).ToLowerInvariant();
                 if (CheatDatabase.KnownDlls.TryGetValue(fileName, out var cheat))
                 {

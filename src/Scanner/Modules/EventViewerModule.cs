@@ -42,7 +42,7 @@ public class EventViewerModule : BaseModule
         }
 
         // Check for USN reset event (ID 3079 in Application log - NTFS)
-        ScanUsnResetEvent(findings, cancellationToken);
+        ScanUsnResetEvent(findings, since, cancellationToken);
 
         // Check 4688 for suspicious process creation
         ScanProcessCreationEvents(findings, cancellationToken);
@@ -103,22 +103,25 @@ public class EventViewerModule : BaseModule
         }
     }
 
-    private static void ScanUsnResetEvent(List<Finding> findings, CancellationToken cancellationToken)
+    private static void ScanUsnResetEvent(List<Finding> findings, DateTime since, CancellationToken cancellationToken)
     {
-        // ID 3079 in Application log = NTFS volume reset (possible USN journal bypass)
+        // ID 3079: NTFS volume reset — can indicate USN Journal bypass but also benign disk events
         try
         {
+            var sinceStr = since.ToString("yyyy-MM-ddTHH:mm:ss.000Z");
             var query = new EventLogQuery(
                 "Application",
                 PathType.LogName,
-                "*[System[EventID=3079]]");
+                $"*[System[EventID=3079 and TimeCreated[@SystemTime>='{sinceStr}']]]")
+            { ReverseDirection = true };
 
             using var reader = new EventLogReader(query);
+            int count = 0;
             EventRecord? record;
-            while ((record = reader.ReadEvent()) != null)
+            while ((record = reader.ReadEvent()) != null && count < 5)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-
+                count++;
                 using (record)
                 {
                     string description;
@@ -126,13 +129,17 @@ public class EventViewerModule : BaseModule
                     catch { description = "Evento NTFS 3079"; }
 
                     findings.Add(new Finding(
-                        RiskLevel.Critical,
+                        RiskLevel.High,
                         FindingCategory.AntiForensics,
                         "EventViewer",
-                        "TENTATIVA DE BYPASS NTFS (3079) — USN Journal possivelmente apagado",
-                        $"NTFS realizou reset ou detectou inconsistências. Possível limpeza do USN Journal.\n{description}",
+                        "POSSÍVEL BYPASS NTFS (3079) — inconsistência no USN Journal",
+                        $"NTFS detectou inconsistências. Pode indicar limpeza do USN Journal.\n{description}",
                         $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
-                        record.TimeCreated
+                        record.TimeCreated,
+                        confidence: Confidence.Low,
+                        ruleId: $"EVENT_3079@{record.TimeCreated:yyyyMMddHH}",
+                        entity: $"3079@{record.TimeCreated:yyyyMMddHH}",
+                        validationHint: "Confirmar com PSReadLine: fsutil usn deletejournal — evento 3079 sozinho é inconclusivo"
                     ));
                 }
             }

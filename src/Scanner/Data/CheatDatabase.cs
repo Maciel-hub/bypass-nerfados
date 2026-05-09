@@ -17,7 +17,7 @@ public static class CheatDatabase
             ["launcher.exe"] = new CheatInfo(
                 "GOSTH",
                 "Cheat para FiveM. Gera arquivo de 8-10 chars aleatórios na System32 e arquivo de 8-10 números com 0kb.",
-                [@"C:\Users", @"AppData\Local\Programs\Common"],
+                [@"AppData\Local\Programs\Common", @"AppData\Local\Temp\"],
                 AssociatedFiles: ["dxsetup"],
                 IsGenericName: true   // "launcher.exe" é usado por Rockstar, Steam, Epic etc.
             ),
@@ -91,6 +91,21 @@ public static class CheatDatabase
         "pcasvc", "dps", "diagtrack", "sysmain", "eventlog",
         "dusmsvc", "appinfo", "bam"
     ];
+
+    // Legitimate patterns that match suspicious keywords but are not cheats
+    private static readonly HashSet<string> _legitimatePatterns = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "citizenfx_uninstall", // FiveM official uninstaller
+        "fivem_uninstall",
+        "rockstargameslauncher",
+        "epicgameslauncher",
+    };
+
+    public static bool IsKnownLegitimate(string name)
+    {
+        var lower = name.ToLowerInvariant();
+        return _legitimatePatterns.Any(p => lower.Contains(p));
+    }
 
     public static bool IsKnownCheatExecutable(string filename) =>
         KnownExecutables.ContainsKey(filename);

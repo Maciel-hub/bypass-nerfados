@@ -48,15 +48,26 @@ public class RegistryArtifactsModule : BaseModule
                 // Data contains hex PCA flags like 0x4477000
                 string pca = data != null ? $"PCA: 0x{Convert.ToInt32(data):X}" : "";
 
+                if (IsOwnProcess(fileName)) continue;
+                if (CheatDatabase.IsKnownLegitimate(fileName) || CheatDatabase.IsKnownLegitimate(valueName)) continue;
+
                 if (CheatDatabase.KnownExecutables.TryGetValue(fileName, out var cheat))
                 {
+                    var confidence = cheat.IsGenericName ? Confidence.Low : Confidence.Medium;
+                    var risk       = cheat.IsGenericName ? RiskLevel.Medium : RiskLevel.High;
                     findings.Add(new Finding(
-                        RiskLevel.Critical,
+                        risk,
                         FindingCategory.Cheat,
                         ModuleName,
-                        $"CHEAT NA STORE: {cheat.Name} ({fileName})",
+                        cheat.IsGenericName
+                            ? $"Executável com nome de cheat na Store (baixa confiança): {fileName}"
+                            : $"CHEAT NA STORE: {cheat.Name} ({fileName})",
                         $"Executável encontrado na chave PCA Store.\n{cheat.Description}",
-                        $"Caminho: {valueName} | {pca}"
+                        $"Caminho: {valueName} | {pca}",
+                        confidence: confidence,
+                        ruleId: $"STORE_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}",
+                        entity: valueName,
+                        validationHint: cheat.IsGenericName ? "Confirmar por hash ou caminho típico do GOSTH" : null
                     ));
                     continue;
                 }
@@ -64,12 +75,14 @@ public class RegistryArtifactsModule : BaseModule
                 if (CheatDatabase.HasSuspiciousKeyword(fileName) || CheatDatabase.IsSuspiciousPath(valueName))
                 {
                     findings.Add(new Finding(
-                        RiskLevel.High,
+                        RiskLevel.Medium,
                         FindingCategory.RegistryArtifact,
                         ModuleName,
                         $"Execução suspeita na Store: {fileName}",
                         $"Caminho: {valueName}",
-                        pca
+                        pca,
+                        confidence: Confidence.Low,
+                        entity: valueName
                     ));
                 }
             }
@@ -95,15 +108,26 @@ public class RegistryArtifactsModule : BaseModule
                 var fileName = Path.GetFileName(exePath).ToLowerInvariant()
                     .Replace(".friendlyappname", "").Replace(".applicationcompany", "");
 
+                if (IsOwnProcess(fileName) || IsOwnProcess(exePath)) continue;
+                if (CheatDatabase.IsKnownLegitimate(fileName) || CheatDatabase.IsKnownLegitimate(exePath)) continue;
+
                 if (CheatDatabase.KnownExecutables.TryGetValue(fileName, out var cheat))
                 {
+                    var confidence = cheat.IsGenericName ? Confidence.Low : Confidence.Medium;
+                    var risk       = cheat.IsGenericName ? RiskLevel.Medium : RiskLevel.High;
                     findings.Add(new Finding(
-                        RiskLevel.Critical,
+                        risk,
                         FindingCategory.Cheat,
                         ModuleName,
-                        $"CHEAT NO MUICACHE: {cheat.Name}",
+                        cheat.IsGenericName
+                            ? $"Executável com nome de cheat no MuiCache (baixa confiança): {fileName}"
+                            : $"CHEAT NO MUICACHE: {cheat.Name} ({fileName})",
                         $"Executável registrado no MuiCache (confirma execução).\n{cheat.Description}",
-                        $"Caminho: {exePath}"
+                        $"Caminho: {exePath}",
+                        confidence: confidence,
+                        ruleId: $"MUICACHE_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}",
+                        entity: exePath,
+                        validationHint: cheat.IsGenericName ? "Confirmar por hash ou caminho típico do GOSTH" : null
                     ));
                     continue;
                 }
@@ -111,11 +135,13 @@ public class RegistryArtifactsModule : BaseModule
                 if (CheatDatabase.HasSuspiciousKeyword(fileName))
                 {
                     findings.Add(new Finding(
-                        RiskLevel.High,
+                        RiskLevel.Medium,
                         FindingCategory.RegistryArtifact,
                         ModuleName,
                         $"Execução suspeita no MuiCache: {fileName}",
-                        $"Caminho: {exePath}"
+                        $"Caminho: {exePath}",
+                        confidence: Confidence.Low,
+                        entity: exePath
                     ));
                 }
             }
