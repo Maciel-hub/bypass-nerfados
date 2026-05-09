@@ -51,7 +51,7 @@ public class RegistryPersistenceModule : BaseModule
 
     // ── IFEO (Image File Execution Options) debugger hijack ────────────────────────
 
-    private static void ScanIfeo(List<Finding> findings, CancellationToken ct)
+    private void ScanIfeo(List<Finding> findings, CancellationToken ct)
     {
         const string ifeoPath = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options";
         try
@@ -109,15 +109,15 @@ public class RegistryPersistenceModule : BaseModule
                         ));
                     }
                 }
-                catch { }
+                catch { } // per-subkey: skip individual inaccessible entries
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("IFEO inacessível ou corrompido", ex); }
     }
 
     // ── AppInit_DLLs (global DLL injection into every user-mode process) ───────────
 
-    private static void ScanAppInitDlls(List<Finding> findings)
+    private void ScanAppInitDlls(List<Finding> findings)
     {
         var appInitPaths = new[]
         {
@@ -169,13 +169,13 @@ public class RegistryPersistenceModule : BaseModule
                     ));
                 }
             }
-            catch { }
+            catch (Exception ex) { LogPartialError("AppInit_DLLs inacessível", ex); }
         }
     }
 
     // ── AppCertDlls (loaded into every process, code-signing bypass) ───────────────
 
-    private static void ScanAppCertDlls(List<Finding> findings)
+    private void ScanAppCertDlls(List<Finding> findings)
     {
         const string appCertPath = @"SYSTEM\CurrentControlSet\Control\Session Manager\AppCertDlls";
         try
@@ -202,12 +202,12 @@ public class RegistryPersistenceModule : BaseModule
                 ));
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("AppCertDlls inacessível", ex); }
     }
 
     // ── Winlogon hooks (Userinit / Shell hijack) ───────────────────────────────────
 
-    private static void ScanWinlogon(List<Finding> findings)
+    private void ScanWinlogon(List<Finding> findings)
     {
         const string winlogonPath = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon";
         try
@@ -267,12 +267,12 @@ public class RegistryPersistenceModule : BaseModule
                 ));
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("Winlogon hooks inacessíveis", ex); }
     }
 
     // ── BootExecute (runs before Windows fully loads) ─────────────────────────────
 
-    private static void ScanBootExecute(List<Finding> findings)
+    private void ScanBootExecute(List<Finding> findings)
     {
         const string smPath = @"SYSTEM\CurrentControlSet\Control\Session Manager";
         try
@@ -313,12 +313,12 @@ public class RegistryPersistenceModule : BaseModule
                 ));
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("BootExecute inacessível", ex); }
     }
 
     // ── Run keys — cheat-specific scan ────────────────────────────────────────────
 
-    private static void ScanCheatRunKeys(List<Finding> findings)
+    private void ScanCheatRunKeys(List<Finding> findings)
     {
         var runKeys = new[]
         {
@@ -388,7 +388,7 @@ public class RegistryPersistenceModule : BaseModule
                     }
                 }
             }
-            catch { }
+            catch (Exception ex) { LogPartialError("Run keys de persistência inacessíveis", ex); }
         }
     }
 }

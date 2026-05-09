@@ -29,7 +29,11 @@ public class ShimCacheModule : BaseModule
             using var key = Registry.LocalMachine.OpenSubKey(RegPath);
             raw = key?.GetValue(RegValue) as byte[];
         }
-        catch { return Task.FromResult(findings); }
+        catch (Exception ex)
+        {
+            LogPartialError("ShimCache/AppCompatCache inacessível via registry", ex);
+            return Task.FromResult(findings);
+        }
 
         if (raw == null || raw.Length < 128) return Task.FromResult(findings);
 

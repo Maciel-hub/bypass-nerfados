@@ -29,6 +29,7 @@ public class EventViewerModule : BaseModule
         var findings = new List<Finding>();
         var since = DateTime.UtcNow - config.EventWindowLookback;
 
+        var failedLogs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var spec in Specs)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -38,7 +39,12 @@ public class EventViewerModule : BaseModule
                 QueryEventLog(spec, findings, since, cancellationToken);
             }
             catch (OperationCanceledException) { throw; }
-            catch { /* log not available or access denied */ }
+            catch (Exception ex)
+            {
+                // Log once per failing event log name to avoid duplicate messages
+                if (failedLogs.Add(spec.Log))
+                    LogPartialError($"Log '{spec.Log}' inacessível ou negado", ex);
+            }
         }
 
         // Check for USN reset event (ID 3079 in Application log - NTFS)
@@ -268,7 +274,7 @@ public class EventViewerModule : BaseModule
 
     // For each critical log, queries the oldest available record and emits a warning
     // finding when coverage is less than the configured lookback window.
-    private static void CheckLogCoverage(List<Finding> findings, DateTime since, TimeSpan lookback)
+    private void CheckLogCoverage(List<Finding> findings, DateTime since, TimeSpan lookback)
     {
         var requiredDays = (int)lookback.TotalDays;
         foreach (var logName in new[] { "Security", "System", "Application" })
@@ -308,7 +314,7 @@ public class EventViewerModule : BaseModule
                     ));
                 }
             }
-            catch { /* log inacessível — sem aviso */ }
+            catch (Exception ex) { LogPartialError($"Falha ao calcular cobertura do log '{logName}'", ex); }
         }
     }
 
