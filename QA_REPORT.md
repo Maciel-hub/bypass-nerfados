@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+e4efd75  
-**Build:** e4efd75 → pós-QA (2026-05-09)  
+**Versão:** 1.0.0+cbf2c23  
+**Build:** cbf2c23 (2026-05-09) — aprovado para smoke test interativo  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `f4228ff50fd1480667ffa3db0dd5aeb8def246da23cc0687ab1bd826c846a76e`  
+**SHA256:** `65dc08a942585c193f1314cc62545bafbce62f77f67cdd3bc1f5276734ad6b80`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
@@ -308,35 +308,98 @@ EchoNerfados.exe [opções]
 
 ---
 
-## 12. Build Reproducível
+## 12. Smoke Test Interativo — Procedimento Obrigatório
+
+O smoke test requer execução manual com console interativo real. Executar nas duas condições abaixo.
+
+### CONDIÇÃO A — Sem elevação (duplo clique / terminal normal)
+
+```
+1. Copiar EchoNerfados.exe para a máquina alvo
+2. Abrir terminal normal (sem "Executar como administrador")
+3. Executar: .\EchoNerfados.exe
+4. Login: nerfados / admin
+5. Aguardar conclusão
+```
+
+**Verificar:**
+- [ ] Nenhum UAC prompt aparece (app.manifest = asInvoker)
+- [ ] Console exibe "Executando sem privilégios de Administrador"
+- [ ] Módulos ShimCache, LNK Recent, RegistryPersistence, BAM/DAM, Prefetch, EventViewer, Defender, KnownCheats, FileSystem, Network, Services executam normalmente
+- [ ] Tabela "COBERTURA DA VARREDURA" no console mostra Amcache = PULADO, UserAssist = PULADO (com motivo)
+- [ ] Pasta timestamped criada na área de trabalho
+- [ ] `report.html` abre no browser — seção "COBERTURA DA VARREDURA" visível
+- [ ] `report.txt` — seção "COBERTURA DA VARREDURA" visível com status PULADO para Amcache/UserAssist
+- [ ] `evidence.json` — JSON válido, parseable
+- [ ] Todos os 8 `*_60d.json` presentes (incluindo `registrypersistence_60d.json`)
+- [ ] `manifest.json` — campo `"isElevated": false`
+- [ ] `manifest.sha256` verifica: `sha256sum -c manifest.sha256` → OK
+
+**Se algum módulo tiver erro parcial:**
+- [ ] Status aparece como PARCIAL (não FALHOU nem EXECUTADO) na tabela
+- [ ] Motivo específico está visível ("X itens inacessíveis" ou mensagem de contexto)
+
+---
+
+### CONDIÇÃO B — Com elevação ("Executar como administrador")
+
+```
+1. Clicar com botão direito em EchoNerfados.exe → "Executar como administrador"
+2. Login: nerfados / admin
+3. Aguardar conclusão
+```
+
+**Verificar:**
+- [ ] Console NÃO exibe aviso de privilégios
+- [ ] Tabela "COBERTURA DA VARREDURA" mostra Amcache = EXECUTADO, UserAssist = EXECUTADO
+- [ ] `manifest.json` — campo `"isElevated": true`
+- [ ] `amcache_60d.json` — `findingCount > 0` (ou `findingCount: 0` + `coverageDays` preenchido)
+- [ ] `userassist_60d.json` — idem
+- [ ] `registrypersistence_60d.json` — presente
+- [ ] `evidence.json` — campo `EvidenceBundles` não vazio se houver cheats
+- [ ] `manifest.sha256` verifica
+
+**Verificação do manifesto (Windows PowerShell):**
+```powershell
+$folder = Get-ChildItem $env:USERPROFILE\Desktop\Echo_Nerfados_* | Sort LastWriteTime | Select -Last 1
+cd $folder.FullName
+$ref = (Get-Content manifest.sha256 -Raw).Split("  ")[0].Trim()
+$actual = (Get-FileHash manifest.json -Algorithm SHA256).Hash.ToLower()
+if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
+```
+
+---
+
+## 13. Build Reproducível
 
 ```bash
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout e4efd75
+git checkout cbf2c23
 .\publish.ps1
 
-# Verificar hash do resultado
-# SHA256 esperado: f835ee2f9806dc14c684ac2e745b6e7a0e75bde932500f920cdd4feb6082e796
+# SHA256 esperado: 65dc08a942585c193f1314cc62545bafbce62f77f67cdd3bc1f5276734ad6b80
 ```
 
-**Nota:** O hash do EXE varia com cada build (metadados de timestamp no PE). O hash acima é da build de referência `e4efd75` gerada em 2026-05-09.
+**Nota:** O hash do EXE varia com cada build (metadados de timestamp no PE). O hash acima é da build de referência `cbf2c23` gerada em 2026-05-09.
 
 ---
 
-## 13. Sumário para QA
+## 14. Sumário para QA
 
-**O que está pronto e testável:**
-- `--help` funciona sem login e sem console interativo (exit 0)
+**O que está pronto e testável (build cbf2c23):**
+- `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
-- Login gate funcional com bloqueio por tentativas
-- 15 módulos de varredura cobrindo todos os principais artefatos forenses Windows
-- Correlação cruzada entre módulos
-- Artifact dossiers com bypass temporal window corrigido (±1h por sinal)
-- Exportação completa: HTML, TXT, **8 JSONs de cobertura** (incluindo `registrypersistence_60d.json`), evidence.json
-- Manifesto criptograficamente verificável (SHA256)
+- Login gate funcional com bloqueio após 3 tentativas (exit code 2)
+- 15 módulos cobrindo todos os principais artefatos forenses Windows
+- Correlação cruzada entre módulos + artifact dossiers com bypass ±1h por sinal
+- Exportação: HTML, TXT, **8 JSONs de cobertura** (incluindo `registrypersistence_60d.json`), `evidence.json`
+- Manifesto criptograficamente verificável (`manifest.sha256`)
+- Tabela "COBERTURA DA VARREDURA" no terminal, TXT e HTML com status Executed/Partial/Skipped/Failed
+- Todos os catches críticos logam `LogPartialError` com contexto específico
+- Contadores agregados em módulos de alto volume (ProcessMemory, LNK, FileSystem, Network, Defender, RegistryArtifacts, ServiceCheck)
 - Executável self-contained (~34 MB), sem .NET no host
 - AppInit_DLLs distingue ativo vs. inativo via `LoadAppInit_DLLs`
 - LNK parser suporta `LocalBasePathUnicode` (caminhos Unicode)
