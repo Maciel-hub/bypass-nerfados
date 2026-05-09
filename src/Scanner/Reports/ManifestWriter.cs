@@ -45,7 +45,7 @@ public static class ManifestWriter
         var args = Environment.GetCommandLineArgs();
         var manifest = new ManifestDto
         {
-            Scanner       = "Bypass Nerfados Shield XDR",
+            Scanner       = "Echo Nerfados Shield XDR",
             Version       = version,
             ScanStarted   = result.ScanTime,
             ScanCompleted = result.ScanCompleted ?? DateTime.Now,

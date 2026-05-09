@@ -18,7 +18,7 @@ public static class ReportGenerator
         var dash = new string('-', 70);
 
         sb.AppendLine(sep);
-        sb.AppendLine("  BYPASS NERFADOS SHIELD XDR — Relatório de Investigação");
+        sb.AppendLine("  ECHO NERFADOS SHIELD XDR — Relatório de Investigação");
         sb.AppendLine(sep);
         sb.AppendLine();
         sb.AppendLine($"  Máquina    : {result.MachineName}");

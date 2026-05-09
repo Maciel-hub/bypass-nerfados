@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Spectre.Console;
 using BypassNerfados.Scanner.Models;
 
@@ -8,7 +9,7 @@ public static class ConsoleUI
     public static void PrintBanner()
     {
         AnsiConsole.Clear();
-        AnsiConsole.Write(new FigletText("BYPASS NERFADOS").Centered().Color(Color.Red));
+        AnsiConsole.Write(new FigletText("ECHO NERFADOS").Centered().Color(Color.Red));
         AnsiConsole.Write(new Rule("[bold red]Shield XDR v1.0 — Anti-Cheat Investigation Platform[/]"));
         AnsiConsole.MarkupLine("[grey]Investigação Forense · Detecção de Cheats · Screen-Share Analysis[/]");
         AnsiConsole.MarkupLine($"[grey]Máquina: [white]{Environment.MachineName}[/] | Usuário: [white]{Environment.UserName}[/] | {DateTime.Now:dd/MM/yyyy HH:mm:ss}[/]");
@@ -233,4 +234,54 @@ public static class ConsoleUI
 
     public static void PrintError(string message) =>
         AnsiConsole.MarkupLine($"[red]{Markup.Escape(message)}[/]");
+
+    // Returns true if the user authenticates successfully within maxAttempts tries.
+    public static bool PromptLogin(int maxAttempts = 3)
+    {
+        AnsiConsole.Clear();
+        AnsiConsole.Write(new Rule("[bold red]Echo Nerfados Shield XDR — Acesso Restrito[/]"));
+        AnsiConsole.WriteLine();
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            var user = AnsiConsole.Prompt(
+                new TextPrompt<string>("[bold]Usuário :[/]")
+                    .PromptStyle("cyan"));
+
+            var pass = AnsiConsole.Prompt(
+                new TextPrompt<string>("[bold]Senha   :[/]")
+                    .PromptStyle("cyan")
+                    .Secret());
+
+            if (ValidateCredentials(user, pass))
+            {
+                AnsiConsole.MarkupLine("[green]Autenticado.[/]");
+                AnsiConsole.WriteLine();
+                return true;
+            }
+
+            var remaining = maxAttempts - attempt;
+            if (remaining > 0)
+                AnsiConsole.MarkupLine($"[red]Credenciais inválidas. {remaining} tentativa(s) restante(s).[/]");
+            else
+                AnsiConsole.MarkupLine("[red]Acesso negado.[/]");
+
+            AnsiConsole.WriteLine();
+        }
+
+        return false;
+    }
+
+    private static bool ValidateCredentials(string user, string pass)
+    {
+        // Username: case-insensitive compare
+        if (!string.Equals(user.Trim(), "nerfados", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        // Password: constant-time SHA-256 comparison to resist timing attacks
+        var inputHash  = SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(pass));
+        var targetHash = Convert.FromHexString(
+            "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"); // SHA256("admin")
+        return CryptographicOperations.FixedTimeEquals(inputHash, targetHash);
+    }
 }

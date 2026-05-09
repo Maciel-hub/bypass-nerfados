@@ -41,7 +41,7 @@ public static class HtmlTemplate
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Bypass Nerfados Shield XDR — Relatório</title>
+<title>Echo Nerfados Shield XDR — Relatório</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: #0f0f0f; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
@@ -115,7 +115,7 @@ public static class HtmlTemplate
 </head>
 <body>
 <div class="header">
-  <h1>BYPASS NERFADOS <span>SHIELD XDR</span></h1>
+  <h1>ECHO NERFADOS <span>SHIELD XDR</span></h1>
   <div class="sub">Investigação Forense Anti-Cheat — Relatório de Screen-Share</div>
   <div class="meta">
     <div><span class="label">Máquina</span><span class="value">{{machineName}}</span></div>
@@ -236,7 +236,7 @@ public static class HtmlTemplate
         sb.AppendLine($"""
 </div>
 <div class="footer">
-  <span>Bypass Nerfados Shield XDR v1.0 — Uso Defensivo Autorizado</span>
+  <span>Echo Nerfados Shield XDR v1.0 — Uso Defensivo Autorizado</span>
   <span>Gerado em {DateTime.Now:dd/MM/yyyy HH:mm:ss} | {result.ModulesRun.Count} módulos | {result.Findings.Count} findings</span>
 </div>
 </body>

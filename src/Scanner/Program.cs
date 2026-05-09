@@ -3,7 +3,11 @@ using BypassNerfados.Scanner.Core;
 using BypassNerfados.Scanner.Models;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
-Console.Title = "Bypass Nerfados Shield XDR v1.0";
+Console.Title = "Echo Nerfados Shield XDR v1.0";
+
+// Authentication gate — must pass before any scan activity
+if (!ConsoleUI.PromptLogin())
+    return 2; // exit code 2 = auth failed
 
 var config = new ScanConfig();
 
@@ -171,11 +175,11 @@ static void PrintProgress(ScanProgressUpdate update)
 
 static void PrintHelp()
 {
-    AnsiConsole.MarkupLine("[bold]BYPASS NERFADOS SHIELD XDR v1.0[/]");
+    AnsiConsole.MarkupLine("[bold]ECHO NERFADOS SHIELD XDR v1.0[/]");
     AnsiConsole.MarkupLine("[grey]Plataforma Anti-Cheat para investigação de Screen-Share[/]");
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[bold]USO:[/]");
-    AnsiConsole.MarkupLine("  BypassNerfados.exe [opções]");
+    AnsiConsole.MarkupLine("  EchoNerfados.exe [opções]");
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[bold]OPÇÕES:[/]");
     AnsiConsole.MarkupLine("  --investigator <nome>   Nome do investigador (para o relatório)");
@@ -190,9 +194,9 @@ static void PrintHelp()
     AnsiConsole.MarkupLine("  --help                  Exibir esta ajuda");
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[bold]EXEMPLOS:[/]");
-    AnsiConsole.MarkupLine("  BypassNerfados.exe");
-    AnsiConsole.MarkupLine("  BypassNerfados.exe --investigator \"Fulano\" --suspect \"Ciclano\" --case-id \"CASO-001\"");
-    AnsiConsole.MarkupLine("  BypassNerfados.exe --no-memory --output C:\\Relatorios");
+    AnsiConsole.MarkupLine("  EchoNerfados.exe");
+    AnsiConsole.MarkupLine("  EchoNerfados.exe --investigator \"Fulano\" --suspect \"Ciclano\" --case-id \"CASO-001\"");
+    AnsiConsole.MarkupLine("  EchoNerfados.exe --no-memory --output C:\\Relatorios");
     AnsiConsole.WriteLine();
     AnsiConsole.MarkupLine("[grey]IMPORTANTE: Execute como Administrador para acesso completo.[/]");
 }

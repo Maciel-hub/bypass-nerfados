@@ -31,7 +31,7 @@ public class ScanConfig
     public TimeSpan EventWindowLookback { get; set; } = TimeSpan.FromDays(60);
 
     public string ReportFileName =>
-        $"Bypass_Nerfados_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}";
+        $"Echo_Nerfados_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}";
 
     public static bool IsValidDrive(string drive) =>
         Regex.IsMatch(drive?.Trim() ?? "", @"^[A-Za-z]:[\\/]?$");

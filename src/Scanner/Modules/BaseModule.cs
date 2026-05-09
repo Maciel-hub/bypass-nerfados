@@ -34,7 +34,7 @@ public abstract class BaseModule
 
     // Self-exclusion: never flag the scanner's own process or its build/run directory
     private static readonly string _selfExeName =
-        Path.GetFileName(Environment.ProcessPath ?? "bypassnerfados.exe").ToLowerInvariant();
+        Path.GetFileName(Environment.ProcessPath ?? "echonerfados.exe").ToLowerInvariant();
     private static readonly string _selfDirLower =
         (Path.GetDirectoryName(Environment.ProcessPath) ?? "").ToLowerInvariant();
 
