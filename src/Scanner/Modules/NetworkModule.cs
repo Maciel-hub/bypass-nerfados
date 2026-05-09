@@ -170,19 +170,40 @@ public class NetworkModule : BaseModule
         return $"{addr & 0xFF}.{(addr >> 8) & 0xFF}.{(addr >> 16) & 0xFF}.{(addr >> 24) & 0xFF}";
     }
 
-    private static bool IsLocalAddress(string ip) =>
-        ip.StartsWith("127.") || ip.StartsWith("0.0.") || ip == "::1" || ip.StartsWith("192.168.") ||
-        ip.StartsWith("10.") || ip.StartsWith("172.16.");
-
-    private static bool IsKnownSafeProcess(string name)
+    private static bool IsLocalAddress(string ip)
     {
-        var safe = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        if (ip.StartsWith("127.") || ip.StartsWith("0.0.") || ip == "::1") return true;
+        if (ip.StartsWith("192.168.") || ip.StartsWith("10.")) return true;
+        // 172.16.0.0/12 covers 172.16.x.x – 172.31.x.x
+        if (ip.StartsWith("172."))
         {
-            "chrome", "firefox", "msedge", "opera", "brave", "discord",
-            "steam", "epicgameslauncher", "origin", "svchost", "system"
-        };
-        return safe.Contains(name);
+            var parts = ip.Split('.');
+            if (parts.Length >= 2 && int.TryParse(parts[1], out var second))
+                return second is >= 16 and <= 31;
+        }
+        return false;
     }
+
+    private static bool IsKnownSafeProcess(string name) => _knownSafe.Contains(name);
+
+    private static readonly HashSet<string> _knownSafe = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Browsers
+        "chrome", "firefox", "msedge", "opera", "brave", "vivaldi",
+        // Communication / media
+        "discord", "spotify", "teams", "slack", "zoom", "skype",
+        // Game platforms
+        "steam", "epicgameslauncher", "origin", "gog galaxy", "battlenet",
+        "rockstarlauncher", "upc", "ubisoft connect",
+        // Runtimes / dev
+        "python", "python3", "pythonw", "node", "java", "javaw", "ruby",
+        // Windows system
+        "svchost", "system", "lsass", "services", "wininit", "winlogon",
+        "searchhost", "runtimebroker", "sihost", "ctfmon", "dwm",
+        "taskhostw", "explorer", "onedrive", "microsoftedgeupdate",
+        // Updaters / cloud storage
+        "dropbox", "onedrive", "googledrivefs", "icloudservices",
+    };
 
     private record TcpConnection(int ProcessId, string RemoteAddress, ushort RemotePort);
 

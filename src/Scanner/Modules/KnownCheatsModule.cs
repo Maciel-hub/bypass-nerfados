@@ -59,14 +59,52 @@ public class KnownCheatsModule : BaseModule
 
                 if (CheatDatabase.KnownExecutables.TryGetValue(fileName, out var cheat))
                 {
-                    var hash = GetFileHash(file);
+                    var sha256 = GetFileHash(file);
+                    var sha1   = GetFileSha1(file);
+
+                    bool hashMatch = cheat.Hashes?.Contains(sha1 ?? "", StringComparer.OrdinalIgnoreCase) == true;
+                    bool pathMatch = cheat.KnownPaths.Any(p =>
+                        file.Contains(p, StringComparison.OrdinalIgnoreCase));
+
+                    Confidence confidence;
+                    RiskLevel risk;
+                    string? validationHint = null;
+
+                    if (hashMatch)
+                    {
+                        confidence = Confidence.Confirmed;
+                        risk = RiskLevel.Critical;
+                    }
+                    else if (pathMatch)
+                    {
+                        confidence = Confidence.High;
+                        risk = RiskLevel.Critical;
+                    }
+                    else
+                    {
+                        // Name-only: generic names like launcher.exe hit many legitimate programs
+                        confidence = Confidence.Low;
+                        risk = RiskLevel.Medium;
+                        validationHint = "Nome genérico — confirmar por hash SHA1, caminho típico ou Prefetch/MuiCache";
+                    }
+
+                    var ruleId = hashMatch ? $"CHEAT_HASH_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}"
+                               : pathMatch ? $"CHEAT_PATH_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}"
+                               :             $"CHEAT_NAME_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}";
+
                     findings.Add(new Finding(
-                        RiskLevel.Critical,
+                        risk,
                         FindingCategory.Cheat,
                         "Known Cheats",
-                        $"CHEAT ENCONTRADO NO DISCO: {cheat.Name}",
+                        risk == RiskLevel.Critical
+                            ? $"CHEAT ENCONTRADO: {cheat.Name} ({fileName})"
+                            : $"Executável com nome de cheat (baixa confiança): {fileName}",
                         $"Arquivo: {file}\n{cheat.Description}",
-                        $"SHA256: {hash ?? "N/A"} | Tamanho: {new FileInfo(file).Length} bytes"
+                        $"SHA256: {sha256 ?? "N/A"} | Tamanho: {new FileInfo(file).Length} bytes",
+                        confidence: confidence,
+                        ruleId: ruleId,
+                        entity: file,
+                        validationHint: validationHint
                     ));
                 }
             }
@@ -108,19 +146,22 @@ public class KnownCheatsModule : BaseModule
 
         if (File.Exists(fakeWhatsApp))
         {
-            var sha256 = GetFileHash(fakeWhatsApp);           // for evidence label
-            var sha1   = GetFileSha1(fakeWhatsApp);           // for db comparison (known hash is SHA1)
-            var isConfirmed = string.Equals(sha1, "a7d04fdbc41fe2165a4cbc8e0657052ec3fb334f",
+            var sha256 = GetFileHash(fakeWhatsApp);
+            var sha1   = GetFileSha1(fakeWhatsApp);
+            var hashMatch = string.Equals(sha1, "a7d04fdbc41fe2165a4cbc8e0657052ec3fb334f",
                 StringComparison.OrdinalIgnoreCase);
             findings.Add(new Finding(
                 RiskLevel.Critical,
                 FindingCategory.Cheat,
                 "Known Cheats",
-                isConfirmed
+                hashMatch
                     ? "GOSTH LOADER CONFIRMADO: WhatsApp Installer.exe em System32"
                     : "WhatsApp Installer.exe suspeito em System32\\WinBioDatabase",
                 "Executável malicioso disfarçado de WhatsApp Installer encontrado em System32\\WinBioDatabase.",
-                $"Caminho: {fakeWhatsApp} | SHA256: {sha256 ?? "N/A"}"
+                $"Caminho: {fakeWhatsApp} | SHA256: {sha256 ?? "N/A"}",
+                confidence: hashMatch ? Confidence.Confirmed : Confidence.High,
+                ruleId: hashMatch ? "CHEAT_HASH_GOSTH_WHATSAPP" : "CHEAT_PATH_GOSTH_WHATSAPP",
+                entity: fakeWhatsApp
             ));
         }
 
@@ -144,7 +185,10 @@ public class KnownCheatsModule : BaseModule
                         "Known Cheats",
                         $"GOSTH LOADER: {Path.GetFileName(file)} em AppData\\Programs\\Common",
                         $"Caminho típico do loader GOSTH detectado.\nArquivo: {file}",
-                        $"SHA256: {GetFileHash(file) ?? "N/A"}"
+                        $"SHA256: {GetFileHash(file) ?? "N/A"}",
+                        confidence: Confidence.High,
+                        ruleId: "CHEAT_PATH_GOSTH_DXSETUP",
+                        entity: file
                     ));
                 }
             }

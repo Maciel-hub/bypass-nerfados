@@ -16,7 +16,8 @@ public class ScanResult
     public List<string> ModuleErrors { get; } = new();
     public Dictionary<string, TimeSpan> ModuleDurations { get; } = new();
 
-    public int TotalScore => Math.Min(Findings.Sum(f => f.Score), 100);
+    // Weighted by confidence; deduplication happens in ScanOrchestrator before score is read
+    public int TotalScore => (int)Math.Min(Findings.Sum(f => f.WeightedScore), 100);
 
     public RiskLevel OverallRisk => TotalScore switch
     {

@@ -88,6 +88,11 @@ public class ScanOrchestrator
             }
         }
 
+        // Deduplicate before correlation so cross-module duplicates don't inflate signals
+        var deduped = FindingDeduplicator.Deduplicate(_result.Findings);
+        _result.Findings.Clear();
+        _result.Findings.AddRange(deduped);
+
         // Run correlation engine
         cancellationToken.ThrowIfCancellationRequested();
         Report(new ScanProgressUpdate(

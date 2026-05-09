@@ -132,6 +132,9 @@ public static class HtmlTemplate
 
         sb.AppendLine("  </div>\n</div>\n<div class=\"content\">");
 
+        // Executive summary
+        sb.AppendLine(ExecutiveSummaryHtml(result));
+
         // Cheat section first
         var cheats = result.Findings.Where(f => f.Category == FindingCategory.Cheat).ToList();
         if (cheats.Count > 0)
@@ -218,6 +221,58 @@ public static class HtmlTemplate
 </html>
 """);
 
+        return sb.ToString();
+    }
+
+    private static string ExecutiveSummaryHtml(ScanResult result)
+    {
+        var confirmed = result.Findings
+            .Where(f => f.Category == FindingCategory.Cheat && f.Confidence >= Confidence.High)
+            .ToList();
+        var strong = result.Findings
+            .Where(f => f.Risk >= RiskLevel.High && f.Confidence >= Confidence.Medium && f.Category != FindingCategory.Cheat)
+            .ToList();
+        var needsValidation = result.Findings
+            .Where(f => f.ValidationHint != null)
+            .ToList();
+        var likelyFp = result.Findings
+            .Where(f => f.Confidence == Confidence.Low)
+            .ToList();
+        var correlated = result.Findings
+            .Where(f => f.RuleId?.StartsWith("CORR_") == true)
+            .ToList();
+
+        var sb = new StringBuilder();
+        sb.AppendLine("""<div class="section"><div class="section-title" style="color:#94a3b8">RESUMO EXECUTIVO</div>""");
+        sb.AppendLine("""<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:8px">""");
+
+        void Card(string label, string color, IList<Finding> items, string hint)
+        {
+            sb.AppendLine($"""
+<div style="background:#1a1a2e;border:1px solid #334155;border-left:4px solid {color};border-radius:8px;padding:12px 16px">
+  <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px">{label}</div>
+  <div style="font-size:28px;font-weight:800;color:{color};margin:4px 0">{items.Count}</div>
+  <div style="font-size:11px;color:#475569">{hint}</div>
+</div>""");
+        }
+
+        Card("Cheats confirmados",      "#dc2626", confirmed,       "hash ou caminho GOSTH verificado");
+        Card("Indícios fortes",         "#ea580c", strong,          "High/Critical com média confiança");
+        Card("Requer validação manual", "#ca8a04", needsValidation, "sinal fraco — investigar antes de concluir");
+        Card("Possíveis falsos positivos", "#6b7280", likelyFp,     "nome genérico sem contexto adicional");
+        if (correlated.Count > 0)
+            Card("Evidências correlacionadas", "#7c3aed", correlated, "padrões detectados entre módulos");
+
+        sb.AppendLine("</div>");
+
+        if (confirmed.Count > 0)
+        {
+            sb.AppendLine("""<div style="margin-top:12px;font-size:13px;font-weight:700;color:#dc2626">Cheats confirmados:</div>""");
+            foreach (var f in confirmed.Take(5))
+                sb.AppendLine($"""<div style="color:#e2e8f0;font-size:12px;margin:2px 0">• {Esc(f.Title)} <span style="color:#475569">({f.ConfidenceLabel})</span></div>""");
+        }
+
+        sb.AppendLine("</div>");
         return sb.ToString();
     }
 
