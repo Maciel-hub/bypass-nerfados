@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+cbf2c23  
-**Build:** cbf2c23 (2026-05-09) — aprovado para smoke test interativo  
+**Versão:** 1.0.0+888ab32  
+**Build:** 888ab32 (2026-05-09) — fixes pós-smoke test P1/P2  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `65dc08a942585c193f1314cc62545bafbce62f77f67cdd3bc1f5276734ad6b80`  
+**SHA256:** `f089882a944ebe8fcab9eddbe37499df6dfb3b1d63db1758cf6aed77dc64dd0d`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
@@ -53,8 +53,8 @@ O executável exige login antes de qualquer varredura.
 | Módulo | Artefato | O que detecta |
 |--------|----------|---------------|
 | **System Info** | WMI | Nome da máquina, usuário, OS, BIOS |
-| **BAM/DAM** | HKLM\SYSTEM\...\BAM | Histórico de execução (Background Activity Monitor) — últimos ~7 dias |
-| **Prefetch** | C:\Windows\Prefetch\*.pf | Histórico de execução por nome de arquivo; nome da entry = nome do processo |
+| **BAM/DAM** | HKLM\SYSTEM\...\BAM | Histórico de execução (Background Activity Monitor) — últimos ~7 dias. **Nota:** o registro BAM tem ACL restrita em algumas builds do Windows; sem admin pode resultar em PARCIAL (SecurityException capturada, motivo exibido). |
+| **Prefetch** | C:\Windows\Prefetch\*.pf | Histórico de execução por nome de arquivo; nome da entry = nome do processo. **Nota:** `C:\Windows\Prefetch` exige admin em algumas configurações; sem admin pode resultar em PARCIAL. |
 | **Registry Artifacts** | HKLM run keys + MRU | Execuções recentes, autoruns em registry |
 | **Event Viewer** | Security/System/Application logs | Logons (4624), falhas (4625), serviços instalados (7045), Defender alerts, cobertura de log |
 | **Windows Defender** | Event log + MPLog | Detecções, exclusões, deleções de definição, reconfiguração |
@@ -305,6 +305,8 @@ EchoNerfados.exe [opções]
 | **Assinatura digital** | manifest.sha256 não assinado por PKI | Requer setup de certificado (futuro) |
 | **License key** | Login fixo (nerfados/admin) | Substituir por sistema de keys para comercialização |
 | **ProcessMemoryModule** | Pode causar lentidão em máquinas com muitos processos | Desativar com `--no-memory` se necessário |
+| **UserAssist PARCIAL para perfis de sistema** | NTUSER.DAT de "Usuário Padrão", "WsiAccount" e perfis similares é inacessível mesmo com admin | Comportamento esperado — perfis de sistema não têm NTUSER.DAT padrão. O finding PARCIAL é correto; confirmar que o perfil do usuário real foi lido. |
+| **BAM/DAM PARCIAL sem admin** | ACL restrita em HKLM\SYSTEM\...\BAM em algumas configurações | SecurityException capturada → PARCIAL com motivo. Para cobertura completa, usar com admin. |
 
 ---
 
@@ -325,7 +327,8 @@ O smoke test requer execução manual com console interativo real. Executar nas 
 **Verificar:**
 - [ ] Nenhum UAC prompt aparece (app.manifest = asInvoker)
 - [ ] Console exibe "Executando sem privilégios de Administrador"
-- [ ] Módulos ShimCache, LNK Recent, RegistryPersistence, BAM/DAM, Prefetch, KnownCheats, FileSystem, Network, Services executam normalmente
+- [ ] Módulos ShimCache, LNK Recent, RegistryPersistence, KnownCheats, FileSystem, Network, Services executam normalmente
+- [ ] BAM/DAM e Prefetch podem aparecer como PARCIAL se o sistema tiver ACL restrita; confirmar que o status é PARCIAL (não FALHOU) e que o motivo está visível na tabela
 - [ ] EventViewer e Defender podem aparecer como PARCIAL (Security log pode ser inacessível sem admin); qualquer limitação aparece como PARCIAL — não FALHOU — na tabela de cobertura
 - [ ] Tabela "COBERTURA DA VARREDURA" no console mostra Amcache = PULADO, UserAssist = PULADO (com motivo)
 - [ ] Pasta timestamped criada na área de trabalho
@@ -378,13 +381,13 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout cbf2c23
+git checkout 888ab32
 .\publish.ps1
 ```
 
-**SHA256 do artefato entregue (build cbf2c23):**
+**SHA256 do artefato entregue (build 888ab32):**
 ```
-65dc08a942585c193f1314cc62545bafbce62f77f67cdd3bc1f5276734ad6b80
+f089882a944ebe8fcab9eddbe37499df6dfb3b1d63db1758cf6aed77dc64dd0d
 ```
 
 **Nota:** Este hash identifica o artefato `EchoNerfados.exe` entregue para QA — gerado em 2026-05-09. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` e fixar `SourceRevisionId` no `.csproj` (fora do escopo desta release).
@@ -393,7 +396,7 @@ git checkout cbf2c23
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build cbf2c23):**
+**O que está pronto e testável (build 888ab32):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
@@ -409,9 +412,12 @@ git checkout cbf2c23
 - AppInit_DLLs distingue ativo vs. inativo via `LoadAppInit_DLLs`
 - LNK parser suporta `LocalBasePathUnicode` (caminhos Unicode)
 - Amcache/ShimCache com linguagem forense calibrada ("presença/indício", não "execução confirmada")
+- BAM/DAM sem admin → PARCIAL com motivo (SecurityException capturada), nunca FALHOU
+- Amcache com admin → SeBackupPrivilege + SeRestorePrivilege habilitados antes de RegLoadKey
+- `evidence.json` inclui `ModuleCoverage` (status, motivo, impacto forense de cada módulo)
 
 **Prioridade de teste:** Focar nos cenários 9.1, 9.2, 9.3, 9.4 — são os mais críticos para validar o produto. Os outros podem ser smoke test.
 
 ---
 
-*Relatório gerado em: 2026-05-09 | Build: e4efd75 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-09 | Build: 888ab32 | Echo Nerfados Shield XDR v1.0.0*
