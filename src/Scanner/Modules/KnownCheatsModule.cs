@@ -116,17 +116,15 @@ public class KnownCheatsModule : BaseModule
                 }
             }
 
-            // Search DLLs in FiveM plugins
+            // Skip DLL scan entirely inside C:\Windows — d3d10.dll exists legitimately in System32,
+            // WinSxS, servicing, and hundreds of other subdirectories. The cheat variant is only
+            // relevant in FiveM Plugins and is handled by CheckFiveMPlugins.
+            var windowsDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+            if (!root.StartsWith(windowsDir, StringComparison.OrdinalIgnoreCase))
             foreach (var file in Directory.EnumerateFiles(root, "*.dll",
                 new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, MaxRecursionDepth = 5 }))
             {
                 cancellationToken.ThrowIfCancellationRequested();
-
-                // d3d10.dll in System32/SysWOW64 is the legitimate DirectX runtime
-                var parentDir = Path.GetDirectoryName(file) ?? "";
-                if (parentDir.Equals(Environment.GetFolderPath(Environment.SpecialFolder.System), StringComparison.OrdinalIgnoreCase) ||
-                    parentDir.Equals(Environment.GetFolderPath(Environment.SpecialFolder.SystemX86), StringComparison.OrdinalIgnoreCase))
-                    continue;
 
                 var fileName = Path.GetFileName(file).ToLowerInvariant();
                 if (CheatDatabase.KnownDlls.TryGetValue(fileName, out var cheat))

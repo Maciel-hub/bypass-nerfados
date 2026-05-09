@@ -64,16 +64,22 @@ public class FileSystemModule : BaseModule
                             continue;
                         }
 
-                        if (CheatDatabase.HasSuspiciousKeyword(fileName) ||
-                            CheatDatabase.IsSuspiciousPath(originalPath))
+                        // Only flag executable-type files on keyword match — .lnk, .log, .sql etc.
+                        // are benign even when found in AppData or Downloads paths
+                        var origExt = Path.GetExtension(originalPath).ToLowerInvariant();
+                        if (origExt is ".exe" or ".dll" or ".bat" or ".ps1" or ".vbs" or ".cmd" or ".scr")
                         {
-                            findings.Add(new Finding(
-                                RiskLevel.High,
-                                FindingCategory.FileSystem,
-                                "File System",
-                                $"Arquivo suspeito na Lixeira: {fileName}",
-                                $"Caminho original: {originalPath}"
-                            ));
+                            if (CheatDatabase.HasSuspiciousKeyword(fileName) &&
+                                !CheatDatabase.IsKnownLegitimate(fileName))
+                            {
+                                findings.Add(new Finding(
+                                    RiskLevel.Medium,
+                                    FindingCategory.FileSystem,
+                                    "File System",
+                                    $"Arquivo suspeito na Lixeira: {fileName}",
+                                    $"Caminho original: {originalPath}"
+                                ));
+                            }
                         }
                     }
                     catch (OperationCanceledException) { throw; }

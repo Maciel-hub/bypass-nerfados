@@ -90,6 +90,33 @@ public class EventViewerModule : BaseModule
                         title = $"SERVIÇO SUSPEITO INSTALADO: {ExtractServiceName(description)}";
                 }
 
+                // 4616 time-change events from W32Time/svchost are NTP sync — downgrade to Info
+                if (spec.EventId == 4616)
+                {
+                    var lower = description.ToLowerInvariant();
+                    bool isNormalSync =
+                        lower.Contains("w32tm") || lower.Contains("w32time") ||
+                        lower.Contains("svchost") || lower.Contains("local service") ||
+                        lower.Contains("serviço local") || lower.Contains("nt authority");
+
+                    if (isNormalSync)
+                    {
+                        findings.Add(new Finding(
+                            RiskLevel.Info,
+                            spec.Category,
+                            "EventViewer",
+                            "Sincronização de horário NTP (4616) — normal",
+                            detail,
+                            $"Log: {spec.Log} | Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
+                            record.TimeCreated,
+                            confidence: Confidence.Low,
+                            ruleId: "EVENT_4616_NTP",
+                            entity: "4616-ntp"
+                        ));
+                        continue;
+                    }
+                }
+
                 findings.Add(new Finding(
                     spec.Risk,
                     spec.Category,

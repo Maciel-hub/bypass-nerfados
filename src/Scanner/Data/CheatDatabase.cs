@@ -99,6 +99,20 @@ public static class CheatDatabase
         "fivem_uninstall",
         "rockstargameslauncher",
         "epicgameslauncher",
+        "spotify",
+        "discord",
+        "steam",
+        "onedrive",
+        "googledrive",
+        "dropbox",
+        "teams",
+        "skype",
+        "zoom",
+        "obs",
+        "nvidia",
+        "nvcontainer",
+        "nvcplui",
+        "geforce",
     };
 
     public static bool IsKnownLegitimate(string name)

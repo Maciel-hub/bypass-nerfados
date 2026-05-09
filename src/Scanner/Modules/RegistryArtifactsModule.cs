@@ -313,7 +313,14 @@ public class RegistryArtifactsModule : BaseModule
                     var value = key.GetValue(valueName)?.ToString() ?? "";
                     var lower = value.ToLowerInvariant();
 
-                    if (CheatDatabase.HasSuspiciousKeyword(lower) || CheatDatabase.IsSuspiciousPath(lower))
+                    // Extract executable name from the command (strip arguments after space)
+                    var exeName = Path.GetFileName(lower.Split('"', ' ')[0]);
+                    if (IsOwnProcess(exeName)) continue;
+                    if (CheatDatabase.IsKnownLegitimate(exeName) || CheatDatabase.IsKnownLegitimate(valueName)) continue;
+
+                    // IsSuspiciousPath alone produces many FPs (Spotify, Discord, etc. live in AppData)
+                    // Only flag on keyword match, which is more precise for startup entries
+                    if (CheatDatabase.HasSuspiciousKeyword(lower))
                     {
                         findings.Add(new Finding(
                             RiskLevel.High,

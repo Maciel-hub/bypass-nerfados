@@ -15,7 +15,7 @@ public class DefenderModule : BaseModule
         var findings = new List<Finding>();
 
         ScanProtectionHistory(findings, cancellationToken);
-        ScanDefenderConfigChanges(findings, cancellationToken);
+        ScanDefenderConfigChanges(findings, config.EventWindowLookback, cancellationToken);
         CheckDefenderStatus(findings);
 
         return Task.FromResult(findings);
@@ -82,17 +82,25 @@ public class DefenderModule : BaseModule
         catch { /* Defender log unavailable */ }
     }
 
-    private static void ScanDefenderConfigChanges(List<Finding> findings, CancellationToken cancellationToken)
+    private static void ScanDefenderConfigChanges(List<Finding> findings, TimeSpan lookback, CancellationToken cancellationToken)
     {
         try
         {
+            var since = DateTime.UtcNow - lookback;
+            var sinceStr = since.ToString("yyyy-MM-ddTHH:mm:ss.000Z");
+
             var query = new EventLogQuery(
                 "Microsoft-Windows-Windows Defender/Operational",
                 PathType.LogName,
-                "*[System[EventID=5007]]");
+                $"*[System[EventID=5007 and TimeCreated[@SystemTime>='{sinceStr}']]]")
+            { ReverseDirection = true };
 
             using var reader = new EventLogReader(query);
             EventRecord? record;
+
+            // Deduplicate by changed registry key — one finding per key
+            var seenKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            int genericCount = 0;
 
             while ((record = reader.ReadEvent()) != null)
             {
@@ -104,24 +112,75 @@ public class DefenderModule : BaseModule
                     {
                         var description = record.FormatDescription() ?? "";
                         var ts = record.TimeCreated;
+                        var lower = description.ToLowerInvariant();
 
-                        bool isDisable =
-                            description.Contains("DisableRealtimeMonitoring", StringComparison.OrdinalIgnoreCase) ||
-                            description.Contains("DisableBehaviorMonitoring", StringComparison.OrdinalIgnoreCase) ||
-                            description.Contains("DisableIOAVProtection", StringComparison.OrdinalIgnoreCase) ||
-                            description.Contains("DisableScriptScanning", StringComparison.OrdinalIgnoreCase);
+                        var changedKey = ExtractChangedKey(description);
+                        if (!string.IsNullOrEmpty(changedKey) && !seenKeys.Add(changedKey))
+                            continue;
 
-                        findings.Add(new Finding(
-                            isDisable ? RiskLevel.Critical : RiskLevel.High,
-                            FindingCategory.SystemTampering,
-                            "Defender",
-                            isDisable
-                                ? "DEFENDER DESATIVADO (ID 5007)"
-                                : "Configuração do Defender alterada (ID 5007)",
-                            description.Length > 300 ? description[..300] : description,
-                            $"Data: {ts:dd/MM/yyyy HH:mm:ss}",
-                            ts
-                        ));
+                        bool isCriticalDisable =
+                            lower.Contains("disablerealtimemonitoring") ||
+                            lower.Contains("tamperprotection") ||
+                            lower.Contains("disablebehaviormonitoring") ||
+                            lower.Contains("disableioavprotection") ||
+                            lower.Contains("disablescriptscanning") ||
+                            lower.Contains("disableantispyware") ||
+                            lower.Contains("disableantivirus");
+
+                        bool isExclusion =
+                            lower.Contains("exclusionpath") ||
+                            lower.Contains("exclusionextension") ||
+                            lower.Contains("exclusionprocess") ||
+                            lower.Contains("exclusionipaddress");
+
+                        if (isCriticalDisable)
+                        {
+                            findings.Add(new Finding(
+                                RiskLevel.Critical,
+                                FindingCategory.SystemTampering,
+                                "Defender",
+                                "DEFENDER DESATIVADO (ID 5007)",
+                                description.Length > 400 ? description[..400] : description,
+                                $"Data: {ts:dd/MM/yyyy HH:mm:ss}",
+                                ts,
+                                confidence: Confidence.High,
+                                ruleId: "DEFENDER_DISABLED_5007",
+                                entity: changedKey ?? "defender-config"
+                            ));
+                        }
+                        else if (isExclusion)
+                        {
+                            findings.Add(new Finding(
+                                RiskLevel.High,
+                                FindingCategory.SystemTampering,
+                                "Defender",
+                                $"Exclusão adicionada ao Defender (ID 5007): {changedKey ?? "exclusão"}",
+                                description.Length > 400 ? description[..400] : description,
+                                $"Data: {ts:dd/MM/yyyy HH:mm:ss}",
+                                ts,
+                                confidence: Confidence.Medium,
+                                ruleId: "DEFENDER_EXCLUSION_5007",
+                                entity: changedKey ?? "defender-exclusion"
+                            ));
+                        }
+                        else
+                        {
+                            // Generic config change (signature updates, scan schedules, Windows Update noise)
+                            if (genericCount >= 3) continue;
+                            genericCount++;
+                            findings.Add(new Finding(
+                                RiskLevel.Low,
+                                FindingCategory.SystemTampering,
+                                "Defender",
+                                $"Configuração do Defender alterada (ID 5007): {changedKey ?? "configuração"}",
+                                description.Length > 400 ? description[..400] : description,
+                                $"Data: {ts:dd/MM/yyyy HH:mm:ss}",
+                                ts,
+                                confidence: Confidence.Low,
+                                ruleId: "DEFENDER_CONFIG_5007",
+                                entity: changedKey ?? "defender-generic"
+                            ));
+                        }
                     }
                     catch { }
                 }
@@ -129,6 +188,22 @@ public class DefenderModule : BaseModule
         }
         catch (OperationCanceledException) { throw; }
         catch { }
+    }
+
+    private static string? ExtractChangedKey(string description)
+    {
+        // 5007 format: "New value: HKLM\...\KeyName = value"
+        var idx = description.IndexOf("New value:", StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) idx = description.IndexOf("Old value:", StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return null;
+
+        var rest = description[(idx + 10)..].TrimStart();
+        var eqIdx = rest.IndexOf('=');
+        if (eqIdx < 0) return null;
+
+        var keyPath = rest[..eqIdx].Trim();
+        var lastSlash = keyPath.LastIndexOf('\\');
+        return lastSlash >= 0 ? keyPath[(lastSlash + 1)..] : keyPath;
     }
 
     private static void CheckDefenderStatus(List<Finding> findings)

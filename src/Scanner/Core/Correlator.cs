@@ -23,14 +23,17 @@ public static class Correlator
             f.Category == FindingCategory.AntiForensics &&
             f.Detail.Contains("prefetch", StringComparison.OrdinalIgnoreCase));
 
+        // USN 3079 alone is Confidence.Low — don't count it as an anti-forensic signal
         var usnManipulated = result.Findings.Any(f =>
-            f.Title.Contains("3079") ||
-            f.Title.Contains("USN", StringComparison.OrdinalIgnoreCase));
+            (f.Title.Contains("3079") || f.Title.Contains("USN", StringComparison.OrdinalIgnoreCase)) &&
+            f.Confidence > Confidence.Low);
 
+        // Generic 5007 config changes are now Low confidence — only count real disabling events
         var defenderDisabled = result.Findings.Any(f =>
-            f.Title.Contains("5007") ||
-            f.Title.Contains("defender", StringComparison.OrdinalIgnoreCase) &&
-            f.Category == FindingCategory.SystemTampering);
+            (f.Title.Contains("5007") ||
+             f.Title.Contains("defender", StringComparison.OrdinalIgnoreCase)) &&
+            f.Category == FindingCategory.SystemTampering &&
+            f.Confidence >= Confidence.Medium);
 
         int score = 0;
         var signals = new List<string>();
@@ -59,12 +62,16 @@ public static class Correlator
 
     private static void DetectCheatWithHiddenLogs(ScanResult result)
     {
-        var hasCheat = result.Findings.Any(f => f.Category == FindingCategory.Cheat);
-        var hasLogClearing = result.Findings.Any(f =>
-            f.Category == FindingCategory.AntiForensics ||
-            f.Category == FindingCategory.SystemTampering);
+        // Require credible cheat evidence (High/Confirmed) to avoid Low-confidence DLL name matches
+        // escalating into a Critical correlation finding.
+        var hasCredibleCheat = result.Findings.Any(f =>
+            f.Category == FindingCategory.Cheat && f.Confidence >= Confidence.High);
+        var hasAntiForensics = result.Findings.Any(f =>
+            (f.Category == FindingCategory.AntiForensics ||
+             f.Category == FindingCategory.SystemTampering) &&
+            f.Confidence >= Confidence.Medium);
 
-        if (hasCheat && hasLogClearing)
+        if (hasCredibleCheat && hasAntiForensics)
         {
             result.Findings.Add(new Finding(
                 RiskLevel.Critical,
