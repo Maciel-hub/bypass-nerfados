@@ -80,12 +80,19 @@ public class KnownCheatsModule : BaseModule
                         confidence = Confidence.High;
                         risk = RiskLevel.Critical;
                     }
-                    else
+                    else if (cheat.IsGenericName)
                     {
-                        // Name-only: generic names like launcher.exe hit many legitimate programs
+                        // Generic filename (launcher.exe, dxsetup.exe) — needs path or hash to be credible
                         confidence = Confidence.Low;
                         risk = RiskLevel.Medium;
                         validationHint = "Nome genérico — confirmar por hash SHA1, caminho típico ou Prefetch/MuiCache";
+                    }
+                    else
+                    {
+                        // Unique cheat name (farinhafree.exe, whatsapp installer.exe) — name alone is credible
+                        confidence = Confidence.Medium;
+                        risk = RiskLevel.High;
+                        validationHint = null;
                     }
 
                     var ruleId = hashMatch ? $"CHEAT_HASH_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}"

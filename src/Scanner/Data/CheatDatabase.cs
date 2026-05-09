@@ -5,7 +5,8 @@ public record CheatInfo(
     string Description,
     string[] KnownPaths,
     string[]? Hashes = null,
-    string[]? AssociatedFiles = null
+    string[]? AssociatedFiles = null,
+    bool IsGenericName = false  // true when the filename is common (launcher, setup) — needs path/hash to be credible
 );
 
 public static class CheatDatabase
@@ -17,7 +18,8 @@ public static class CheatDatabase
                 "GOSTH",
                 "Cheat para FiveM. Gera arquivo de 8-10 chars aleatórios na System32 e arquivo de 8-10 números com 0kb.",
                 [@"C:\Users", @"AppData\Local\Programs\Common"],
-                AssociatedFiles: ["dxsetup"]
+                AssociatedFiles: ["dxsetup"],
+                IsGenericName: true   // "launcher.exe" é usado por Rockstar, Steam, Epic etc.
             ),
 
             ["farinhafree.exe"] = new CheatInfo(
@@ -37,7 +39,8 @@ public static class CheatDatabase
             ["dxsetup.exe"] = new CheatInfo(
                 "GOSTH Loader (dxsetup)",
                 "Loader do cheat GOSTH disfarçado de instalador DirectX. Normalmente em AppData\\Local\\Programs\\Common",
-                [@"AppData\Local\Programs\Common", @"AppData\Local\Temp\"]
+                [@"AppData\Local\Programs\Common", @"AppData\Local\Temp\"],
+                IsGenericName: true   // "dxsetup.exe" é o instalador legítimo do DirectX redistribuível
             ),
         };
 
