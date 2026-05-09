@@ -93,11 +93,7 @@ public class ScanOrchestrator
         _result.Findings.Clear();
         _result.Findings.AddRange(deduped);
 
-        // Build artifact dossiers — group cheat findings by file, enrich with paths/hashes/bypass
-        var bundles = EvidenceEnricher.Enrich(_result.Findings);
-        _result.EvidenceBundles.AddRange(bundles);
-
-        // Run correlation engine
+        // Run correlation engine first — enricher needs correlated findings for bypass indicators
         cancellationToken.ThrowIfCancellationRequested();
         Report(new ScanProgressUpdate(
             ScanProgressKind.CorrelationStarted,
@@ -108,6 +104,10 @@ public class ScanOrchestrator
         Report(new ScanProgressUpdate(
             ScanProgressKind.CorrelationCompleted,
             "Correlação concluída."));
+
+        // Build artifact dossiers after correlation so CORR_ findings are visible in bypass section
+        var bundles = EvidenceEnricher.Enrich(_result.Findings);
+        _result.EvidenceBundles.AddRange(bundles);
 
         Report(new ScanProgressUpdate(
             ScanProgressKind.ResultReady,
