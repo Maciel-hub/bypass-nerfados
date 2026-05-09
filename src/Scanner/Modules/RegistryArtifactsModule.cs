@@ -31,7 +31,7 @@ public class RegistryArtifactsModule : BaseModule
         return Task.FromResult(findings);
     }
 
-    private static void ScanCompatibilityStore(List<Finding> findings)
+    private void ScanCompatibilityStore(List<Finding> findings)
     {
         const string path = @"SOFTWARE\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Compatibility Assistant\Store";
         try
@@ -87,10 +87,10 @@ public class RegistryArtifactsModule : BaseModule
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("CompatibilityAssistant registry inacessível", ex); }
     }
 
-    private static void ScanMuiCache(List<Finding> findings)
+    private void ScanMuiCache(List<Finding> findings)
     {
         const string path = @"Local Settings\Software\Microsoft\Windows\Shell\MuiCache";
         try
@@ -146,10 +146,10 @@ public class RegistryArtifactsModule : BaseModule
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("MuiCache registry inacessível", ex); }
     }
 
-    private static void ScanRecentDocs(List<Finding> findings)
+    private void ScanRecentDocs(List<Finding> findings)
     {
         const string path = @"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\RecentDocs";
         try
@@ -176,7 +176,7 @@ public class RegistryArtifactsModule : BaseModule
                 CheckRecentDocsSubkey(exeKey, ".exe", findings);
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("RecentDocs registry inacessível", ex); }
     }
 
     private static void CheckRecentDocsSubkey(RegistryKey key, string ext, List<Finding> findings)
@@ -211,7 +211,7 @@ public class RegistryArtifactsModule : BaseModule
         }
     }
 
-    private static void ScanArchiveHistory(List<Finding> findings)
+    private void ScanArchiveHistory(List<Finding> findings)
     {
         // 7-Zip FM history
         const string sevenZipPath = @"Software\7-Zip\FM";
@@ -238,7 +238,7 @@ public class RegistryArtifactsModule : BaseModule
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("Histórico do 7-Zip inacessível", ex); }
 
         // WinRAR ArcHistory
         const string winrarPath = @"Software\WinRAR\ArcHistory";
@@ -263,10 +263,10 @@ public class RegistryArtifactsModule : BaseModule
                 }
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("Histórico do WinRAR inacessível", ex); }
     }
 
-    private static void ScanMountedDevices(List<Finding> findings)
+    private void ScanMountedDevices(List<Finding> findings)
     {
         const string path = @"SYSTEM\MountedDevices";
         try
@@ -289,7 +289,7 @@ public class RegistryArtifactsModule : BaseModule
                 ));
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("MountedDevices registry inacessível", ex); }
     }
 
     private static void ScanStartupEntries(List<Finding> findings)

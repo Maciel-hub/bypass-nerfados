@@ -26,7 +26,7 @@ public class SystemInfoModule : BaseModule
         return Task.FromResult(findings);
     }
 
-    private static void GetSystemInfo(List<Finding> findings)
+    private void GetSystemInfo(List<Finding> findings)
     {
         try
         {
@@ -47,10 +47,10 @@ public class SystemInfoModule : BaseModule
                 $"Build: {buildNumber} | UBR: {ubr}"
             ));
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("Informações do sistema inacessíveis via registry", ex); }
     }
 
-    private static void CheckInstallDate(List<Finding> findings)
+    private void CheckInstallDate(List<Finding> findings)
     {
         try
         {
@@ -88,10 +88,10 @@ public class SystemInfoModule : BaseModule
                 ));
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("Data de instalação do Windows inacessível", ex); }
     }
 
-    private static void CheckDmaProtection(List<Finding> findings, CancellationToken cancellationToken)
+    private void CheckDmaProtection(List<Finding> findings, CancellationToken cancellationToken)
     {
         // Check Kernel DMA Protection status
         try
@@ -118,7 +118,7 @@ public class SystemInfoModule : BaseModule
                 ));
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("Proteção DMA inacessível via registry", ex); }
 
         // Check IOMMU/VT-d related events in System log
         try
@@ -160,10 +160,10 @@ public class SystemInfoModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { }
+        catch (Exception ex) { LogPartialError("Eventos IOMMU inacessíveis", ex); }
     }
 
-    private static void CheckUnknownPcieDevices(List<Finding> findings, CancellationToken cancellationToken)
+    private void CheckUnknownPcieDevices(List<Finding> findings, CancellationToken cancellationToken)
     {
         // Use SetupAPI via WMI to look for unknown or recently added PCIe/Thunderbolt devices
         try
@@ -202,10 +202,10 @@ public class SystemInfoModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { }
+        catch (Exception ex) { LogPartialError("Enumeração de dispositivos PCIe falhou", ex); }
     }
 
-    private static void CheckVirtualization(List<Finding> findings)
+    private void CheckVirtualization(List<Finding> findings)
     {
         // Check if running in a VM (possible indicator of environment manipulation)
         try
@@ -233,6 +233,6 @@ public class SystemInfoModule : BaseModule
                 ));
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("Dados de virtualização inacessíveis via registry", ex); }
     }
 }

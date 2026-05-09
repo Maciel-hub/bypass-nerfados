@@ -21,7 +21,7 @@ public class DefenderModule : BaseModule
         return Task.FromResult(findings);
     }
 
-    private static void ScanProtectionHistory(List<Finding> findings, CancellationToken cancellationToken)
+    private void ScanProtectionHistory(List<Finding> findings, CancellationToken cancellationToken)
     {
         // Event IDs for Defender:
         // 1116 = malware detected
@@ -79,10 +79,10 @@ public class DefenderModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { /* Defender log unavailable */ }
+        catch (Exception ex) { LogPartialError("Log do Defender (Protection History) inacessível", ex); }
     }
 
-    private static void ScanDefenderConfigChanges(List<Finding> findings, TimeSpan lookback, CancellationToken cancellationToken)
+    private void ScanDefenderConfigChanges(List<Finding> findings, TimeSpan lookback, CancellationToken cancellationToken)
     {
         try
         {
@@ -187,7 +187,7 @@ public class DefenderModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { }
+        catch (Exception ex) { LogPartialError("Log de alterações de configuração do Defender inacessível", ex); }
     }
 
     private static string? ExtractChangedKey(string description)
@@ -206,7 +206,7 @@ public class DefenderModule : BaseModule
         return lastSlash >= 0 ? keyPath[(lastSlash + 1)..] : keyPath;
     }
 
-    private static void CheckDefenderStatus(List<Finding> findings)
+    private void CheckDefenderStatus(List<Finding> findings)
     {
         try
         {
@@ -227,7 +227,7 @@ public class DefenderModule : BaseModule
                 ));
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("Status do Defender inacessível via registry", ex); }
     }
 
     private static string ExtractThreatName(string description)

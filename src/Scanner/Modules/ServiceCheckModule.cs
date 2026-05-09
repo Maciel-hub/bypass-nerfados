@@ -88,7 +88,7 @@ public class ServiceCheckModule : BaseModule
         return Task.FromResult(findings);
     }
 
-    private static void CheckDefenderRealtime(List<Finding> findings)
+    private void CheckDefenderRealtime(List<Finding> findings)
     {
         try
         {
@@ -110,6 +110,6 @@ public class ServiceCheckModule : BaseModule
                 ));
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("Status de tempo real do Defender inacessível via registry", ex); }
     }
 }

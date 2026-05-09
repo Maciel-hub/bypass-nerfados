@@ -133,7 +133,7 @@ public class EventViewerModule : BaseModule
         }
     }
 
-    private static void ScanUsnResetEvent(List<Finding> findings, DateTime since, CancellationToken cancellationToken)
+    private void ScanUsnResetEvent(List<Finding> findings, DateTime since, CancellationToken cancellationToken)
     {
         // ID 3079: NTFS volume reset — can indicate USN Journal bypass but also benign disk events
         try
@@ -175,10 +175,10 @@ public class EventViewerModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { }
+        catch (Exception ex) { LogPartialError("Eventos NTFS 3079 inacessíveis", ex); }
     }
 
-    private static void ScanProcessCreationEvents(List<Finding> findings, CancellationToken cancellationToken)
+    private void ScanProcessCreationEvents(List<Finding> findings, CancellationToken cancellationToken)
     {
         // ID 4688 = Process created. Look for suspicious cmd/powershell patterns
         try
@@ -251,7 +251,7 @@ public class EventViewerModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { }
+        catch (Exception ex) { LogPartialError("Eventos de criação de processo (4688) inacessíveis", ex); }
     }
 
     private static string ExtractServiceName(string description)

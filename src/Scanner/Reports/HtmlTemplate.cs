@@ -233,6 +233,10 @@ public static class HtmlTemplate
             sb.AppendLine("</div>");
         }
 
+        // Module coverage table
+        if (result.ModuleCoverage.Count > 0)
+            sb.AppendLine(ModuleCoverageHtml(result));
+
         sb.AppendLine($"""
 </div>
 <div class="footer">
@@ -377,6 +381,57 @@ public static class HtmlTemplate
         }
 
         sb.AppendLine("</div>");
+        return sb.ToString();
+    }
+
+    private static string ModuleCoverageHtml(ScanResult result)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("""
+<div class="section">
+<div class="section-title">COBERTURA DA VARREDURA</div>
+<table>
+  <thead>
+    <tr>
+      <th>Módulo</th>
+      <th>Status</th>
+      <th>Motivo / Impacto Forense</th>
+    </tr>
+  </thead>
+  <tbody>
+""");
+
+        foreach (var entry in result.ModuleCoverage.OrderBy(e => e.Status).ThenBy(e => e.Name))
+        {
+            // Map status to display label and color
+            var (statusLabel, statusColor) = entry.Status switch
+            {
+                ModuleStatus.Executed => ("EXECUTADO",  "#28a745"),
+                ModuleStatus.Partial  => ("PARCIAL",    "#fd7e14"),
+                ModuleStatus.Skipped  => ("PULADO",     "#6c757d"),
+                ModuleStatus.Failed   => ("FALHOU",     "#dc3545"),
+                _                     => ("AGUARDANDO", "#adb5bd")
+            };
+
+            // Prefer Reason; fall back to ForensicImpact; then em-dash
+            var note = !string.IsNullOrEmpty(entry.Reason)
+                ? entry.Reason
+                : !string.IsNullOrEmpty(entry.ForensicImpact) ? entry.ForensicImpact : "—";
+
+            sb.AppendLine($"""
+    <tr>
+      <td>{Esc(entry.Name)}</td>
+      <td style="color:{statusColor};font-weight:bold">{statusLabel}</td>
+      <td>{Esc(note)}</td>
+    </tr>
+""");
+        }
+
+        sb.AppendLine("""
+  </tbody>
+</table>
+</div>
+""");
         return sb.ToString();
     }
 

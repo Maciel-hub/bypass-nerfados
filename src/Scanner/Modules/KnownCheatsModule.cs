@@ -46,7 +46,7 @@ public class KnownCheatsModule : BaseModule
         return findings;
     }
 
-    private static void SearchDirectory(string root, List<Finding> findings, CancellationToken cancellationToken)
+    private void SearchDirectory(string root, List<Finding> findings, CancellationToken cancellationToken)
     {
         try
         {
@@ -143,7 +143,7 @@ public class KnownCheatsModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { }
+        catch (Exception ex) { LogPartialError("Diretório inacessível na varredura de cheats conhecidos", ex); }
     }
 
     private static void CheckSpecificPaths(List<Finding> findings, CancellationToken cancellationToken)
@@ -206,7 +206,7 @@ public class KnownCheatsModule : BaseModule
         }
     }
 
-    private static void CheckGosthPattern(List<Finding> findings, CancellationToken cancellationToken)
+    private void CheckGosthPattern(List<Finding> findings, CancellationToken cancellationToken)
     {
         // GOSTH gera arquivo de 8-10 chars aleatórios (apenas letras/números) na System32
         // e um arquivo com 8-10 dígitos numéricos com 0 KB
@@ -256,7 +256,7 @@ public class KnownCheatsModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { }
+        catch (Exception ex) { LogPartialError("Varredura de padrão GOSTH no System32 falhou", ex); }
     }
 
     private static void CheckFiveMPlugins(List<Finding> findings, CancellationToken cancellationToken)
@@ -303,7 +303,7 @@ public class KnownCheatsModule : BaseModule
         }
     }
 
-    private static void CheckPsReadLine(List<Finding> findings, CancellationToken cancellationToken)
+    private void CheckPsReadLine(List<Finding> findings, CancellationToken cancellationToken)
     {
         var psHistory = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -356,6 +356,6 @@ public class KnownCheatsModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { }
+        catch (Exception ex) { LogPartialError("Histórico do PSReadLine inacessível", ex); }
     }
 }

@@ -20,7 +20,7 @@ public class NetworkModule : BaseModule
         return Task.FromResult(findings);
     }
 
-    private static void ScanActiveTcpConnections(List<Finding> findings, CancellationToken cancellationToken)
+    private void ScanActiveTcpConnections(List<Finding> findings, CancellationToken cancellationToken)
     {
         var connections = GetTcpConnections();
         var processConnections = connections.GroupBy(c => c.ProcessId).ToList();
@@ -93,7 +93,7 @@ public class NetworkModule : BaseModule
         }
     }
 
-    private static void ScanNetworkDataUsage(List<Finding> findings, CancellationToken cancellationToken)
+    private void ScanNetworkDataUsage(List<Finding> findings, CancellationToken cancellationToken)
     {
         // Supplement with netstat output for running connections
         try
@@ -133,10 +133,10 @@ public class NetworkModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { }
+        catch (Exception ex) { LogPartialError("Dados de uso de rede inacessíveis", ex); }
     }
 
-    private static List<TcpConnection> GetTcpConnections()
+    private List<TcpConnection> GetTcpConnections()
     {
         var result = new List<TcpConnection>();
         var bufferSize = 0;
@@ -164,7 +164,7 @@ public class NetworkModule : BaseModule
                 entryPtr = IntPtr.Add(entryPtr, entrySize);
             }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("Conexões TCP inacessíveis via P/Invoke", ex); }
         finally { Marshal.FreeHGlobal(buffer); }
 
         return result;

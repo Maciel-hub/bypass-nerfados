@@ -127,7 +127,7 @@ public class UsnJournalModule : BaseModule
         }
     }
 
-    private static async Task<(string Label, List<string> Lines)> ReadJournalAsync(
+    private async Task<(string Label, List<string> Lines)> ReadJournalAsync(
         string drive, string reasonMask, string label, CancellationToken cancellationToken)
     {
         var tempFile = Path.GetTempFileName();
@@ -145,7 +145,7 @@ public class UsnJournalModule : BaseModule
                 .ToList();
         }
         catch (OperationCanceledException) { throw; }
-        catch { /* USN journal unavailable */ }
+        catch (Exception ex) { LogPartialError("USN Journal inacessível ou fsutil falhou", ex); }
         finally
         {
             if (File.Exists(tempFile)) File.Delete(tempFile);

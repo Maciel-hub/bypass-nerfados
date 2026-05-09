@@ -22,7 +22,7 @@ public class FileSystemModule : BaseModule
         return Task.FromResult(findings);
     }
 
-    private static void ScanRecycleBin(List<Finding> findings, CancellationToken cancellationToken)
+    private void ScanRecycleBin(List<Finding> findings, CancellationToken cancellationToken)
     {
         var recyclePath = @"C:\$Recycle.Bin";
         if (!Directory.Exists(recyclePath)) return;
@@ -88,7 +88,7 @@ public class FileSystemModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { }
+        catch (Exception ex) { LogPartialError("Lixeira inacessível", ex); }
     }
 
     private static void ScanTempFolders(List<Finding> findings, CancellationToken cancellationToken)
@@ -143,7 +143,7 @@ public class FileSystemModule : BaseModule
         }
     }
 
-    private static void ScanDownloads(List<Finding> findings, CancellationToken cancellationToken)
+    private void ScanDownloads(List<Finding> findings, CancellationToken cancellationToken)
     {
         var downloads = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
@@ -188,7 +188,7 @@ public class FileSystemModule : BaseModule
             }
         }
         catch (OperationCanceledException) { throw; }
-        catch { }
+        catch (Exception ex) { LogPartialError("Pasta Downloads inacessível", ex); }
     }
 
     private static void ScanCrashDumps(List<Finding> findings, CancellationToken cancellationToken)
