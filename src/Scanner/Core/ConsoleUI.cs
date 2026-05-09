@@ -172,6 +172,39 @@ public static class ConsoleUI
             }
         }
 
+        // Module coverage table
+        if (result.ModuleCoverage.Count > 0)
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.Write(new Rule("[bold]COBERTURA DA VARREDURA[/]"));
+
+            var covTable = new Table().Border(TableBorder.Rounded).Expand();
+            covTable.AddColumn("Módulo");
+            covTable.AddColumn("Status");
+            covTable.AddColumn("Motivo / Impacto");
+
+            foreach (var entry in result.ModuleCoverage.OrderBy(e => e.Status).ThenBy(e => e.Name))
+            {
+                var (statusColor, statusLabel) = entry.Status switch
+                {
+                    ModuleStatus.Executed => ("green",      "EXECUTADO"),
+                    ModuleStatus.Partial  => ("yellow",     "PARCIAL"),
+                    ModuleStatus.Skipped  => ("grey",       "PULADO"),
+                    ModuleStatus.Failed   => ("red",        "FALHOU"),
+                    _                     => ("white",      "AGUARDANDO")
+                };
+                var note = entry.Status is ModuleStatus.Skipped or ModuleStatus.Failed or ModuleStatus.Partial
+                    ? Markup.Escape(entry.Reason)
+                    : string.IsNullOrEmpty(entry.ForensicImpact) ? "[grey]—[/]" : $"[grey]{Markup.Escape(entry.ForensicImpact)}[/]";
+
+                covTable.AddRow(
+                    Markup.Escape(entry.Name),
+                    $"[{statusColor}]{statusLabel}[/]",
+                    note);
+            }
+            AnsiConsole.Write(covTable);
+        }
+
         // Bypass / anti-forensics section
         var bypassList = result.BypassFindings.OrderByDescending(f => f.Risk).Take(15).ToList();
         if (bypassList.Count > 0)

@@ -20,7 +20,11 @@ public class AmcacheModule : BaseModule
         if (!File.Exists(HivePath)) return Task.FromResult(findings);
 
         var hive = LoadOfflineHive(HivePath, TempKeyName, out var tempFile);
-        if (hive == null) return Task.FromResult(findings);
+        if (hive == null)
+        {
+            LogPartialError("Amcache.hve — não foi possível carregar offline hive (acesso negado ou arquivo em uso)");
+            return Task.FromResult(findings);
+        }
 
         try
         {

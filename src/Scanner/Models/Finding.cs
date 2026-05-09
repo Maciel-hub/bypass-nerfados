@@ -28,7 +28,8 @@ public enum FindingCategory
     RegistryArtifact,
     FileSystem,
     DeviceAnomaly,
-    ServiceTampering
+    ServiceTampering,
+    LogCoverage   // log coverage warnings and module partial-collection errors
 }
 
 public class Finding

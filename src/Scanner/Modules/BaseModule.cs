@@ -12,19 +12,35 @@ public abstract class BaseModule
     public abstract string Name { get; }
     public abstract string Description { get; }
 
+    private readonly List<string> _partialErrors = [];
+
+    protected void LogPartialError(string context, Exception? ex = null) =>
+        _partialErrors.Add(ex != null ? $"{context}: {ex.Message}" : context);
+
+    public bool HasPartialErrors => _partialErrors.Count > 0;
+    public IReadOnlyList<string> GetPartialErrors() => _partialErrors;
+
     public async Task<List<Finding>> RunAsync(ScanConfig config, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        _partialErrors.Clear();
 
         try
         {
             var findings = await ExecuteAsync(config, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Surface partial errors as Info findings so they appear in the report
+            foreach (var err in _partialErrors)
+                findings.Add(new Finding(RiskLevel.Info, FindingCategory.LogCoverage, Name,
+                    $"Coleta parcial — {Name}", err, confidence: Confidence.Low));
+
             return findings;
         }
         catch (OperationCanceledException) { throw; }
-        catch (UnauthorizedAccessException)
+        catch (UnauthorizedAccessException ex)
         {
+            LogPartialError("Acesso negado ao módulo", ex);
             return [new Finding(RiskLevel.Info, FindingCategory.SystemTampering, Name,
                 "Acesso negado", "Módulo requer privilégios de Administrador.")];
         }

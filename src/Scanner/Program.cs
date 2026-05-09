@@ -190,30 +190,32 @@ static void PrintProgress(ScanProgressUpdate update)
 
 static void PrintHelp()
 {
-    AnsiConsole.MarkupLine("[bold]ECHO NERFADOS SHIELD XDR v1.0[/]");
-    AnsiConsole.MarkupLine("[grey]Plataforma Anti-Cheat para investigação de Screen-Share[/]");
-    AnsiConsole.WriteLine();
-    AnsiConsole.MarkupLine("[bold]USO:[/]");
-    AnsiConsole.MarkupLine("  EchoNerfados.exe [opções]");
-    AnsiConsole.WriteLine();
-    AnsiConsole.MarkupLine("[bold]OPÇÕES:[/]");
-    AnsiConsole.MarkupLine("  --investigator <nome>   Nome do investigador (para o relatório)");
-    AnsiConsole.MarkupLine("  --suspect <nome>        Nome do suspeito (para o relatório)");
-    AnsiConsole.MarkupLine("  --case-id <id>          ID do caso/investigação");
-    AnsiConsole.MarkupLine("  --drive <letra>         Drive a ser analisado (padrão: C:)");
-    AnsiConsole.MarkupLine("  --output <caminho>      Pasta de saída do relatório");
-    AnsiConsole.MarkupLine("  --no-usn                Pular análise do USN Journal");
-    AnsiConsole.MarkupLine("  --no-memory             Pular análise de memória de processos");
-    AnsiConsole.MarkupLine("  --no-report             Não gerar relatório em arquivo");
-    AnsiConsole.MarkupLine("  --verbose               Mostrar todos os findings (incluindo INFO)");
-    AnsiConsole.MarkupLine("  --help                  Exibir esta ajuda");
-    AnsiConsole.WriteLine();
-    AnsiConsole.MarkupLine("[bold]EXEMPLOS:[/]");
-    AnsiConsole.MarkupLine("  EchoNerfados.exe");
-    AnsiConsole.MarkupLine("  EchoNerfados.exe --investigator \"Fulano\" --suspect \"Ciclano\" --case-id \"CASO-001\"");
-    AnsiConsole.MarkupLine("  EchoNerfados.exe --no-memory --output C:\\Relatorios");
-    AnsiConsole.WriteLine();
-    AnsiConsole.MarkupLine("[grey]IMPORTANTE: Execute como Administrador para acesso completo.[/]");
+    // Plain Console.WriteLine — safe for pipes and non-interactive terminals.
+    // Never use AnsiConsole here: brackets in help text crash Spectre markup parser.
+    Console.WriteLine("ECHO NERFADOS SHIELD XDR v1.0");
+    Console.WriteLine("Plataforma Anti-Cheat para investigacao de Screen-Share");
+    Console.WriteLine();
+    Console.WriteLine("USO:");
+    Console.WriteLine("  EchoNerfados.exe [opcoes]");
+    Console.WriteLine();
+    Console.WriteLine("OPCOES:");
+    Console.WriteLine("  --investigator <nome>   Nome do investigador (para o relatorio)");
+    Console.WriteLine("  --suspect <nome>        Nome do suspeito (para o relatorio)");
+    Console.WriteLine("  --case-id <id>          ID do caso/investigacao");
+    Console.WriteLine("  --drive <letra>         Drive a ser analisado (padrao: C:)");
+    Console.WriteLine("  --output <caminho>      Pasta de saida do relatorio");
+    Console.WriteLine("  --no-usn                Pular analise do USN Journal");
+    Console.WriteLine("  --no-memory             Pular analise de memoria de processos");
+    Console.WriteLine("  --no-report             Nao gerar relatorio em arquivo");
+    Console.WriteLine("  --verbose               Mostrar todos os findings (incluindo INFO)");
+    Console.WriteLine("  --help                  Exibir esta ajuda");
+    Console.WriteLine();
+    Console.WriteLine("EXEMPLOS:");
+    Console.WriteLine("  EchoNerfados.exe");
+    Console.WriteLine("  EchoNerfados.exe --investigator \"Fulano\" --suspect \"Ciclano\" --case-id \"CASO-001\"");
+    Console.WriteLine("  EchoNerfados.exe --no-memory --output C:\\Relatorios");
+    Console.WriteLine();
+    Console.WriteLine("IMPORTANTE: Execute como Administrador para acesso completo (Amcache, UserAssist, USN Journal).");
 }
 
 internal sealed class InlineProgress<T>(Action<T> handler) : IProgress<T>

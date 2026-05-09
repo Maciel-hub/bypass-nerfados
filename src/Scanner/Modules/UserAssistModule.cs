@@ -46,7 +46,11 @@ public class UserAssistModule : BaseModule
 
             var tempKey = $"ECHO_UA_{Guid.NewGuid():N}";
             var hive = LoadOfflineHive(hivePath, tempKey, out var tempFile);
-            if (hive == null) continue;
+            if (hive == null)
+            {
+                LogPartialError($"NTUSER.DAT de {userName} — não foi possível carregar (acesso negado ou arquivo em uso)");
+                continue;
+            }
 
             try { ScanUserHive(hive, userName, findings, ct); }
             finally { hive.Dispose(); UnloadOfflineHive(tempKey, tempFile); }

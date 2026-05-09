@@ -48,6 +48,8 @@ public class ScanOrchestrator
                 ModuleIndex: i + 1,
                 ModuleCount: modules.Count));
 
+            var coverage = _result.ModuleCoverage.FirstOrDefault(c => c.Name == module.Name);
+
             var sw = System.Diagnostics.Stopwatch.StartNew();
             try
             {
@@ -57,6 +59,13 @@ public class ScanOrchestrator
                 _result.Findings.AddRange(findings);
                 _result.ModulesRun.Add(module.Name);
                 _result.ModuleDurations[module.Name] = sw.Elapsed;
+
+                if (coverage != null)
+                {
+                    coverage.Status = module.HasPartialErrors ? ModuleStatus.Partial : ModuleStatus.Executed;
+                    if (module.HasPartialErrors)
+                        coverage.Reason = string.Join("; ", module.GetPartialErrors());
+                }
 
                 Report(new ScanProgressUpdate(
                     ScanProgressKind.ModuleCompleted,
@@ -76,6 +85,12 @@ public class ScanOrchestrator
             {
                 sw.Stop();
                 _result.ModuleErrors.Add($"{module.Name}: {ex.Message}");
+
+                if (coverage != null)
+                {
+                    coverage.Status = ModuleStatus.Failed;
+                    coverage.Reason = ex.Message;
+                }
 
                 Report(new ScanProgressUpdate(
                     ScanProgressKind.ModuleFailed,
@@ -173,39 +188,66 @@ public class ScanOrchestrator
 
     private List<BaseModule> BuildModuleList()
     {
-        var list = new List<BaseModule>
-        {
-            new SystemInfoModule(),
-            new BamDamModule(),
-            new PrefetchModule(),
-            new RegistryArtifactsModule(),
-            new EventViewerModule(),
-            new DefenderModule(),
-            new KnownCheatsModule(),
-            new FileSystemModule(),
-            new NetworkModule(),
-            new ServiceCheckModule(),
-        };
+        var list = new List<BaseModule>();
 
-        // ShimCache is always readable (live HKLM key)
-        list.Add(new ShimCacheModule());
-
-        // Amcache and UserAssist read offline hives — require admin for RegLoadKey
-        if (_result.IsAdministrator)
+        void Queue(BaseModule module, string forensicImpact = "")
         {
-            list.Add(new AmcacheModule());
-            list.Add(new UserAssistModule());
+            list.Add(module);
+            _result.ModuleCoverage.Add(new ModuleCoverageEntry
+            {
+                Name = module.Name,
+                Status = ModuleStatus.Queued,
+                ForensicImpact = forensicImpact
+            });
         }
 
-        // LNK and registry persistence — accessible without admin
-        list.Add(new LnkRecentModule());
-        list.Add(new RegistryPersistenceModule());
+        void Skip(string name, string reason, string forensicImpact) =>
+            _result.ModuleCoverage.Add(new ModuleCoverageEntry
+            {
+                Name = name,
+                Status = ModuleStatus.Skipped,
+                Reason = reason,
+                ForensicImpact = forensicImpact
+            });
+
+        Queue(new SystemInfoModule());
+        Queue(new BamDamModule(),             "Histórico de atividade recente (Background Activity Monitor)");
+        Queue(new PrefetchModule(),            "Evidência de execução de processos");
+        Queue(new RegistryArtifactsModule(),   "Autoruns e artefatos de registry");
+        Queue(new EventViewerModule(),         "Logs de segurança, sistema e aplicação");
+        Queue(new DefenderModule(),            "Alertas e configuração do Windows Defender");
+        Queue(new KnownCheatsModule(),         "Arquivos de cheat conhecidos no disco");
+        Queue(new FileSystemModule(),          "Arquivos suspeitos em paths de risco");
+        Queue(new NetworkModule(),             "Histórico de redes conectadas");
+        Queue(new ServiceCheckModule(),        "Serviços instalados com nomes suspeitos");
+        Queue(new ShimCacheModule(),           "Indício de carregamento de executáveis (AppCompatCache)");
+        Queue(new LnkRecentModule(),           "Atalhos recentes — evidência de acesso a arquivos");
+        Queue(new RegistryPersistenceModule(), "Persistência via IFEO, AppInit, Winlogon, BootExecute");
+
+        if (_result.IsAdministrator)
+        {
+            Queue(new AmcacheModule(),   "SHA1 e detecção de executáveis pós-deleção");
+            Queue(new UserAssistModule(), "Histórico de execuções via Explorer (NTUSER.DAT)");
+        }
+        else
+        {
+            Skip("Amcache",    "Requer Administrador — RegLoadKey negado", "SHA1 de executáveis e detecção pós-deleção indisponíveis");
+            Skip("UserAssist", "Requer Administrador — NTUSER.DAT inacessível", "Histórico de execuções via Explorer não coletado");
+        }
 
         if (_config.RunUsnJournal && _result.IsAdministrator)
-            list.Add(new UsnJournalModule());
+            Queue(new UsnJournalModule(), "Operações de arquivo de baixo nível (criação/deleção/renomeação)");
+        else if (_config.RunUsnJournal)
+            Skip("USN Journal", "Requer Administrador", "Operações de arquivo de baixo nível não coletadas");
+        else
+            Skip("USN Journal", "Desativado (--no-usn)", "Operações de arquivo de baixo nível não coletadas");
 
         if (_config.DeepMemoryScan && _result.IsAdministrator)
-            list.Add(new ProcessMemoryModule());
+            Queue(new ProcessMemoryModule(), "Strings suspeitas em memória de processos");
+        else if (_config.DeepMemoryScan)
+            Skip("Process Memory", "Requer Administrador", "Strings suspeitas em memória não varridas");
+        else
+            Skip("Process Memory", "Desativado (--no-memory)", "Varredura de memória de processos não realizada");
 
         return list;
     }

@@ -14,6 +14,7 @@ public class ScanResult
 
     public List<Finding> Findings { get; } = new();
     public List<EvidenceBundle> EvidenceBundles { get; } = new();
+    public List<ModuleCoverageEntry> ModuleCoverage { get; } = new();
     public List<string> ModulesRun { get; } = new();
     public List<string> ModuleErrors { get; } = new();
     public Dictionary<string, TimeSpan> ModuleDurations { get; } = new();

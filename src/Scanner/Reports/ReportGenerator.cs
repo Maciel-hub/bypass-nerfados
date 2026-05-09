@@ -130,6 +130,32 @@ public static class ReportGenerator
         }
 
         sb.AppendLine();
+        // Module coverage table
+        if (result.ModuleCoverage.Count > 0)
+        {
+            sb.AppendLine(sep);
+            sb.AppendLine("  COBERTURA DA VARREDURA");
+            sb.AppendLine(dash);
+            sb.AppendLine($"  {"MÓDULO",-25} {"STATUS",-12} MOTIVO / IMPACTO FORENSE");
+            sb.AppendLine(dash);
+            foreach (var entry in result.ModuleCoverage.OrderBy(e => e.Status).ThenBy(e => e.Name))
+            {
+                var statusStr = entry.Status switch
+                {
+                    ModuleStatus.Executed => "EXECUTADO",
+                    ModuleStatus.Partial  => "PARCIAL",
+                    ModuleStatus.Skipped  => "PULADO",
+                    ModuleStatus.Failed   => "FALHOU",
+                    _                     => "AGUARDANDO"
+                };
+                var note = !string.IsNullOrEmpty(entry.Reason)
+                    ? entry.Reason
+                    : !string.IsNullOrEmpty(entry.ForensicImpact) ? entry.ForensicImpact : "—";
+                sb.AppendLine($"  {entry.Name,-25} {statusStr,-12} {note}");
+            }
+            sb.AppendLine();
+        }
+
         sb.AppendLine(sep);
         sb.AppendLine($"  Módulos executados: {string.Join(", ", result.ModulesRun)}");
         sb.AppendLine($"  Gerado em: {DateTime.Now:dd/MM/yyyy HH:mm:ss}");
