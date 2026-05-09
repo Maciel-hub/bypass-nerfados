@@ -41,19 +41,67 @@ public static class ReportGenerator
         }
         sb.AppendLine();
 
-        // Cheat findings first
-        var cheats = result.Findings.Where(f => f.Category == FindingCategory.Cheat).ToList();
-        if (cheats.Count > 0)
+        // Artifact dossiers
+        if (result.EvidenceBundles.Count > 0)
         {
             sb.AppendLine(sep);
-            sb.AppendLine($"  *** CHEATS DETECTADOS ({cheats.Count}) ***");
+            sb.AppendLine($"  *** DOSSIÊ POR ARTEFATO ({result.EvidenceBundles.Count} artefatos) ***");
             sb.AppendLine(dash);
-            foreach (var f in cheats)
+
+            foreach (var bundle in result.EvidenceBundles)
             {
-                sb.AppendLine($"  [{f.RiskLabel}] {f.Title}");
-                sb.AppendLine($"  Detalhe: {f.Detail}");
+                sb.AppendLine($"  ARTEFATO : {bundle.ArtifactName}");
+                sb.AppendLine($"  Veredito : {bundle.Verdict}  |  Risco: {bundle.Risk.ToString().ToUpper()}");
+                if (!string.IsNullOrEmpty(bundle.FullPath))
+                    sb.AppendLine($"  Caminho  : {bundle.FullPath}");
+                if (!string.IsNullOrEmpty(bundle.Sha256))
+                    sb.AppendLine($"  SHA256   : {bundle.Sha256}");
+                if (!string.IsNullOrEmpty(bundle.Sha1))
+                    sb.AppendLine($"  SHA1     : {bundle.Sha1}");
+                sb.AppendLine($"  Origem   : {bundle.Summary}");
+
+                if (bundle.Signals.Count > 0)
+                {
+                    sb.AppendLine("  Sinais:");
+                    foreach (var sig in bundle.Signals)
+                    {
+                        var ts = sig.Timestamp.HasValue ? $" | {sig.Timestamp:dd/MM/yyyy HH:mm:ss}" : "";
+                        sb.AppendLine($"    • [{sig.SignalType}] {sig.SourceModule}: {sig.Description}{ts}");
+                    }
+                }
+
+                if (bundle.BypassIndicators.Count > 0)
+                {
+                    sb.AppendLine("  Bypass próximo:");
+                    foreach (var b in bundle.BypassIndicators)
+                        sb.AppendLine($"    ⚠ {b}");
+                }
+
+                if (bundle.ValidationSteps.Count > 0)
+                {
+                    sb.AppendLine("  Validar:");
+                    foreach (var v in bundle.ValidationSteps)
+                        sb.AppendLine($"    → {v}");
+                }
+
+                sb.AppendLine(new string('-', 50));
+                sb.AppendLine();
+            }
+        }
+
+        // Bypass / anti-forensics section
+        var bypass = result.BypassFindings.OrderByDescending(f => f.Risk).ToList();
+        if (bypass.Count > 0)
+        {
+            sb.AppendLine(sep);
+            sb.AppendLine($"  *** TENTATIVAS DE BYPASS / ANTI-FORENSE ({bypass.Count}) ***");
+            sb.AppendLine(dash);
+            foreach (var f in bypass)
+            {
+                sb.AppendLine($"  [{f.RiskLabel}] [{f.Module}] {f.Title}");
+                sb.AppendLine($"  {f.Detail}");
                 if (f.Evidence != null) sb.AppendLine($"  Evidência: {f.Evidence}");
-                if (f.Timestamp.HasValue) sb.AppendLine($"  Timestamp: {f.Timestamp:dd/MM/yyyy HH:mm:ss}");
+                if (f.Timestamp.HasValue) sb.AppendLine($"  Data: {f.Timestamp:dd/MM/yyyy HH:mm:ss}");
                 sb.AppendLine();
             }
         }

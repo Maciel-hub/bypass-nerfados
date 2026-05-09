@@ -12,6 +12,7 @@ public class ScanResult
     public bool IsAdministrator { get; set; }
 
     public List<Finding> Findings { get; } = new();
+    public List<EvidenceBundle> EvidenceBundles { get; } = new();
     public List<string> ModulesRun { get; } = new();
     public List<string> ModuleErrors { get; } = new();
     public Dictionary<string, TimeSpan> ModuleDurations { get; } = new();
@@ -45,6 +46,11 @@ public class ScanResult
 
     public IEnumerable<Finding> CheatFindings =>
         Findings.Where(f => f.Category == FindingCategory.Cheat);
+
+    public IEnumerable<Finding> BypassFindings =>
+        Findings.Where(f =>
+            f.Category == FindingCategory.AntiForensics &&
+            f.Risk >= RiskLevel.High);
 
     public IEnumerable<Finding> SortedByTime =>
         Findings.Where(f => f.Timestamp.HasValue)

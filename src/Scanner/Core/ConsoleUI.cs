@@ -117,51 +117,95 @@ public static class ConsoleUI
             AnsiConsole.Write(findTable);
         }
 
-        // Cheat section — always shown regardless of risk level, grouped by confidence tier
-        var cheatFindings = result.Findings
-            .Where(f => f.Category == FindingCategory.Cheat)
-            .OrderByDescending(f => f.Confidence)
-            .ThenByDescending(f => f.Risk)
-            .ToList();
-
-        if (cheatFindings.Count > 0)
+        // Artifact dossier — one card per unique cheat artifact, enriched with path/hashes/bypass
+        if (result.EvidenceBundles.Count > 0)
         {
             AnsiConsole.WriteLine();
-            AnsiConsole.Write(new Rule("[bold red]CHEATS DETECTADOS / INDÍCIOS[/]"));
+            AnsiConsole.Write(new Rule($"[bold red]CHEATS DETECTADOS / INDÍCIOS ({result.EvidenceBundles.Count} artefatos)[/]"));
 
-            var cheatTable = new Table().Border(TableBorder.Rounded).Expand();
-            cheatTable.AddColumn("Confiança");
-            cheatTable.AddColumn("Risco");
-            cheatTable.AddColumn("Módulo");
-            cheatTable.AddColumn("Título");
-            cheatTable.AddColumn("Validar?");
-
-            foreach (var f in cheatFindings)
+            foreach (var bundle in result.EvidenceBundles)
             {
-                var (confLabel, confColor) = f.Confidence switch
+                var (vColor, vLabel) = bundle.Confidence switch
                 {
-                    Confidence.Confirmed => ("CONFIRMADO",     "red"),
-                    Confidence.High      => ("FORTE INDÍCIO",  "darkorange"),
-                    Confidence.Medium    => ("INDÍCIO",        "yellow"),
-                    _                    => ("BAIXA CONFIANÇA","grey")
+                    Confidence.Confirmed => ("red",        "CONFIRMADO"),
+                    Confidence.High      => ("darkorange", "FORTE INDÍCIO"),
+                    Confidence.Medium    => ("yellow",     "INDÍCIO"),
+                    _                    => ("grey",       "BAIXA CONFIANÇA")
                 };
-                var rc = f.Risk switch
+                var brc = bundle.Risk switch
                 {
                     RiskLevel.Critical => "red",
                     RiskLevel.High     => "darkorange",
                     RiskLevel.Medium   => "yellow",
                     _                  => "grey"
                 };
-                cheatTable.AddRow(
-                    $"[bold {confColor}]{confLabel}[/]",
-                    $"[{rc}]{f.RiskLabel}[/]",
+
+                AnsiConsole.WriteLine();
+                AnsiConsole.MarkupLine(
+                    $"  [{vColor}]◆ {vLabel}[/]  [{brc}]{bundle.Risk.ToString().ToUpper()}[/]  " +
+                    $"[bold white]{Markup.Escape(bundle.ArtifactName)}[/]");
+
+                if (!string.IsNullOrEmpty(bundle.FullPath))
+                    AnsiConsole.MarkupLine(
+                        $"    [grey]Caminho :[/] [dim]{Markup.Escape(TruncatePath(bundle.FullPath, 90))}[/]");
+
+                AnsiConsole.MarkupLine(
+                    $"    [grey]Origem  :[/] {Markup.Escape(bundle.Summary)}");
+
+                var lastTs = bundle.Timeline.LastOrDefault()?.Timestamp;
+                if (lastTs.HasValue)
+                    AnsiConsole.MarkupLine(
+                        $"    [grey]Histórico:[/] última evidência em {lastTs:dd/MM/yyyy HH:mm:ss}");
+
+                if (!string.IsNullOrEmpty(bundle.Sha256))
+                    AnsiConsole.MarkupLine(
+                        $"    [grey]SHA256  :[/] [dim]{Markup.Escape(bundle.Sha256)}[/]");
+
+                if (bundle.BypassIndicators.Count > 0)
+                    AnsiConsole.MarkupLine(
+                        $"    [red]Bypass  :[/] {Markup.Escape(bundle.BypassIndicators[0])}");
+
+                if (bundle.ValidationSteps.Count > 0)
+                    AnsiConsole.MarkupLine(
+                        $"    [yellow]Validar :[/] {Markup.Escape(bundle.ValidationSteps[0])}");
+            }
+        }
+
+        // Bypass / anti-forensics section
+        var bypassList = result.BypassFindings.OrderByDescending(f => f.Risk).Take(15).ToList();
+        if (bypassList.Count > 0)
+        {
+            AnsiConsole.WriteLine();
+            AnsiConsole.Write(new Rule("[bold red]TENTATIVAS DE BYPASS / ANTI-FORENSE[/]"));
+
+            var bypassTable = new Table().Border(TableBorder.Rounded).Expand();
+            bypassTable.AddColumn("Risco");
+            bypassTable.AddColumn("Módulo");
+            bypassTable.AddColumn("Evento");
+            bypassTable.AddColumn("Timestamp");
+
+            foreach (var f in bypassList)
+            {
+                var bColor = f.Risk == RiskLevel.Critical ? "red" : "darkorange";
+                bypassTable.AddRow(
+                    $"[bold {bColor}]{f.RiskLabel}[/]",
                     $"[cyan]{Markup.Escape(f.Module)}[/]",
                     $"[bold]{Markup.Escape(f.Title)}[/]",
-                    Markup.Escape(f.ValidationHint ?? "—")
+                    f.Timestamp.HasValue
+                        ? $"[grey]{f.Timestamp:dd/MM/yyyy HH:mm:ss}[/]"
+                        : "[grey]—[/]"
                 );
             }
-            AnsiConsole.Write(cheatTable);
+            AnsiConsole.Write(bypassTable);
         }
+    }
+
+    private static string TruncatePath(string path, int maxLen)
+    {
+        if (path.Length <= maxLen) return path;
+        // Keep start and end, put ellipsis in middle
+        var keep = (maxLen - 3) / 2;
+        return path[..keep] + "..." + path[^keep..];
     }
 
     public static void PrintFinding(Finding finding)

@@ -93,6 +93,10 @@ public class ScanOrchestrator
         _result.Findings.Clear();
         _result.Findings.AddRange(deduped);
 
+        // Build artifact dossiers — group cheat findings by file, enrich with paths/hashes/bypass
+        var bundles = EvidenceEnricher.Enrich(_result.Findings);
+        _result.EvidenceBundles.AddRange(bundles);
+
         // Run correlation engine
         cancellationToken.ThrowIfCancellationRequested();
         Report(new ScanProgressUpdate(

@@ -90,6 +90,27 @@ public static class HtmlTemplate
   td { padding: 8px 12px; border-bottom: 1px solid #1e293b; color: #e2e8f0; font-size: 13px; }
   tr:hover td { background: #1e293b44; }
   .footer { background: #0a0a0f; border-top: 1px solid #1e293b; padding: 16px 32px; color: #334155; font-size: 12px; display: flex; justify-content: space-between; }
+  .artifact-card { background:#1a1a2e;border:1px solid #334155;border-radius:8px;padding:16px 18px;margin-bottom:10px;border-left:4px solid #7c3aed; }
+  .artifact-card.confirmed { border-left-color:#dc2626; }
+  .artifact-card.strong { border-left-color:#ea580c; }
+  .artifact-card.indicative { border-left-color:#ca8a04; }
+  .artifact-card.low-conf { border-left-color:#475569; }
+  .artifact-header { display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px; }
+  .artifact-name { font-weight:800;color:#e2e8f0;font-size:15px; }
+  .verdict-badge { padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700; }
+  .verdict-confirmed { background:#dc262222;color:#dc2626; }
+  .verdict-strong { background:#ea580c22;color:#ea580c; }
+  .verdict-indicative { background:#ca8a0422;color:#ca8a04; }
+  .verdict-low { background:#47556922;color:#94a3b8; }
+  .artifact-path { font-family:monospace;font-size:12px;color:#64748b;margin-bottom:8px;word-break:break-all; }
+  .artifact-meta { display:flex;gap:20px;flex-wrap:wrap;margin-bottom:8px;font-size:12px; }
+  .artifact-meta span { color:#64748b; }
+  .artifact-meta strong { color:#94a3b8; }
+  .signals-grid { margin-top:10px;border-top:1px solid #1e293b;padding-top:8px; }
+  .signal-item { font-size:12px;color:#94a3b8;padding:3px 0;border-bottom:1px solid #1e293b11; }
+  .signal-mod { color:#64748b;font-size:11px;margin-right:6px; }
+  .bypass-alert { background:#dc262210;border:1px solid #dc262233;border-radius:4px;padding:8px 12px;margin-top:8px;font-size:12px;color:#fca5a5; }
+  .validation-alert { background:#ca8a0410;border:1px solid #ca8a0433;border-radius:4px;padding:8px 12px;margin-top:6px;font-size:12px;color:#fde68a; }
 </style>
 </head>
 <body>
@@ -135,15 +156,16 @@ public static class HtmlTemplate
         // Executive summary
         sb.AppendLine(ExecutiveSummaryHtml(result));
 
-        // Cheat section first
-        var cheats = result.Findings.Where(f => f.Category == FindingCategory.Cheat).ToList();
-        if (cheats.Count > 0)
+        // Artifact dossier — enriched per-artifact view
+        if (result.EvidenceBundles.Count > 0)
+            sb.AppendLine(ArtifactDossierHtml(result));
+
+        // Bypass / anti-forensics
+        var bypassFindings = result.BypassFindings.OrderByDescending(f => f.Risk).ToList();
+        if (bypassFindings.Count > 0)
         {
-            sb.AppendLine($"""
-<div class="section">
-<div class="section-title" style="color:#dc2626">⚠ CHEATS DETECTADOS ({cheats.Count})</div>
-""");
-            foreach (var f in cheats)
+            sb.AppendLine($"""<div class="section"><div class="section-title" style="color:#ea580c">⚡ TENTATIVAS DE BYPASS / ANTI-FORENSE ({bypassFindings.Count})</div>""");
+            foreach (var f in bypassFindings)
                 sb.AppendLine(FindingHtml(f));
             sb.AppendLine("</div>");
         }
@@ -293,6 +315,69 @@ public static class HtmlTemplate
   {(f.Timestamp.HasValue ? $"""<div style="color:#475569;font-size:11px;margin-top:4px">🕐 {f.Timestamp:dd/MM/yyyy HH:mm:ss}</div>""" : "")}
 </div>
 """;
+    }
+
+    private static string ArtifactDossierHtml(ScanResult result)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"""<div class="section"><div class="section-title" style="color:#7c3aed">🔍 DOSSIÊ POR ARTEFATO ({result.EvidenceBundles.Count})</div>""");
+
+        foreach (var bundle in result.EvidenceBundles)
+        {
+            var (verdictClass, verdictBadgeClass, verdictLabel) = bundle.Confidence switch
+            {
+                Confidence.Confirmed => ("confirmed", "verdict-confirmed", "CONFIRMADO"),
+                Confidence.High      => ("strong",    "verdict-strong",    "FORTE INDÍCIO"),
+                Confidence.Medium    => ("indicative","verdict-indicative", "INDÍCIO"),
+                _                    => ("low-conf",  "verdict-low",       "BAIXA CONFIANÇA")
+            };
+            var riskCss = bundle.Risk.ToString().ToLower();
+
+            sb.AppendLine($"""<div class="artifact-card {verdictClass}">""");
+            sb.AppendLine($"""  <div class="artifact-header">""");
+            sb.AppendLine($"""    <span class="verdict-badge {verdictBadgeClass}">{verdictLabel}</span>""");
+            sb.AppendLine($"""    <span class="badge {riskCss}">{bundle.Risk.ToString().ToUpper()}</span>""");
+            sb.AppendLine($"""    <span class="artifact-name">{Esc(bundle.ArtifactName)}</span>""");
+            sb.AppendLine($"""  </div>""");
+
+            if (!string.IsNullOrEmpty(bundle.FullPath))
+                sb.AppendLine($"""  <div class="artifact-path">📁 {Esc(bundle.FullPath)}</div>""");
+
+            sb.AppendLine($"""  <div class="artifact-meta">""");
+            sb.AppendLine($"""    <span><strong>Origem:</strong> {Esc(bundle.Summary)}</span>""");
+            if (!string.IsNullOrEmpty(bundle.Sha256))
+                sb.AppendLine($"""    <span><strong>SHA256:</strong> <code>{Esc(bundle.Sha256)}</code></span>""");
+            var lastTs = bundle.Timeline.LastOrDefault()?.Timestamp;
+            if (lastTs.HasValue)
+                sb.AppendLine($"""    <span><strong>Última evidência:</strong> {lastTs:dd/MM/yyyy HH:mm:ss}</span>""");
+            sb.AppendLine($"""  </div>""");
+
+            if (bundle.Signals.Count > 0)
+            {
+                sb.AppendLine($"""  <div class="signals-grid">""");
+                foreach (var sig in bundle.Signals)
+                {
+                    var ts = sig.Timestamp.HasValue ? $" — {sig.Timestamp:dd/MM/yyyy HH:mm:ss}" : "";
+                    sb.AppendLine($"""    <div class="signal-item"><span class="signal-mod">[{Esc(sig.SignalType)}] {Esc(sig.SourceModule)}:</span>{Esc(sig.Description)}{Esc(ts)}</div>""");
+                }
+                sb.AppendLine($"""  </div>""");
+            }
+
+            if (bundle.BypassIndicators.Count > 0)
+            {
+                sb.AppendLine($"""  <div class="bypass-alert">⚡ Bypass próximo: {Esc(string.Join(" | ", bundle.BypassIndicators))}</div>""");
+            }
+
+            if (bundle.ValidationSteps.Count > 0)
+            {
+                sb.AppendLine($"""  <div class="validation-alert">⚠ Validar: {Esc(string.Join(" · ", bundle.ValidationSteps))}</div>""");
+            }
+
+            sb.AppendLine("</div>");
+        }
+
+        sb.AppendLine("</div>");
+        return sb.ToString();
     }
 
     private static string Esc(string? s) =>
