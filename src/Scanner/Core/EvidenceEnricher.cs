@@ -347,19 +347,20 @@ public static class EvidenceEnricher
         IEnumerable<Finding> relevant;
         if (timestamps.Count > 0)
         {
-            var earliest = timestamps.Min().AddHours(-1);
-            var latest   = timestamps.Max().AddHours(1);
             relevant = bypassFindings.Where(f =>
                 f.Timestamp.HasValue
-                    // Timed: within ±1h window
-                    ? f.Timestamp.Value >= earliest && f.Timestamp.Value <= latest
-                    // Untimed: only high-impact categories (no generic 7045/5007 noise)
+                    // Timed: must fall within ±1h of at least one individual cheat signal
+                    ? timestamps.Any(ts =>
+                        f.Timestamp.Value >= ts.AddHours(-1) &&
+                        f.Timestamp.Value <= ts.AddHours(1))
+                    // Untimed: only persistent-state categories (no temporal events like 3079)
                     : f.Category is FindingCategory.AntiForensics or FindingCategory.ServiceTampering);
         }
         else
         {
-            // No cheat timestamps — only AntiForensics/ServiceTampering critical events
+            // Artifact has no timestamps — only show untimed bypass states; skip temporal events
             relevant = bypassFindings.Where(f =>
+                !f.Timestamp.HasValue &&
                 f.Category is FindingCategory.AntiForensics or FindingCategory.ServiceTampering &&
                 f.Risk >= RiskLevel.High);
         }
