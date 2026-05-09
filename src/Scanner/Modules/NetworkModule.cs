@@ -37,6 +37,11 @@ public class NetworkModule : BaseModule
                 try { exePath = proc.MainModule?.FileName ?? nameLower; } catch { }
 
                 bool isKnownCheat = CheatDatabase.KnownExecutables.ContainsKey(nameLower + ".exe");
+
+                // Skip known-safe processes (Spotify, Python, Teams, etc.) unless they match
+                // a confirmed cheat executable — path heuristics alone are too noisy here
+                if (!isKnownCheat && IsKnownSafeProcess(nameLower)) continue;
+
                 bool isSuspicious = CheatDatabase.HasSuspiciousKeyword(nameLower) ||
                                     CheatDatabase.IsSuspiciousPath(exePath);
 

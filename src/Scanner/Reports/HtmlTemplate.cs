@@ -253,7 +253,8 @@ public static class HtmlTemplate
   <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px">{label}</div>
   <div style="font-size:28px;font-weight:800;color:{color};margin:4px 0">{items.Count}</div>
   <div style="font-size:11px;color:#475569">{hint}</div>
-</div>""");
+</div>
+""");
         }
 
         Card("Cheats confirmados",      "#dc2626", confirmed,       "hash ou caminho GOSTH verificado");

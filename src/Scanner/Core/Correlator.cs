@@ -49,7 +49,10 @@ public static class Correlator
                 $"PADRÃO ANTI-FORENSE DETECTADO ({score}/4 indicadores)",
                 $"Múltiplas tentativas de apagar rastros identificadas: {string.Join(", ", signals)}. " +
                 "Este padrão é fortemente indicativo de adulteração intencional do sistema.",
-                string.Join(" | ", signals)
+                string.Join(" | ", signals),
+                confidence: Confidence.High,
+                ruleId: "CORR_ANTI_FORENSICS",
+                entity: string.Join("|", signals)
             ));
         }
     }
@@ -70,7 +73,10 @@ public static class Correlator
                 "CHEAT + TENTATIVA DE OCULTAÇÃO",
                 "Foram encontrados rastros de cheat E evidências de tentativas de remover rastros. " +
                 "Isso confirma uso intencional de cheat com conhecimento da detecção.",
-                "Cheat detectado + sinais de anti-forense ativos"
+                "Cheat detectado + sinais de anti-forense ativos",
+                confidence: Confidence.High,
+                ruleId: "CORR_CHEAT_HIDING",
+                entity: "cheat+antiforensics"
             ));
         }
     }
@@ -95,6 +101,7 @@ public static class Correlator
             if (window.Count >= 3)
             {
                 var ts = timedFindings[i].Timestamp!.Value;
+                var modules = string.Join(", ", window.Select(f => f.Module).Distinct());
                 result.Findings.Add(new Finding(
                     RiskLevel.High,
                     FindingCategory.SuspiciousExecution,
@@ -102,7 +109,11 @@ public static class Correlator
                     $"BURST DE ATIVIDADE SUSPEITA ({window.Count} eventos em <1 min)",
                     $"Múltiplos eventos suspeitos concentrados em {ts:dd/MM/yyyy HH:mm:ss}. " +
                     "Padrão típico de execução de cheat loader.",
-                    $"Janela: {ts:HH:mm:ss} | Eventos: {string.Join(", ", window.Select(f => f.Module).Distinct())}"
+                    $"Janela: {ts:HH:mm:ss} | Eventos: {modules}",
+                    timestamp: ts,
+                    confidence: Confidence.Medium,
+                    ruleId: "CORR_TEMPORAL_BURST",
+                    entity: $"burst@{ts:yyyyMMddHHmm}"
                 ));
                 break;
             }
@@ -117,6 +128,7 @@ public static class Correlator
 
         if (stoppedServices.Count >= 2)
         {
+            var serviceList = string.Join(", ", stoppedServices.Select(f => f.Title));
             result.Findings.Add(new Finding(
                 RiskLevel.Critical,
                 FindingCategory.ServiceTampering,
@@ -124,7 +136,10 @@ public static class Correlator
                 $"MÚLTIPLOS SERVIÇOS DE PROTEÇÃO DESATIVADOS ({stoppedServices.Count})",
                 "Vários serviços de monitoramento do Windows estão desativados. " +
                 "Bypass de proteções do sistema para ocultar atividade.",
-                string.Join(", ", stoppedServices.Select(f => f.Title))
+                serviceList,
+                confidence: Confidence.High,
+                ruleId: "CORR_SERVICE_TAMPERING",
+                entity: serviceList
             ));
         }
     }
