@@ -149,6 +149,60 @@ public abstract class BaseModule
         return name.EndsWith(".exe") ? name : name + ".exe";
     }
 
+    // ── Offline registry hive helpers (Amcache, UserAssist, ShimCache) ─────────────
+
+    // Copies a locked system file (e.g. Amcache.hve, NTUSER.DAT) to a temp path
+    // using FILE_SHARE_READ|WRITE|DELETE so the OS doesn't block the copy.
+    protected static string? CopyLockedFile(string sourcePath)
+    {
+        var temp = Path.Combine(Path.GetTempPath(), $"echo_scan_{Guid.NewGuid():N}.tmp");
+        try
+        {
+            using var src = new FileStream(sourcePath, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var dst = File.Create(temp);
+            src.CopyTo(dst);
+            return temp;
+        }
+        catch { try { File.Delete(temp); } catch { } return null; }
+    }
+
+    // Loads an offline hive copy under HKLM\<tempKeyName>. Returns the RegistryKey
+    // (caller must dispose it before calling UnloadOfflineHive).
+    protected static RegistryKey? LoadOfflineHive(string hivePath, string tempKeyName, out string tempFile)
+    {
+        tempFile = string.Empty;
+        var copy = CopyLockedFile(hivePath);
+        if (copy == null) return null;
+        tempFile = copy;
+        if (RegLoadKey(HklmHandle, tempKeyName, copy) != 0)
+        {
+            try { File.Delete(copy); } catch { }
+            return null;
+        }
+        return Registry.LocalMachine.OpenSubKey(tempKeyName);
+    }
+
+    protected static void UnloadOfflineHive(string tempKeyName, string tempFile)
+    {
+        // Force GC to release any cached RegistryKey handles before unloading
+        GC.Collect(); GC.WaitForPendingFinalizers();
+        RegUnLoadKey(HklmHandle, tempKeyName);
+        if (!string.IsNullOrEmpty(tempFile)) try { File.Delete(tempFile); } catch { }
+    }
+
+    // Converts a Windows FILETIME (100-ns intervals since 1601-01-01) to DateTime?
+    protected static DateTime? FileTimeToDateTime(long ft) =>
+        ft > 0 ? DateTime.FromFileTimeUtc(ft).ToLocalTime() : null;
+
+    private static readonly IntPtr HklmHandle = new IntPtr(unchecked((int)0x80000002));
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    protected static extern int RegLoadKey(IntPtr hKey, string lpSubKey, string lpFile);
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    protected static extern int RegUnLoadKey(IntPtr hKey, string lpSubKey);
+
     [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
     private static extern uint QueryDosDevice(string lpDeviceName, StringBuilder lpTargetPath, uint ucchMax);
 }

@@ -187,6 +187,16 @@ public class ScanOrchestrator
             new ServiceCheckModule(),
         };
 
+        // ShimCache is always readable (live HKLM key)
+        list.Add(new ShimCacheModule());
+
+        // Amcache and UserAssist read offline hives — require admin for RegLoadKey
+        if (_result.IsAdministrator)
+        {
+            list.Add(new AmcacheModule());
+            list.Add(new UserAssistModule());
+        }
+
         if (_config.RunUsnJournal && _result.IsAdministrator)
             list.Add(new UsnJournalModule());
 
