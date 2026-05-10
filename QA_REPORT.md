@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+4fc2e61  
-**Build:** 4fc2e61 (2026-05-10) — fix: VSS cleanup com retry, verificação e LogPartialError em falha  
+**Versão:** 1.0.0+671951d  
+**Build:** 671951d (2026-05-10) — feat: sprint forense P1/P2 — 7 novos módulos forenses  
 **Arquivo:** `publish\EchoNerfados.exe`  
-**SHA256:** `dc42a533bfb845a0620e44dc551ad704f52bd3e94d83b6e9a25169711d51e956`  
+**SHA256:** `2dc41ecdf92a34a9d894b7e38cfbae9791a36ec5e9319bbbd57273e9c2b502e0`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
@@ -46,7 +46,7 @@ O executável exige login antes de qualquer varredura.
 
 ---
 
-## 4. Módulos de Varredura (15 módulos)
+## 4. Módulos de Varredura (22 módulos + 2 opcionais)
 
 ### Módulos sem requisito de admin (funcionam com asInvoker)
 
@@ -65,6 +65,16 @@ O executável exige login antes de qualquer varredura.
 | **ShimCache** | HKLM AppCompatCache | Histórico de carregamento de executáveis pelo kernel — sobrevive a reboots |
 | **LNK Recent** | %APPDATA%\...\Recent + AutomaticDestinations | Atalhos de arquivos recentemente acessados → evidência de abertura de arquivos |
 | **RegistryPersistence** | IFEO, AppInit_DLLs, AppCertDlls, Winlogon, BootExecute, Run keys | Técnicas de persistência e hijack de processo |
+| **SystemResetRestore** | InstallDate, Windows.old, Panther logs, PendingRename | Reinstalação/reset recente do Windows — perda de cobertura forense |
+| **SystemTampering** | LabConfig/MoSetup keys, getadmin.vbs, scripts bat/ps1 | Bypass de requisitos Windows 11, BatchGotAdmin, scripts de elevação UAC |
+| **BrowserDownloads** | Chrome/Edge/Brave/Opera History SQLite | Downloads de executáveis suspeitos + URLs de C2 conhecidos |
+| **ShellBags** | HKCU BagMRU | Navegação em pastas suspeitas — persiste após deleção dos arquivos |
+| **JumpLists** | AutomaticDestinations + CustomDestinations | Histórico de arquivos abertos por aplicação — executáveis e caminhos suspeitos |
+| **NvidiaArtifacts** | nvAppTimestamps + nvdrsdb | Timestamps de uso de GPU — confirma sessão FiveM com dados de hardware |
+| **ExternalToolResidue** | Prefetch + paths + registry | 28 ferramentas de análise/tampering: Process Hacker, CheatEngine, x64dbg, Everything, etc. |
+| **RecycleBin** | C:\$RECYCLE.BIN\{SID}\$I* | Caminho original + data de deleção de arquivos suspeitos — evidência pós-deleção |
+| **Timeline** | Prefetch + BAM + LNK + Downloads + Temp | Linha do tempo unificada — sequência de eventos dos últimos 60 dias |
+| **SRUM** | SRUDB.dat (ESE) | Uso de rede/CPU por processo (~30-60 dias) — fonte mais confiável que o painel Windows |
 
 ### Módulos que exigem Administrador
 
@@ -297,7 +307,7 @@ EchoNerfados.exe [opções]
 
 | Limitação | Impacto | Status |
 |-----------|---------|--------|
-| **SRUM não implementado** | Histórico de uso de rede/CPU por processo (~30 dias) não coletado | Previsto para sprint futuro |
+| **SRUM: dirty shutdown** | SRUDB.dat pode exigir recovery — tentadas 3 page sizes (32768/16384/8192); se todas falharem → PARCIAL | Comportamento esperado em máquinas com shutdown abrupto |
 | **ShimCache: formato Windows 7/8** | Parser fallback por UTF-16 — timestamps ausentes | Aceitável para Win10/11 |
 | **UserAssist: somente HKCU do usuário atual** | Outros perfis lidos via offline hive (admin only) | Funcional |
 | **Log < 60 dias** | `coverageOk: false` reportado mas scan continua | Investigador deve notar o aviso |
@@ -396,13 +406,13 @@ aec100829434016c0ee2f559b55f57d258cb3e3f6440f4eb9d82102a325c084c
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build a552337):**
+**O que está pronto e testável (build 671951d):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
 - Login gate funcional com bloqueio após 3 tentativas (exit code 2)
-- 15 módulos cobrindo todos os principais artefatos forenses Windows
-- Correlação cruzada entre módulos + artifact dossiers com bypass ±1h por sinal
+- **22 módulos** cobrindo todos os principais artefatos forenses Windows
+- Correlação cruzada entre módulos + artifact dossiers com bypass ±1h por sinal + correlação FiveM session (-30min/+2h)
 - Exportação: HTML, TXT, **8 JSONs de cobertura** (incluindo `registrypersistence_60d.json`), `evidence.json`
 - Manifesto criptograficamente verificável (`manifest.sha256`)
 - Tabela "COBERTURA DA VARREDURA" no terminal, TXT e HTML com status Executed/Partial/Skipped/Failed
@@ -417,9 +427,18 @@ aec100829434016c0ee2f559b55f57d258cb3e3f6440f4eb9d82102a325c084c
 - `evidence.json` inclui `ModuleCoverage` (status, motivo, impacto forense de cada módulo)
 - CompatibilityAssistant → casting seguro de tipos registry variados (int/long/byte[]) sem InvalidCastException
 - Auto-exclusão robusta: `IsOwnProcess` cobre nomes históricos (`bypassnerfados.exe`, `echonerfados.exe`) e caminhos de build; `IsOwnToolArtifact` adiciona Publisher/ProductName para Amcache — o scanner não se acusa como suspeito
+- **SRUM** via ManagedEsent — ESE reader para SRUDB.dat com fallback de 3 page sizes
+- **ShellBags/JumpLists** — evidência forense de acesso a pastas/arquivos mesmo após deleção
+- **RecycleBin** — parser $I v1/v2 para recuperar caminhos originais de arquivos deletados
+- **SystemResetRestore** — detecta reinstalação/reset recente (cobertura forense comprometida)
+- **SystemTampering** — LabConfig/MoSetup bypass + BatchGotAdmin/getadmin.vbs
+- **BrowserDownloads** — winsqlite3.dll p/invoke sem NuGet (Chrome/Edge/Brave/Opera)
+- **ExternalToolResidue** — 28 ferramentas de análise/tampering via Prefetch + paths + registry
+- **Timeline** — linha do tempo unificada Prefetch/BAM/LNK/Downloads/Temp
+- **NvidiaArtifacts** — timestamps GPU de sessão FiveM via nvAppTimestamps
 
-**Prioridade de teste:** Focar nos cenários 9.1, 9.2, 9.3, 9.4 — são os mais críticos para validar o produto. Os outros podem ser smoke test.
+**Prioridade de teste:** Focar nos cenários 10.1, 10.2, 10.3, 10.4 — são os mais críticos para validar o produto. Os outros podem ser smoke test.
 
 ---
 
-*Relatório gerado em: 2026-05-09 | Build: a552337 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-10 | Build: 671951d | Echo Nerfados Shield XDR v1.0.0*
