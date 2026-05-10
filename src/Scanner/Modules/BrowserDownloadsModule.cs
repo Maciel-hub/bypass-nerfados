@@ -6,14 +6,14 @@ using System.Runtime.InteropServices;
 namespace BypassNerfados.Scanner.Modules;
 
 /// <summary>
-/// Histórico de downloads do Chrome/Edge/Brave/Opera — detecta executáveis e URLs suspeitos.
+/// Histórico de downloads do Chrome/Edge/Brave/Opera/Firefox — detecta executáveis e URLs suspeitos.
 /// Lê o banco de dados SQLite do Chromium via winsqlite3.dll (incluído no Windows 10+)
-/// sem dependências externas de SQLite gerenciado.
+/// e places.sqlite do Firefox, sem dependências externas de SQLite gerenciado.
 /// </summary>
 public class BrowserDownloadsModule : BaseModule
 {
     public override string Name        => "Browser Downloads";
-    public override string Description => "Histórico de downloads do Chrome/Edge/Brave/Opera — detecta executáveis e URLs suspeitos";
+    public override string Description => "Histórico de downloads do Chrome/Edge/Brave/Opera/Firefox — detecta executáveis e URLs suspeitos";
 
     // ── SQLite P/Invoke declarations ──────────────────────────────────────────
     // All calls go through winsqlite3.dll which ships with Windows 10+.
@@ -139,7 +139,7 @@ public class BrowserDownloadsModule : BaseModule
     /// to their decimal string representation.
     /// Returns an empty list on any failure — never throws.
     /// </summary>
-    private static List<string[]> QueryDb(string path, string sql, int cols)
+    private List<string[]> QueryDb(string path, string sql, int cols)
     {
         var rows = new List<string[]>();
         var db   = IntPtr.Zero;
@@ -148,10 +148,16 @@ public class BrowserDownloadsModule : BaseModule
         try
         {
             if (sqlite3_open_v2(path, out db, SQLITE_OPEN_READONLY, IntPtr.Zero) != SQLITE_OK)
+            {
+                LogPartialError($"Browser Downloads: sqlite3_open falhou — {Path.GetFileName(path)}");
                 return rows;
+            }
 
             if (sqlite3_prepare_v2(db, sql, -1, out stmt, IntPtr.Zero) != SQLITE_OK)
+            {
+                LogPartialError($"Browser Downloads: sqlite3_prepare falhou — {Path.GetFileName(path)}");
                 return rows;
+            }
 
             while (sqlite3_step(stmt) == SQLITE_ROW)
             {
@@ -168,9 +174,9 @@ public class BrowserDownloadsModule : BaseModule
                 rows.Add(row);
             }
         }
-        catch
+        catch (Exception ex)
         {
-            // Swallow all failures; caller handles an empty result set
+            LogPartialError($"Browser Downloads: QueryDb falhou — {Path.GetFileName(path)}", ex);
         }
         finally
         {

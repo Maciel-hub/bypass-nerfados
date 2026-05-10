@@ -68,7 +68,7 @@ public class DefenderModule : BaseModule
                         findings.Add(new Finding(
                             risk,
                             isCheat ? FindingCategory.Cheat : FindingCategory.SystemTampering,
-                            "Defender",
+                            Name,
                             $"Detecção Defender (ID {record.Id}): {ExtractThreatName(detail)}",
                             detail,
                             $"Data: {ts:dd/MM/yyyy HH:mm:ss}",
@@ -143,7 +143,7 @@ public class DefenderModule : BaseModule
                             findings.Add(new Finding(
                                 RiskLevel.Critical,
                                 FindingCategory.SystemTampering,
-                                "Defender",
+                                Name,
                                 "DEFENDER DESATIVADO (ID 5007)",
                                 description.Length > 400 ? description[..400] : description,
                                 $"Data: {ts:dd/MM/yyyy HH:mm:ss}",
@@ -158,7 +158,7 @@ public class DefenderModule : BaseModule
                             findings.Add(new Finding(
                                 RiskLevel.High,
                                 FindingCategory.SystemTampering,
-                                "Defender",
+                                Name,
                                 $"Exclusão adicionada ao Defender (ID 5007): {changedKey ?? "exclusão"}",
                                 description.Length > 400 ? description[..400] : description,
                                 $"Data: {ts:dd/MM/yyyy HH:mm:ss}",
@@ -176,7 +176,7 @@ public class DefenderModule : BaseModule
                             findings.Add(new Finding(
                                 RiskLevel.Low,
                                 FindingCategory.SystemTampering,
-                                "Defender",
+                                Name,
                                 $"Configuração do Defender alterada (ID 5007): {changedKey ?? "configuração"}",
                                 description.Length > 400 ? description[..400] : description,
                                 $"Data: {ts:dd/MM/yyyy HH:mm:ss}",
@@ -228,7 +228,7 @@ public class DefenderModule : BaseModule
                 findings.Add(new Finding(
                     RiskLevel.Critical,
                     FindingCategory.SystemTampering,
-                    "Defender",
+                    Name,
                     "Windows Defender desabilitado via Registry",
                     "DisableAntiSpyware = 1 detectado no registro. Proteção em tempo real desativada.",
                     @"HKLM\SOFTWARE\Microsoft\Windows Defender\DisableAntiSpyware"

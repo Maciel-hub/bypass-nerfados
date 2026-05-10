@@ -225,7 +225,7 @@ public class ScanOrchestrator
         Queue(new RegistryPersistenceModule(), "Persistência via IFEO, AppInit, Winlogon, BootExecute");
         Queue(new SystemResetRestoreModule(),  "Reinstalação, reset e restauração do Windows — perda de cobertura forense");
         Queue(new SystemTamperingModule(),     "LabConfig/MoSetup bypass, BatchGotAdmin, scripts de elevação UAC");
-        Queue(new BrowserDownloadsModule(),    "Downloads do Chrome/Edge/Brave/Opera — executáveis e URLs suspeitos");
+        Queue(new BrowserDownloadsModule(),    "Downloads do Chrome/Edge/Brave/Opera/Firefox — executáveis e URLs suspeitos");
         Queue(new ShellBagsModule(),           "Histórico de navegação de pastas — acesso a diretórios suspeitos mesmo após deleção");
         Queue(new JumpListsModule(),           "Histórico de acesso recente por aplicação — executáveis e caminhos suspeitos");
         Queue(new NvidiaArtifactsModule(),     "Timestamps de uso de GPU — confirma execução de app na sessão FiveM");

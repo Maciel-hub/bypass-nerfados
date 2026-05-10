@@ -219,7 +219,8 @@ public class FileSystemModule : BaseModule
             return;
         }
 
-        var dmpFiles = Directory.GetFiles(crashDumps, "*.dmp", SearchOption.AllDirectories);
+        var dmpFiles = Directory.EnumerateFiles(crashDumps, "*.dmp",
+            new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true });
         foreach (var dmp in dmpFiles)
         {
             cancellationToken.ThrowIfCancellationRequested();

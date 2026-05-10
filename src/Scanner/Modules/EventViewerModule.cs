@@ -51,7 +51,7 @@ public class EventViewerModule : BaseModule
         ScanUsnResetEvent(findings, since, cancellationToken);
 
         // Check 4688 for suspicious process creation
-        ScanProcessCreationEvents(findings, cancellationToken);
+        ScanProcessCreationEvents(findings, since, cancellationToken);
 
         // Warn if any critical log has less than the required lookback coverage
         CheckLogCoverage(findings, since, config.EventWindowLookback);
@@ -113,7 +113,7 @@ public class EventViewerModule : BaseModule
                         findings.Add(new Finding(
                             RiskLevel.Info,
                             spec.Category,
-                            "EventViewer",
+                            "Event Viewer",
                             "Sincronização de horário NTP (4616) — normal",
                             detail,
                             $"Log: {spec.Log} | Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
@@ -129,7 +129,7 @@ public class EventViewerModule : BaseModule
                 findings.Add(new Finding(
                     spec.Risk,
                     spec.Category,
-                    "EventViewer",
+                    "Event Viewer",
                     $"{title}",
                     detail,
                     $"Log: {spec.Log} | Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
@@ -167,7 +167,7 @@ public class EventViewerModule : BaseModule
                     findings.Add(new Finding(
                         RiskLevel.High,
                         FindingCategory.AntiForensics,
-                        "EventViewer",
+                        Name,
                         "POSSÍVEL BYPASS NTFS (3079) — inconsistência no USN Journal",
                         $"NTFS detectou inconsistências. Pode indicar limpeza do USN Journal.\n{description}",
                         $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
@@ -184,15 +184,16 @@ public class EventViewerModule : BaseModule
         catch (Exception ex) { LogPartialError("Eventos NTFS 3079 inacessíveis", ex); }
     }
 
-    private void ScanProcessCreationEvents(List<Finding> findings, CancellationToken cancellationToken)
+    private void ScanProcessCreationEvents(List<Finding> findings, DateTime since, CancellationToken cancellationToken)
     {
         // ID 4688 = Process created. Look for suspicious cmd/powershell patterns
         try
         {
+            var sinceStr = since.ToString("yyyy-MM-ddTHH:mm:ss.000Z");
             var query = new EventLogQuery(
                 "Security",
                 PathType.LogName,
-                "*[System[EventID=4688]]");
+                $"*[System[EventID=4688 and TimeCreated[@SystemTime>='{sinceStr}']]]");
 
             using var reader = new EventLogReader(query);
             int count = 0;
@@ -218,7 +219,7 @@ public class EventViewerModule : BaseModule
                         findings.Add(new Finding(
                             RiskLevel.High,
                             FindingCategory.SuspiciousExecution,
-                            "EventViewer",
+                            Name,
                             "PowerShell encodado/bypass detectado (4688)",
                             "Execução de PowerShell com parâmetros de evasão detectada.",
                             $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
@@ -232,7 +233,7 @@ public class EventViewerModule : BaseModule
                         findings.Add(new Finding(
                             RiskLevel.Critical,
                             FindingCategory.AntiForensics,
-                            "EventViewer",
+                            Name,
                             "wevtutil LIMPEZA DE LOGS detectada (4688)",
                             "Comando wevtutil usado para limpar logs de eventos.",
                             $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
@@ -246,7 +247,7 @@ public class EventViewerModule : BaseModule
                         findings.Add(new Finding(
                             RiskLevel.Critical,
                             FindingCategory.AntiForensics,
-                            "EventViewer",
+                            Name,
                             "Deleção do USN Journal detectada (4688)",
                             "Comando fsutil usn deletejournal detectado — apagamento do diário NTFS.",
                             $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",

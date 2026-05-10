@@ -55,6 +55,8 @@ public static class EvidenceExporter
         WriteModuleJson(result, runFolder, "Recycle Bin",           "recyclebin_60d.json",           lookback);
         WriteModuleJson(result, runFolder, "Timeline",              "timeline_60d.json",             lookback);
         WriteModuleJson(result, runFolder, "SRUM",                  "srum_60d.json",                 lookback);
+        WriteModuleJson(result, runFolder, "File System",           "filesystem_60d.json",           lookback);
+        WriteModuleJson(result, runFolder, "Network Usage",         "network_60d.json",              lookback);
     }
 
     private static void WriteModuleJson(

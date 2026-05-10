@@ -184,7 +184,8 @@ public class KnownCheatsModule : BaseModule
 
         if (Directory.Exists(dxsetupPath))
         {
-            foreach (var file in Directory.GetFiles(dxsetupPath, "*", SearchOption.AllDirectories))
+            var enumOpts = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true };
+            foreach (var file in Directory.EnumerateFiles(dxsetupPath, "*", enumOpts))
             {
                 cancellationToken.ThrowIfCancellationRequested();
 

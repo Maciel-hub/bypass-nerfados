@@ -1,7 +1,7 @@
 @echo off
 echo.
 echo  ============================================================
-echo   BYPASS NERFADOS SHIELD XDR - Build Script
+echo   ECHO NERFADOS SHIELD XDR - Build Script
 echo  ============================================================
 echo.
 
@@ -17,19 +17,10 @@ echo  [INFO] .NET SDK encontrado:
 dotnet --version
 
 echo.
-echo  [INFO] Restaurando dependencias...
-dotnet restore "src\Scanner\Scanner.csproj"
+echo  [INFO] Publicando executavel self-contained...
+dotnet publish "src\Scanner\Scanner.csproj" /p:PublishProfile=win-x64
 if %errorlevel% neq 0 (
-    echo  [ERRO] Falha ao restaurar pacotes NuGet.
-    pause
-    exit /b 1
-)
-
-echo.
-echo  [INFO] Compilando projeto...
-dotnet build "src\Scanner\Scanner.csproj" -c Release -o "build\Release"
-if %errorlevel% neq 0 (
-    echo  [ERRO] Falha na compilacao!
+    echo  [ERRO] Falha ao publicar!
     pause
     exit /b 1
 )
@@ -39,10 +30,10 @@ echo  ============================================================
 echo   BUILD CONCLUIDO COM SUCESSO!
 echo  ============================================================
 echo.
-echo  Executavel: build\Release\BypassNerfados.exe
+echo  Executavel: publish\win-x64\EchoNerfados.exe
 echo.
 echo  USO (como Administrador):
-echo    build\Release\BypassNerfados.exe
-echo    build\Release\BypassNerfados.exe --investigator "Nome" --suspect "Suspeito"
+echo    publish\win-x64\EchoNerfados.exe
+echo    publish\win-x64\EchoNerfados.exe --investigator "Nome" --suspect "Suspeito"
 echo.
 pause
