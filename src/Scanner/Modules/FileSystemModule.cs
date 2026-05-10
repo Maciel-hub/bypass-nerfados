@@ -128,7 +128,9 @@ public class FileSystemModule : BaseModule
                         continue;
                     }
 
-                    if (CheatDatabase.HasSuspiciousKeyword(name) && !IsOwnProcess(name))
+                    if (CheatDatabase.HasSuspiciousKeyword(name) &&
+                        !IsOwnProcess(name) &&
+                        !CheatDatabase.IsKnownLegitimate(name))
                     {
                         findings.Add(new Finding(
                             RiskLevel.High,
@@ -180,7 +182,9 @@ public class FileSystemModule : BaseModule
                     continue;
                 }
 
-                if (CheatDatabase.HasSuspiciousKeyword(name) && !IsOwnProcess(name))
+                if (CheatDatabase.HasSuspiciousKeyword(name) &&
+                    !IsOwnProcess(name) &&
+                    !CheatDatabase.IsKnownLegitimate(name))
                 {
                     findings.Add(new Finding(
                         RiskLevel.High,

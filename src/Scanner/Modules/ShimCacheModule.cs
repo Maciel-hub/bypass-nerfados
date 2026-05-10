@@ -182,9 +182,12 @@ public class ShimCacheModule : BaseModule
         return (RiskLevel.Info, Confidence.Low, null);
     }
 
-    // Strips leading garbage before the drive letter and trailing non-printable chars.
-    // ShimCache binary parsers can misalign and produce paths like "hC:\..." or
-    // "C:\foo.exe[garbage]"; this normalizes them or rejects obviously corrupt entries.
+    // PE extensions that ShimCache records; used to find the end of a valid path.
+    private static readonly string[] _peExtensions = [".exe", ".dll", ".sys", ".drv", ".scr", ".com"];
+
+    // Strips leading garbage before the drive letter, removes embedded nulls, and
+    // truncates at the end of the last recognized PE extension so that Unicode characters
+    // appended after the extension (e.g. "cmd.exe[ᙣ額ꫨ...]") are discarded.
     private static string? SanitizePath(string raw)
     {
         if (string.IsNullOrEmpty(raw)) return null;
@@ -204,16 +207,34 @@ public class ShimCacheModule : BaseModule
 
         var path = raw[start..];
 
-        // Strip null terminators embedded in the string
+        // Strip embedded null terminators
         var nullIdx = path.IndexOf('\0');
         if (nullIdx >= 0) path = path[..nullIdx];
 
-        // Trim trailing control characters (common in fallback UTF-16 extraction)
-        var trimLen = path.Length;
-        while (trimLen > 0 && path[trimLen - 1] < ' ')
-            trimLen--;
-        path = path[..trimLen];
+        // Truncate at the end of the last known PE extension.
+        // This removes any garbage Unicode chars appended after ".exe" etc.
+        // LastIndexOf searches right-to-left so overlapping extensions (foo.exe.dll) keep the last.
+        var truncated = false;
+        foreach (var ext in _peExtensions)
+        {
+            var extIdx = path.LastIndexOf(ext, StringComparison.OrdinalIgnoreCase);
+            if (extIdx >= 0)
+            {
+                path = path[..(extIdx + ext.Length)];
+                truncated = true;
+                break;
+            }
+        }
 
-        return path.Length >= 4 ? path : null; // at minimum "C:\x"
+        if (!truncated)
+        {
+            // No recognized extension — fall back to stripping trailing control chars only
+            var trimLen = path.Length;
+            while (trimLen > 0 && path[trimLen - 1] < ' ')
+                trimLen--;
+            path = path[..trimLen];
+        }
+
+        return path.Length >= 4 ? path : null;
     }
 }

@@ -97,8 +97,12 @@ public static class CheatDatabase
     // should be distinct enough to avoid collision with cheat paths.
     private static readonly HashSet<string> _legitimatePatterns = new(StringComparer.OrdinalIgnoreCase)
     {
-        // FiveM / CitizenFX official binaries
-        "citizenfx_uninstall", "fivem_uninstall", "citizenfx.exe", "fivem.exe",
+        // FiveM / CitizenFX official binaries and project references
+        // "citizenfx" as a bare keyword covers github.com/citizenfx URLs in PSReadLine history
+        // and CitizenFX.exe shortcuts in UserAssist; distinct enough from cheat paths that
+        // use "citizen" (internal module name) rather than "citizenfx" (project name).
+        "citizenfx", "fivem_uninstall",
+        "citizenfx.exe", "fivem.exe",
 
         // Game launchers (legit)
         "rockstargameslauncher", "epicgameslauncher", "gogalaxy",

@@ -205,8 +205,11 @@ public class NetworkModule : BaseModule
         // Game platforms
         "steam", "epicgameslauncher", "origin", "gog galaxy", "battlenet",
         "rockstarlauncher", "upc", "ubisoft connect",
-        // Runtimes / dev
+        // Runtimes / dev tools
         "python", "python3", "pythonw", "node", "java", "javaw", "ruby",
+        "git", "gh",
+        // VS Code and its helper processes (AppData\Local\Programs\Microsoft VS Code\)
+        "code", "code-tunnel", "code - oss",
         // Windows system
         "svchost", "system", "lsass", "services", "wininit", "winlogon",
         "searchhost", "runtimebroker", "sihost", "ctfmon", "dwm",

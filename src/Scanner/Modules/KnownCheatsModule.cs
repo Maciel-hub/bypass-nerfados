@@ -342,7 +342,11 @@ public class KnownCheatsModule : BaseModule
                         $"Arquivo: {psHistory}"
                     ));
                 }
-                else if (CheatDatabase.HasSuspiciousKeyword(lower))
+                // Guard with IsKnownLegitimate before keyword match: commands like
+                // "git clone github.com/citizenfx/..." contain "citizen" as a substring
+                // of "citizenfx" and would otherwise generate false High findings.
+                else if (CheatDatabase.HasSuspiciousKeyword(lower) &&
+                         !CheatDatabase.IsKnownLegitimate(lower))
                 {
                     findings.Add(new Finding(
                         RiskLevel.High,

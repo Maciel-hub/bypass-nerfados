@@ -84,6 +84,11 @@ public class UserAssistModule : BaseModule
                 if (decoded.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
                     fileName = Path.GetFileNameWithoutExtension(decoded).ToLowerInvariant() + ".exe";
 
+                // Re-check with the normalized exe name: for FiveM.lnk, fileName is now
+                // "fivem.exe" which matches the "fivem.exe" pattern — the raw .lnk path
+                // checked above doesn't contain the ".exe" suffix so the check misses.
+                if (CheatDatabase.IsKnownLegitimate(fileName)) continue;
+
                 var (risk, confidence, label) = ClassifyEntry(fileName, decoded);
                 if (risk < RiskLevel.Medium) continue;
 
