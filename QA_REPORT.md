@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+671951d  
-**Build:** 671951d (2026-05-10) — feat: sprint forense P1/P2 — 7 novos módulos forenses  
+**Versão:** 1.0.0+824cf68  
+**Build:** 824cf68 (2026-05-10) — fix: QA P0/P1/P2 — NVIDIA falso positivo, SRUM VSS, exports JSON, BatchGotAdmin, BrowserDownloads, Timeline  
 **Arquivo:** `publish\EchoNerfados.exe`  
-**SHA256:** `2dc41ecdf92a34a9d894b7e38cfbae9791a36ec5e9319bbbd57273e9c2b502e0`  
+**SHA256:** `a83011e725c8d42c8e8d3e0e16927ab6a97246241e1a87eba5005e74eb68d869`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
@@ -308,6 +308,7 @@ EchoNerfados.exe [opções]
 | Limitação | Impacto | Status |
 |-----------|---------|--------|
 | **SRUM: dirty shutdown** | SRUDB.dat pode exigir recovery — tentadas 3 page sizes (32768/16384/8192); se todas falharem → PARCIAL | Comportamento esperado em máquinas com shutdown abrupto |
+| **ManagedEsent NU1701** | ManagedEsent 1.9.4 é .NET Framework — compatível com net8.0 via shim, mas gera warning NU1701 | Funcional; migrar para parser ESE nativo .NET 8 em futura iteração |
 | **ShimCache: formato Windows 7/8** | Parser fallback por UTF-16 — timestamps ausentes | Aceitável para Win10/11 |
 | **UserAssist: somente HKCU do usuário atual** | Outros perfis lidos via offline hive (admin only) | Funcional |
 | **Log < 60 dias** | `coverageOk: false` reportado mas scan continua | Investigador deve notar o aviso |
@@ -441,4 +442,18 @@ aec100829434016c0ee2f559b55f57d258cb3e3f6440f4eb9d82102a325c084c
 
 ---
 
-*Relatório gerado em: 2026-05-10 | Build: 671951d | Echo Nerfados Shield XDR v1.0.0*
+---
+
+## Critérios de Aceite (próximo QA)
+
+- [ ] PC com NVIDIA limpo **não** gera Medium/High por nvAppTimestamps
+- [ ] `bypassstoragecheck` (correto) dispara no scan de scripts de LabConfig
+- [ ] Todos os 10 módulos novos aparecem em evidence.json + arquivos `*_60d.json` dedicados
+- [ ] Browser aberto durante o scan **não** quebra coleta (CopyLockedFile)
+- [ ] Nenhum ruleId com `GOSTH` fora de: `CHEAT_HASH_GOSTH_WHATSAPP`, `CHEAT_PATH_GOSTH_DXSETUP`, `GOSTH_PATTERN_SYSTEM32`
+- [ ] `SCRIPT_BATCHGOTADMIN_PRESENT` substitui `_EXECUTED` no ruleId
+- [ ] `manifest.sha256` verificável após scan completo
+
+---
+
+*Relatório gerado em: 2026-05-10 | Build: 824cf68 | Echo Nerfados Shield XDR v1.0.0*
