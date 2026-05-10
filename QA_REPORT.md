@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+94af1d3  
-**Build:** 94af1d3 (2026-05-09) — fix: redução de falsos positivos no Amcache (nomes genéricos e publishers legítimos)  
+**Versão:** 1.0.0+6cfbc4c  
+**Build:** 6cfbc4c (2026-05-09) — fix: classificação centralizada de nomes genéricos + redução FP cross-module  
 **Arquivo:** `publish\EchoNerfados.exe`  
-**SHA256:** `c062315388742a306be9ad4ac1d104e4ab06a7b474d6e2aeb01cb05aae2d3e39`  
+**SHA256:** `10fef4e85041a74267d0df9dde67d5d4862e7e336f210fccb216b48f360105e8`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
