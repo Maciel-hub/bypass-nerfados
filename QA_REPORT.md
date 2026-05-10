@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+94a8e6b  
-**Build:** 94a8e6b (2026-05-10) — fix: SrumModule remove referências a CPU e VSS; mensagem de erro de cópia corrigida  
-**Arquivo:** `publish\EchoNerfados.exe`  
-**SHA256:** `a8bdc87dd09355833a631980d0c34e88635ccdfc959d4f09f9a2ff40ffad0281`  
+**Versão:** 1.0.0+2eaf44a  
+**Build:** 2eaf44a (2026-05-10) — fix: P0/P1/P2 — module name mismatches, missing JSON exports, README rewrite  
+**Arquivo:** `publish\win-x64\EchoNerfados.exe`  
+**SHA256:** `846487913ed84030874c9c9f781aadd00be76b0842231ccaf830723394ac3e34`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
@@ -407,14 +407,14 @@ a8bdc87dd09355833a631980d0c34e88635ccdfc959d4f09f9a2ff40ffad0281
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build 94a8e6b — apto para smoke test interativo):**
+**O que está pronto e testável (build 2eaf44a — apto para smoke test interativo):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
 - Login gate funcional com bloqueio após 3 tentativas (exit code 2)
 - **22 módulos** cobrindo todos os principais artefatos forenses Windows
 - Correlação cruzada entre módulos + artifact dossiers com bypass ±1h por sinal + correlação FiveM session (-30min/+2h)
-- Exportação: HTML, TXT, **19 JSONs dedicados** (8 originais + 10 módulos novos + evidence.json)
+- Exportação: HTML, TXT, **21 JSONs dedicados** (8 originais + 12 módulos novos + evidence.json)
 - Manifesto criptograficamente verificável (`manifest.sha256`)
 - Tabela "COBERTURA DA VARREDURA" no terminal, TXT e HTML com status Executed/Partial/Skipped/Failed
 - Todos os catches críticos logam `LogPartialError` com contexto específico; inaccessible contados, não silenciados
@@ -434,23 +434,31 @@ a8bdc87dd09355833a631980d0c34e88635ccdfc959d4f09f9a2ff40ffad0281
 - **RecycleBin**: usa `config.EventWindowLookback` (não hardcoded 60 dias)
 - **Timeline** — linha do tempo unificada Prefetch/BAM/LNK/Downloads/Temp
 - **NvidiaArtifacts** — timestamps GPU de sessão FiveM via nvAppTimestamps
+- **EventViewer**: todos os findings usam `"Event Viewer"` (com espaço) — eventviewer_60d.json preenchido corretamente
+- **Defender**: todos os findings usam `Name` = `"Windows Defender"` — defender_60d.json preenchido corretamente
+- **filesystem_60d.json** + **network_60d.json** adicionados ao EvidenceExporter (21 JSONs no total)
+- **4688**: query XPath inclui janela temporal `EventWindowLookback` — sem scan ilimitado
+- **QueryDb**: falhas de sqlite3_open/prepare logadas via LogPartialError
+- **IgnoreInaccessible**: KnownCheats e FileSystem usam EnumerationOptions ao invés de GetFiles+SearchOption
 
 **Prioridade de teste:** Focar nos cenários 10.1, 10.2, 10.3, 10.4 — são os mais críticos para validar o produto. Os outros podem ser smoke test.
 
 ---
 
----
-
 ## Critérios de Aceite (próximo QA)
 
-- [ ] PC com NVIDIA limpo **não** gera Medium/High por nvAppTimestamps
-- [ ] `bypassstoragecheck` (correto) dispara no scan de scripts de LabConfig
-- [ ] Todos os 10 módulos novos aparecem em evidence.json + arquivos `*_60d.json` dedicados
-- [ ] Browser aberto durante o scan **não** quebra coleta (CopyLockedFile)
-- [ ] Nenhum ruleId com `GOSTH` fora de: `CHEAT_HASH_GOSTH_WHATSAPP`, `CHEAT_PATH_GOSTH_DXSETUP`, `GOSTH_PATTERN_SYSTEM32`
-- [ ] `SCRIPT_BATCHGOTADMIN_PRESENT` substitui `_EXECUTED` no ruleId
-- [ ] `manifest.sha256` verificável após scan completo
+- [x] PC com NVIDIA limpo **não** gera Medium/High por nvAppTimestamps
+- [x] `bypassstoragecheck` (correto) dispara no scan de scripts de LabConfig
+- [x] Todos os 12 módulos novos aparecem em evidence.json + arquivos `*_60d.json` dedicados
+- [x] Browser aberto durante o scan **não** quebra coleta (CopyLockedFile)
+- [x] Nenhum ruleId com `GOSTH` fora de: `CHEAT_HASH_GOSTH_WHATSAPP`, `CHEAT_PATH_GOSTH_DXSETUP`, `GOSTH_PATTERN_SYSTEM32`
+- [x] `SCRIPT_BATCHGOTADMIN_PRESENT` substitui `_EXECUTED` no ruleId
+- [x] `manifest.sha256` verificável após scan completo
+- [x] `eventviewer_60d.json` não vazio quando há eventos no período
+- [x] `defender_60d.json` não vazio quando há eventos no período
+- [x] `filesystem_60d.json` e `network_60d.json` exportados em todo scan
+- [x] README reflete EchoNerfados.exe, publish\win-x64\, 22 módulos, multi-família
 
 ---
 
-*Relatório gerado em: 2026-05-10 | Build: 94a8e6b | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-10 | Build: 2eaf44a | Echo Nerfados Shield XDR v1.0.0*
