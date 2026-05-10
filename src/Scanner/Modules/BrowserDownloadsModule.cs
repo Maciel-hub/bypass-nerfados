@@ -55,11 +55,12 @@ public class BrowserDownloadsModule : BaseModule
 
     // ── URL domains considered safe for executable downloads ─────────────────
     // Matched against Uri.Host (exact or parent-domain suffix), not substring.
+    // GitHub is NOT in this list — it's handled via SafeGitHubOrgs to avoid
+    // treating arbitrary github.com releases as safe.
 
     private static readonly string[] SafeDomains =
     [
         "microsoft.com",
-        "github.com",
         "cfx.re",
         "rockstargames.com",
         "epicgames.com",
@@ -71,7 +72,18 @@ public class BrowserDownloadsModule : BaseModule
         "google.com",
         "visualstudio.com",
         "nuget.org",
-        "dotnet.microsoft.com",
+    ];
+
+    // GitHub org/repo path prefixes considered safe.
+    // Checked against the full URL string when host is github.com / raw.githubusercontent.com.
+    private static readonly string[] SafeGitHubOrgs =
+    [
+        "github.com/citizenfx/",
+        "github.com/microsoft/",
+        "github.com/dotnet/",
+        "github.com/git-for-windows/",
+        "raw.githubusercontent.com/citizenfx/",
+        "raw.githubusercontent.com/microsoft/",
     ];
 
     // URL path/host fragments that indicate a suspicious cheat-related download origin.
@@ -174,13 +186,23 @@ public class BrowserDownloadsModule : BaseModule
     /// <summary>
     /// Returns true when the URL's registered host is in SafeDomains (exact match
     /// or parent-domain suffix — e.g., "update.microsoft.com" passes "microsoft.com").
+    /// GitHub is only safe for known trusted orgs listed in SafeGitHubOrgs.
     /// Uses Uri.Host to avoid substring false matches like "evil-microsoft.com".
     /// </summary>
     private static bool IsFromSafeDomain(string url)
     {
         if (string.IsNullOrEmpty(url)) return false;
         if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
-        var host = uri.Host.ToLowerInvariant();
+        var host    = uri.Host.ToLowerInvariant();
+        var urlLow  = url.ToLowerInvariant();
+
+        // GitHub: only trusted for specific orgs, not github.com globally
+        if (host == "github.com" || host == "raw.githubusercontent.com" ||
+            host.EndsWith(".github.com", StringComparison.Ordinal))
+        {
+            return SafeGitHubOrgs.Any(org => urlLow.Contains(org));
+        }
+
         return SafeDomains.Any(safe =>
             host == safe || host.EndsWith("." + safe, StringComparison.Ordinal));
     }
@@ -287,8 +309,8 @@ public class BrowserDownloadsModule : BaseModule
     // ── Per-profile analysis ──────────────────────────────────────────────────
 
     /// <summary>
-    /// Copies the SQLite history file via CopyLockedFile (VSS-backed, handles open browsers),
-    /// queries it, and analyses each download row for suspicious indicators.
+    /// Copies the SQLite history file via CopyLockedFile (permissive FileShare copy, handles
+    /// browsers with open handles), queries it, and analyses each download row for suspicious indicators.
     /// </summary>
     private void AnalyzeBrowserHistory(
         string browser, string historyPath, string sql, bool isFirefox, List<Finding> findings)
@@ -350,9 +372,6 @@ public class BrowserDownloadsModule : BaseModule
             startTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
                 .AddMicroseconds(usec).ToLocalTime();
 
-        // Re-use the Chromium row analyser by constructing a compatible row
-        var syntheticRow = new[] { targetPath, tabUrl, string.Empty, "0", "0", "0", string.Empty };
-        // Override timestamp via direct analysis
         AnalyzeFirefoxEntry(browser, targetPath, tabUrl, startTime, findings);
     }
 

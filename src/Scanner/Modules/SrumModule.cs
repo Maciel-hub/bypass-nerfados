@@ -72,7 +72,7 @@ public class SrumModule : BaseModule
                 var dstFile = Path.Combine(dst, Path.GetFileName(file));
                 var copied  = false;
 
-                // Use CopyLockedFile (VSS-backed) for SRUDB.dat — it may be locked by SruUsageSvc
+                // Use CopyLockedFile for SRUDB.dat — permissive FileShare copy; fallback below if it fails
                 if (string.Equals(Path.GetFileName(file), SruDb, StringComparison.OrdinalIgnoreCase))
                 {
                     var vssTemp = CopyLockedFile(file);

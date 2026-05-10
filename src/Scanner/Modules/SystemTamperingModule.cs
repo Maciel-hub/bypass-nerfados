@@ -168,8 +168,8 @@ public class SystemTamperingModule : BaseModule
                 Name,
                 "SCRIPT BATCHGOTADMIN PRESENTE: getadmin.vbs no Temp",
                 $"O arquivo 'getadmin.vbs' foi encontrado na pasta Temp do sistema. " +
-                $"Esse script é gerado pelo padrão BatchGotAdmin e é usado para escalar " +
-                $"privilégios via UAC sem conhecimento do usuário.",
+                $"Esse script é gerado pelo padrão BatchGotAdmin — script de autoelevação via UAC. " +
+                $"Confirmar execução por Prefetch de cmd.exe/wscript.exe/cscript.exe e BAM.",
                 $"Caminho: {path} | Tamanho: {info.Length} bytes | " +
                 $"Última modificação: {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}",
                 timestamp: info.LastWriteTime,
@@ -266,7 +266,8 @@ public class SystemTamperingModule : BaseModule
         var lastWrite = info.LastWriteTime;
 
         var detail = isBatchGotAdmin
-            ? $"Script contém padrão BatchGotAdmin — eleva privilégios via UAC sem consentimento.\n" +
+            ? $"Script contém padrão BatchGotAdmin — autoelevação via UAC. " +
+              $"Confirmar execução por Prefetch de cmd.exe/wscript.exe/cscript.exe e BAM.\n" +
               $"Arquivo: {filePath}\nIndicadores: {string.Join(", ", matched)}\n" +
               $"SHA256: {sha256} | Tamanho: {fileSize} bytes"
             : $"Script contém indicadores de adulteração do sistema.\n" +
