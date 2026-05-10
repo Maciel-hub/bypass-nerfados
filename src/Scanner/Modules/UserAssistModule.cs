@@ -45,7 +45,8 @@ public class UserAssistModule : BaseModule
             if (!File.Exists(hivePath)) continue;
 
             var tempKey = $"ECHO_UA_{Guid.NewGuid():N}";
-            var hive = LoadOfflineHive(hivePath, tempKey, out var tempFile);
+            var hive = LoadOfflineHive(hivePath, tempKey, out var tempFile,
+                onVssCleanupFail: warn => LogPartialError(warn));
             if (hive == null)
             {
                 LogPartialError($"NTUSER.DAT de {userName} — não foi possível carregar (acesso negado ou arquivo em uso)");

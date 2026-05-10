@@ -270,7 +270,11 @@ public abstract class BaseModule
     // 3. SeBackupPrivilege + SeRestorePrivilege must be explicitly enabled in the token
     //    before RegLoadKey — being an Administrator is not sufficient by itself.
     // 4. tempFile is the temp DIRECTORY; UnloadOfflineHive deletes it recursively.
-    protected static RegistryKey? LoadOfflineHive(string hivePath, string tempKeyName, out string tempFile)
+    // onVssCleanupFail: called when VSS cleanup cannot be verified after maxAttempts.
+    // Callers that have a LogPartialError context should pass it so the failure is surfaced.
+    protected static RegistryKey? LoadOfflineHive(
+        string hivePath, string tempKeyName, out string tempFile,
+        Action<string>? onVssCleanupFail = null)
     {
         tempFile = string.Empty;
 
@@ -300,7 +304,7 @@ public abstract class BaseModule
 
         if (!hiveOk)
         {
-            if (vssId != null) DeleteVssShadow(vssId);
+            CleanupVss(vssId, onVssCleanupFail);
             try { Directory.Delete(tempDir, true); } catch { }
             return null;
         }
@@ -316,7 +320,7 @@ public abstract class BaseModule
         }
 
         // Shadow copy no longer needed once all files are copied
-        if (vssId != null) DeleteVssShadow(vssId);
+        CleanupVss(vssId, onVssCleanupFail);
 
         tempFile = tempDir;
 
@@ -331,6 +335,17 @@ public abstract class BaseModule
         }
 
         return Registry.LocalMachine.OpenSubKey(tempKeyName);
+    }
+
+    // Centralizes VSS cleanup with retry + verification. Invokes onFail if the shadow copy
+    // cannot be confirmed deleted so the caller can surface it as a PartialError.
+    private static void CleanupVss(string? shadowId, Action<string>? onFail)
+    {
+        if (shadowId == null) return;
+        if (!TryDeleteVssShadow(shadowId))
+            onFail?.Invoke(
+                $"Shadow copy VSS {shadowId} não pôde ser removido automaticamente. " +
+                $"Remover manualmente: vssadmin delete shadows /shadow={shadowId} /quiet");
     }
 
     protected static void UnloadOfflineHive(string tempKeyName, string tempFile)
@@ -387,19 +402,58 @@ public abstract class BaseModule
         catch { return (null, null); }
     }
 
-    // Deletes a VSS shadow copy by WMI ID (best-effort, no throw).
-    private static void DeleteVssShadow(string shadowId)
+    // Returns true when the shadow copy with the given ID still exists in WMI.
+    private static bool VssShadowExists(string shadowId)
     {
         try
         {
             var scope = new ManagementScope(@"\\.\root\cimv2");
-            var wql   = $"SELECT * FROM Win32_ShadowCopy WHERE ID = '{shadowId}'";
+            scope.Connect();
+            var wql = $"SELECT ID FROM Win32_ShadowCopy WHERE ID = '{shadowId}'";
             using var searcher = new ManagementObjectSearcher(scope, new ObjectQuery(wql));
             using var results  = searcher.Get();
             foreach (ManagementObject obj in results)
-                using (obj) { obj.Delete(); break; }
+                using (obj) { return true; }
+            return false;
         }
-        catch { }
+        catch { return false; } // treat query failure as "not found"
+    }
+
+    // Deletes a VSS shadow copy by WMI ID.
+    // Retries up to maxAttempts times with a short delay, then verifies via WMI query.
+    // Returns true when the shadow copy is confirmed gone (or was never found).
+    private static bool TryDeleteVssShadow(string shadowId, int maxAttempts = 3)
+    {
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            if (attempt > 0) Thread.Sleep(600);
+
+            try
+            {
+                var scope = new ManagementScope(@"\\.\root\cimv2");
+                scope.Connect();
+                var wql = $"SELECT * FROM Win32_ShadowCopy WHERE ID = '{shadowId}'";
+                using var searcher = new ManagementObjectSearcher(scope, new ObjectQuery(wql));
+                using var results  = searcher.Get();
+
+                var found = false;
+                foreach (ManagementObject obj in results)
+                {
+                    found = true;
+                    using (obj) { obj.Delete(); }
+                    break;
+                }
+
+                if (!found) return true; // already gone
+            }
+            catch { /* retry on exception */ }
+
+            // Brief pause so WMI reflects the deletion before verifying
+            Thread.Sleep(300);
+            if (!VssShadowExists(shadowId)) return true;
+        }
+
+        return !VssShadowExists(shadowId);
     }
 
     // ── Privilege management (AdjustTokenPrivileges) ──────────────────────────────

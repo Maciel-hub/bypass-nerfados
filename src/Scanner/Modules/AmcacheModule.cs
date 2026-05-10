@@ -20,7 +20,8 @@ public class AmcacheModule : BaseModule
 
         // Unique key per run (PID + GUID) avoids collisions if a previous scan crashed mid-run
         var tempKeyName = $"ECHO_AMCACHE_{Environment.ProcessId}_{Guid.NewGuid():N}";
-        var hive = LoadOfflineHive(HivePath, tempKeyName, out var tempFile);
+        var hive = LoadOfflineHive(HivePath, tempKeyName, out var tempFile,
+            onVssCleanupFail: warn => LogPartialError(warn));
         if (hive == null)
         {
             LogPartialError("Amcache.hve — não foi possível carregar offline hive (acesso negado, arquivo em uso, ou VSS indisponível)");
