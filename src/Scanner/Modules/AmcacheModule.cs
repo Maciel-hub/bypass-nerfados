@@ -10,8 +10,7 @@ public class AmcacheModule : BaseModule
     public override string Name        => "Amcache";
     public override string Description => "Histórico persistente de executáveis — confirma presença/registro; execução requer correlação com Prefetch/BAM";
 
-    private const string HivePath   = @"C:\Windows\appcompat\Programs\Amcache.hve";
-    private const string TempKeyName = "ECHO_AMCACHE_SCAN";
+    private const string HivePath = @"C:\Windows\appcompat\Programs\Amcache.hve";
 
     protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken ct)
     {
@@ -19,10 +18,12 @@ public class AmcacheModule : BaseModule
 
         if (!File.Exists(HivePath)) return Task.FromResult(findings);
 
-        var hive = LoadOfflineHive(HivePath, TempKeyName, out var tempFile);
+        // Unique key per run (PID + GUID) avoids collisions if a previous scan crashed mid-run
+        var tempKeyName = $"ECHO_AMCACHE_{Environment.ProcessId}_{Guid.NewGuid():N}";
+        var hive = LoadOfflineHive(HivePath, tempKeyName, out var tempFile);
         if (hive == null)
         {
-            LogPartialError("Amcache.hve — não foi possível carregar offline hive (acesso negado ou arquivo em uso)");
+            LogPartialError("Amcache.hve — não foi possível carregar offline hive (acesso negado, arquivo em uso, ou VSS indisponível)");
             return Task.FromResult(findings);
         }
 
@@ -33,7 +34,7 @@ public class AmcacheModule : BaseModule
         finally
         {
             hive.Dispose();
-            UnloadOfflineHive(TempKeyName, tempFile);
+            UnloadOfflineHive(tempKeyName, tempFile);
         }
 
         return Task.FromResult(findings);

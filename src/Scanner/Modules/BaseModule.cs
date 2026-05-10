@@ -4,6 +4,7 @@ using BypassNerfados.Scanner.Data;
 using Microsoft.Win32;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace BypassNerfados.Scanner.Modules;
 
@@ -191,12 +192,16 @@ public abstract class BaseModule
     // Loads an offline hive under HKLM\<tempKeyName>. Returns the RegistryKey on success;
     // caller must dispose the key then call UnloadOfflineHive(tempKeyName, tempFile).
     //
-    // Key points:
-    // 1. RegLoadKey requires SeBackupPrivilege + SeRestorePrivilege explicitly enabled.
-    // 2. Windows replays dirty transactions via .LOG1/.LOG2 — without those files the
-    //    load fails whenever the OS hasn't yet flushed the hive to disk.
-    //    We copy the hive AND its log files into a dedicated temp directory.
-    // 3. tempFile is the temp DIRECTORY (not a single file); UnloadOfflineHive deletes it.
+    // Strategy:
+    // 1. Copies the hive + .LOG1/.LOG2 into a dedicated temp directory.
+    //    RegLoadKey replays dirty transactions via the log files — without them the
+    //    load fails when the OS hasn't flushed the hive to disk yet.
+    // 2. Direct copy (FileShare.ReadWrite|Delete) is tried first.
+    //    If the hive is exclusively locked (e.g. Amcache.hve held by the registry
+    //    subsystem), falls back to a VSS (Volume Shadow Copy) snapshot.
+    // 3. SeBackupPrivilege + SeRestorePrivilege must be explicitly enabled in the token
+    //    before RegLoadKey — being an Administrator is not sufficient by itself.
+    // 4. tempFile is the temp DIRECTORY; UnloadOfflineHive deletes it recursively.
     protected static RegistryKey? LoadOfflineHive(string hivePath, string tempKeyName, out string tempFile)
     {
         tempFile = string.Empty;
@@ -205,16 +210,45 @@ public abstract class BaseModule
         try { Directory.CreateDirectory(tempDir); }
         catch { return null; }
 
-        var destHive = Path.Combine(tempDir, Path.GetFileName(hivePath));
-        if (!TryCopyLocked(hivePath, destHive))
+        var hiveName = Path.GetFileName(hivePath);
+        var hiveRoot = Path.GetPathRoot(hivePath) ?? @"C:\";
+        var destHive = Path.Combine(tempDir, hiveName);
+
+        // Step 1: direct copy — works when OS shares the file with read access
+        bool hiveOk = TryCopyLocked(hivePath, destHive);
+
+        string? vssId = null, vssDev = null;
+
+        // Step 2: VSS fallback — creates a volume snapshot to read exclusively-locked files
+        if (!hiveOk)
         {
+            (vssId, vssDev) = CreateVssShadow(hiveRoot);
+            if (vssDev != null)
+            {
+                var rel = hivePath.Substring(hiveRoot.Length);
+                hiveOk = TryCopyLocked(vssDev.TrimEnd('\\') + "\\" + rel, destHive);
+            }
+        }
+
+        if (!hiveOk)
+        {
+            if (vssId != null) DeleteVssShadow(vssId);
             try { Directory.Delete(tempDir, true); } catch { }
             return null;
         }
 
-        // Copy transaction logs (best-effort — clean hives have none; dirty ones need them)
+        // Copy transaction logs — live path first, then VSS path (best-effort)
         foreach (var ext in new[] { ".LOG1", ".LOG2", ".LOG" })
-            TryCopyLocked(hivePath + ext, destHive + ext);
+        {
+            if (!TryCopyLocked(hivePath + ext, destHive + ext) && vssDev != null)
+            {
+                var rel = (hivePath + ext).Substring(hiveRoot.Length);
+                TryCopyLocked(vssDev.TrimEnd('\\') + "\\" + rel, destHive + ext);
+            }
+        }
+
+        // Shadow copy no longer needed once all files are copied
+        if (vssId != null) DeleteVssShadow(vssId);
 
         tempFile = tempDir;
 
@@ -244,6 +278,41 @@ public abstract class BaseModule
     // Converts a Windows FILETIME (100-ns intervals since 1601-01-01) to DateTime?
     protected static DateTime? FileTimeToDateTime(long ft) =>
         ft > 0 ? DateTime.FromFileTimeUtc(ft).ToLocalTime() : null;
+
+    // ── VSS (Volume Shadow Copy) helpers ─────────────────────────────────────────
+
+    // Matches a Windows GUID in curly braces, locale-independent.
+    private static readonly Regex VssGuidRegex = new(
+        @"\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}",
+        RegexOptions.Compiled);
+
+    // Matches the UNC device path returned by vssadmin (e.g. \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1)
+    private static readonly Regex VssDevRegex = new(
+        @"\\\\\?\\GLOBALROOT\\[^\r\n]+",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Creates a VSS snapshot for the given volume root (e.g. @"C:\").
+    // Returns (shadowId, devicePath) on success; (null, null) on failure.
+    // Requires administrator privileges.
+    private static (string? id, string? device) CreateVssShadow(string volumeRoot)
+    {
+        try
+        {
+            var output = RunCmd("vssadmin.exe", $"create shadow /for={volumeRoot}", 45000);
+            var idM  = VssGuidRegex.Match(output);
+            var devM = VssDevRegex.Match(output);
+            if (!idM.Success || !devM.Success) return (null, null);
+            return (idM.Value, devM.Value.Trim());
+        }
+        catch { return (null, null); }
+    }
+
+    // Deletes a VSS shadow copy by ID (best-effort, no throw).
+    private static void DeleteVssShadow(string shadowId)
+    {
+        try { RunCmd("vssadmin.exe", $"delete shadows /shadow={shadowId} /quiet", 15000); }
+        catch { }
+    }
 
     // ── Privilege management (AdjustTokenPrivileges) ──────────────────────────────
 
