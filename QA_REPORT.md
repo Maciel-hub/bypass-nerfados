@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+9736a1b  
-**Build:** 9736a1b (2026-05-09) — fix: ShimCache truncagem em extension, VS Code/CitizenFX/FiveM FPs cross-module  
+**Versão:** 1.0.0+5e48db8  
+**Build:** 5e48db8 (2026-05-10) — fix: SanitizePath extensão universal; label genérico sem nome de cheat  
 **Arquivo:** `publish\EchoNerfados.exe`  
-**SHA256:** `d5d48d14704096588199f2e73be0ac4e36480875ec9c386d07bfb7b50d232aa2`  
+**SHA256:** `ffb91ac6c355d30fad1d5ea9dff814a21e27a6414abb822d870c7c8aa0f05cff`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
