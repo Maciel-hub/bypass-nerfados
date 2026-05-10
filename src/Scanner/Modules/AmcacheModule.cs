@@ -59,7 +59,11 @@ public class AmcacheModule : BaseModule
             var linkDate  = (entry.GetValue("LinkDate")          as string ?? "").Trim();
 
             if (string.IsNullOrEmpty(path) && string.IsNullOrEmpty(name)) continue;
-            if (IsOwnProcess(path) || IsOwnProcess(name)) continue;
+            // Use IsOwnToolArtifact (not just IsOwnProcess) to catch historical builds:
+            // combines path/name match with publisher metadata so renamed binaries with
+            // an unrelated publisher are not silently excluded.
+            if (IsOwnToolArtifact(path, publisher: publisher) ||
+                (!string.IsNullOrEmpty(name) && IsOwnProcess(name))) continue;
             if (CheatDatabase.IsKnownLegitimate(path)) continue;
 
             var fileName = Path.GetFileName(path).ToLowerInvariant();

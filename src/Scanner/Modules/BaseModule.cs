@@ -49,18 +49,83 @@ public abstract class BaseModule
 
     protected abstract Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken);
 
-    // Self-exclusion: never flag the scanner's own process or its build/run directory
+    // ── Self-exclusion ────────────────────────────────────────────────────────────
+    //
+    // Covers the current running process, all historical exe names (across rebrands),
+    // build-tree path fragments, and — via IsOwnToolArtifact — PE metadata such as
+    // Publisher / ProductName (used by modules that have that data, e.g. Amcache).
+
     private static readonly string _selfExeName =
         Path.GetFileName(Environment.ProcessPath ?? "echonerfados.exe").ToLowerInvariant();
     private static readonly string _selfDirLower =
         (Path.GetDirectoryName(Environment.ProcessPath) ?? "").ToLowerInvariant();
 
+    // All known EXE names for this tool (current + historical rebranding)
+    private static readonly HashSet<string> _selfExeAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "echonerfados.exe",
+        "bypassnerfados.exe",
+    };
+
+    // Path fragments unique to this tool's source/build/publish tree
+    private static readonly string[] _selfPathFragments =
+    [
+        @"\bypassnerfados\",
+        @"\echonerfados\",
+        @"\echo nerfados\",
+    ];
+
+    // Publisher / ProductName keywords (lowercase) — for metadata-rich modules
+    private static readonly string[] _selfPublisherKeywords =
+    [
+        "echonerfados", "bypassnerfados",
+        "echo nerfados", "bypass nerfados",
+        "echo nerfados shield",
+    ];
+
+    // Checks whether a given name or path belongs to this scanner (current run or
+    // historical build). Covers: current process name, known alias exe names, and
+    // paths containing a known build-tree segment (e.g. \BypassNerfados\).
     protected static bool IsOwnProcess(string nameOrPath)
     {
-        var lower = nameOrPath.ToLowerInvariant();
-        return lower == _selfExeName
-            || lower.EndsWith(Path.DirectorySeparatorChar + _selfExeName)
-            || (!string.IsNullOrEmpty(_selfDirLower) && lower.StartsWith(_selfDirLower));
+        if (string.IsNullOrEmpty(nameOrPath)) return false;
+        var lower    = nameOrPath.ToLowerInvariant();
+        var fileName = Path.GetFileName(lower);
+
+        // Current running process — exact name or same directory
+        if (lower == _selfExeName ||
+            lower.EndsWith(Path.DirectorySeparatorChar + _selfExeName) ||
+            (!string.IsNullOrEmpty(_selfDirLower) && lower.StartsWith(_selfDirLower)))
+            return true;
+
+        // Historical / alternative exe names (rebranding across development)
+        if (_selfExeAliases.Contains(fileName)) return true;
+
+        // Project / build tree path fragments
+        foreach (var frag in _selfPathFragments)
+            if (lower.Contains(frag)) return true;
+
+        return false;
+    }
+
+    // Extended self-exclusion for modules with PE metadata (Publisher, ProductName).
+    // Combines path/name signals with publisher keywords for defence-in-depth:
+    // a file renamed to bypassnerfados.exe but published by an unrelated vendor
+    // is NOT excluded — multiple signals must align.
+    protected static bool IsOwnToolArtifact(
+        string path, string? publisher = null, string? productName = null)
+    {
+        if (IsOwnProcess(path)) return true;
+
+        foreach (var meta in new[] { publisher, productName })
+        {
+            if (string.IsNullOrEmpty(meta)) continue;
+            var m = meta.ToLowerInvariant();
+            foreach (var kw in _selfPublisherKeywords)
+                if (m.Contains(kw)) return true;
+        }
+
+        return false;
     }
 
     protected static string ConvertDevicePath(string devicePath)
