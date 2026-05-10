@@ -4,7 +4,7 @@ using BypassNerfados.Scanner.Data;
 using Microsoft.Win32;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.RegularExpressions;
+using System.Management;
 
 namespace BypassNerfados.Scanner.Modules;
 
@@ -279,38 +279,58 @@ public abstract class BaseModule
     protected static DateTime? FileTimeToDateTime(long ft) =>
         ft > 0 ? DateTime.FromFileTimeUtc(ft).ToLocalTime() : null;
 
-    // ── VSS (Volume Shadow Copy) helpers ─────────────────────────────────────────
+    // ── VSS (Volume Shadow Copy) helpers — WMI-based ─────────────────────────────
+    //
+    // Uses Win32_ShadowCopy.Create via System.Management (no vssadmin.exe dependency).
+    // vssadmin create shadow is not available on all Windows client editions.
 
-    // Matches a Windows GUID in curly braces, locale-independent.
-    private static readonly Regex VssGuidRegex = new(
-        @"\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}\}",
-        RegexOptions.Compiled);
-
-    // Matches the UNC device path returned by vssadmin (e.g. \\?\GLOBALROOT\Device\HarddiskVolumeShadowCopy1)
-    private static readonly Regex VssDevRegex = new(
-        @"\\\\\?\\GLOBALROOT\\[^\r\n]+",
-        RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-    // Creates a VSS snapshot for the given volume root (e.g. @"C:\").
-    // Returns (shadowId, devicePath) on success; (null, null) on failure.
+    // Creates a VSS snapshot for the given volume root (e.g. @"C:\") using WMI.
+    // Returns (shadowId, devicePath) on success; (null, null) on any failure.
     // Requires administrator privileges.
     private static (string? id, string? device) CreateVssShadow(string volumeRoot)
     {
         try
         {
-            var output = RunCmd("vssadmin.exe", $"create shadow /for={volumeRoot}", 45000);
-            var idM  = VssGuidRegex.Match(output);
-            var devM = VssDevRegex.Match(output);
-            if (!idM.Success || !devM.Success) return (null, null);
-            return (idM.Value, devM.Value.Trim());
+            var scope = new ManagementScope(@"\\.\root\cimv2");
+            scope.Connect();
+
+            using var cls = new ManagementClass(scope, new ManagementPath("Win32_ShadowCopy"), null);
+            using var inParams = cls.GetMethodParameters("Create");
+            inParams["Volume"]  = volumeRoot;
+            inParams["Context"] = "ClientAccessible";
+
+            using var outParams = cls.InvokeMethod("Create", inParams, null);
+            if (Convert.ToUInt32(outParams["ReturnValue"]) != 0) return (null, null);
+
+            var shadowId = outParams["ShadowID"]?.ToString();
+            if (string.IsNullOrEmpty(shadowId)) return (null, null);
+
+            // DeviceObject from Create output is not always populated — query separately
+            var wql = $"SELECT DeviceObject FROM Win32_ShadowCopy WHERE ID = '{shadowId}'";
+            using var searcher = new ManagementObjectSearcher(scope, new ObjectQuery(wql));
+            using var results  = searcher.Get();
+
+            string? device = null;
+            foreach (ManagementObject obj in results)
+                using (obj) { device = obj["DeviceObject"]?.ToString(); break; }
+
+            return (shadowId, device);
         }
         catch { return (null, null); }
     }
 
-    // Deletes a VSS shadow copy by ID (best-effort, no throw).
+    // Deletes a VSS shadow copy by WMI ID (best-effort, no throw).
     private static void DeleteVssShadow(string shadowId)
     {
-        try { RunCmd("vssadmin.exe", $"delete shadows /shadow={shadowId} /quiet", 15000); }
+        try
+        {
+            var scope = new ManagementScope(@"\\.\root\cimv2");
+            var wql   = $"SELECT * FROM Win32_ShadowCopy WHERE ID = '{shadowId}'";
+            using var searcher = new ManagementObjectSearcher(scope, new ObjectQuery(wql));
+            using var results  = searcher.Get();
+            foreach (ManagementObject obj in results)
+                using (obj) { obj.Delete(); break; }
+        }
         catch { }
     }
 
