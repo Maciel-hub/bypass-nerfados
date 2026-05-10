@@ -264,6 +264,10 @@ public class LnkRecentModule : BaseModule
         var fileName = Path.GetFileName(targetPath).ToLowerInvariant();
 
         if (IsOwnProcess(fileName) || IsOwnProcess(targetPath)) return;
+        // Also guard on the .lnk shortcut's own name (e.g. "BypassNerfados.lnk")
+        // and on bare directory names (no .exe suffix) that match known tool aliases.
+        var lnkBase = Path.GetFileNameWithoutExtension(lnkPath).ToLowerInvariant();
+        if (IsOwnProcess(lnkBase + ".exe") || IsOwnProcess(lnkBase + @"\")) return;
         if (CheatDatabase.IsKnownLegitimate(targetPath)) return;
 
         if (CheatDatabase.IsKnownCheatExecutable(fileName))

@@ -102,8 +102,11 @@ public abstract class BaseModule
         if (_selfExeAliases.Contains(fileName)) return true;
 
         // Project / build tree path fragments
+        // Normalize to include trailing backslash so bare directory paths like
+        // "D:\BypassNerfados" (no trailing slash) still match "\bypassnerfados\"
+        var lowerSlash = lower.EndsWith('\\') ? lower : lower + '\\';
         foreach (var frag in _selfPathFragments)
-            if (lower.Contains(frag)) return true;
+            if (lowerSlash.Contains(frag)) return true;
 
         return false;
     }
