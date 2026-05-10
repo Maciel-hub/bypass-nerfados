@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+888ab32  
-**Build:** 888ab32 (2026-05-09) — fixes pós-smoke test P1/P2  
+**Versão:** 1.0.0+de70dcb  
+**Build:** de70dcb (2026-05-09) — fixes pós-smoke test P1/P2 round 2  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `f089882a944ebe8fcab9eddbe37499df6dfb3b1d63db1758cf6aed77dc64dd0d`  
+**SHA256:** `9f92898d6d414c96b26c05a6aa356a95c91e3886716559e220ff056b0c4c3e8c`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
@@ -381,13 +381,13 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout 888ab32
+git checkout de70dcb
 .\publish.ps1
 ```
 
-**SHA256 do artefato entregue (build 888ab32):**
+**SHA256 do artefato entregue (build de70dcb):**
 ```
-f089882a944ebe8fcab9eddbe37499df6dfb3b1d63db1758cf6aed77dc64dd0d
+9f92898d6d414c96b26c05a6aa356a95c91e3886716559e220ff056b0c4c3e8c
 ```
 
 **Nota:** Este hash identifica o artefato `EchoNerfados.exe` entregue para QA — gerado em 2026-05-09. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` e fixar `SourceRevisionId` no `.csproj` (fora do escopo desta release).
@@ -396,7 +396,7 @@ f089882a944ebe8fcab9eddbe37499df6dfb3b1d63db1758cf6aed77dc64dd0d
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build 888ab32):**
+**O que está pronto e testável (build de70dcb):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
@@ -413,11 +413,12 @@ f089882a944ebe8fcab9eddbe37499df6dfb3b1d63db1758cf6aed77dc64dd0d
 - LNK parser suporta `LocalBasePathUnicode` (caminhos Unicode)
 - Amcache/ShimCache com linguagem forense calibrada ("presença/indício", não "execução confirmada")
 - BAM/DAM sem admin → PARCIAL com motivo (SecurityException capturada), nunca FALHOU
-- Amcache com admin → SeBackupPrivilege + SeRestorePrivilege habilitados antes de RegLoadKey
+- Amcache com admin → SeBackupPrivilege + SeRestorePrivilege habilitados + cópia de .LOG1/.LOG2 junto com o hive (necessário para replay de transações dirty)
 - `evidence.json` inclui `ModuleCoverage` (status, motivo, impacto forense de cada módulo)
+- CompatibilityAssistant → casting seguro de tipos registry variados (int/long/byte[]) sem InvalidCastException
 
 **Prioridade de teste:** Focar nos cenários 9.1, 9.2, 9.3, 9.4 — são os mais críticos para validar o produto. Os outros podem ser smoke test.
 
 ---
 
-*Relatório gerado em: 2026-05-09 | Build: 888ab32 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-09 | Build: de70dcb | Echo Nerfados Shield XDR v1.0.0*
