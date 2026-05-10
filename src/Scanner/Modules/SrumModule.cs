@@ -5,8 +5,8 @@ using Microsoft.Isam.Esent.Interop;
 
 namespace BypassNerfados.Scanner.Modules;
 
-// System Resource Usage Monitor — reads SRUDB.dat (ESE database) for network/CPU usage
-// per process over the last ~30-60 days. Requires admin to copy the live database via VSS.
+// System Resource Usage Monitor — reads SRUDB.dat (ESE database) for network usage
+// per process over the last ~30-60 days. Copies the live database via permissive FileShare.
 public class SrumModule : BaseModule
 {
     public override string Name        => "SRUM";
@@ -43,7 +43,7 @@ public class SrumModule : BaseModule
             var dbPath = Path.Combine(tempDir, SruDb);
             if (!File.Exists(dbPath))
             {
-                LogPartialError("SRUDB.dat não pôde ser copiado — VSS indisponível ou acesso negado");
+                LogPartialError("SRUDB.dat não pôde ser copiado — arquivo bloqueado, acesso negado ou cópia permissiva falhou");
                 return;
             }
 
@@ -83,7 +83,7 @@ public class SrumModule : BaseModule
                     }
                 }
 
-                // Fallback (log files and failed VSS): permissive FileStream copy
+                // Fallback: permissive FileStream copy for log files or if CopyLockedFile failed
                 if (!copied)
                 {
                     try

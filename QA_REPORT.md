@@ -407,7 +407,7 @@ e90cbe8207dd6274bc5767d87201be7aa5555161ffdc914d9dbfaa5108c9712b
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build 824cf68 — apto para smoke test interativo):**
+**O que está pronto e testável (build d56a45b — apto para smoke test interativo):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
