@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+824cf68  
-**Build:** 824cf68 (2026-05-10) — fix: QA P0/P1/P2 — NVIDIA falso positivo, SRUM VSS, exports JSON, BatchGotAdmin, BrowserDownloads, Timeline  
+**Versão:** 1.0.0+d56a45b  
+**Build:** d56a45b (2026-05-10) — fix: linguagem forense, GitHub allowlist por org, comentários CopyLockedFile  
 **Arquivo:** `publish\EchoNerfados.exe`  
-**SHA256:** `a83011e725c8d42c8e8d3e0e16927ab6a97246241e1a87eba5005e74eb68d869`  
+**SHA256:** `e90cbe8207dd6274bc5767d87201be7aa5555161ffdc914d9dbfaa5108c9712b`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
@@ -392,49 +392,46 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout a552337
-.\publish.ps1
+git checkout d56a45b
+dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 ```
 
-**SHA256 do artefato entregue (build a552337):**
+**SHA256 do artefato entregue para QA (build d56a45b — 2026-05-10):**
 ```
-aec100829434016c0ee2f559b55f57d258cb3e3f6440f4eb9d82102a325c084c
+e90cbe8207dd6274bc5767d87201be7aa5555161ffdc914d9dbfaa5108c9712b
 ```
 
-**Nota:** Este hash identifica o artefato `EchoNerfados.exe` entregue para QA — gerado em 2026-05-09. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` e fixar `SourceRevisionId` no `.csproj` (fora do escopo desta release).
+**Nota:** Este hash identifica o artefato `EchoNerfados.exe` gerado nesta sessão. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` no `.csproj` (fora do escopo desta release).
 
 ---
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build 671951d):**
+**O que está pronto e testável (build 824cf68 — apto para smoke test interativo):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
 - Login gate funcional com bloqueio após 3 tentativas (exit code 2)
 - **22 módulos** cobrindo todos os principais artefatos forenses Windows
 - Correlação cruzada entre módulos + artifact dossiers com bypass ±1h por sinal + correlação FiveM session (-30min/+2h)
-- Exportação: HTML, TXT, **8 JSONs de cobertura** (incluindo `registrypersistence_60d.json`), `evidence.json`
+- Exportação: HTML, TXT, **19 JSONs dedicados** (8 originais + 10 módulos novos + evidence.json)
 - Manifesto criptograficamente verificável (`manifest.sha256`)
 - Tabela "COBERTURA DA VARREDURA" no terminal, TXT e HTML com status Executed/Partial/Skipped/Failed
-- Todos os catches críticos logam `LogPartialError` com contexto específico
-- Contadores agregados em módulos de alto volume (ProcessMemory, LNK, FileSystem, Network, Defender, RegistryArtifacts, ServiceCheck)
+- Todos os catches críticos logam `LogPartialError` com contexto específico; inaccessible contados, não silenciados
 - Executável self-contained (~34 MB), sem .NET no host
 - AppInit_DLLs distingue ativo vs. inativo via `LoadAppInit_DLLs`
 - LNK parser suporta `LocalBasePathUnicode` (caminhos Unicode)
 - Amcache/ShimCache com linguagem forense calibrada ("presença/indício", não "execução confirmada")
 - BAM/DAM sem admin → PARCIAL com motivo (SecurityException capturada), nunca FALHOU
-- Amcache com admin → SeBackupPrivilege + SeRestorePrivilege + cópia de .LOG1/.LOG2 + fallback VSS via WMI `Win32_ShadowCopy.Create` (sem dependência de `vssadmin.exe`) quando o hive estiver exclusivamente lockado pelo OS
+- Amcache com admin → SeBackupPrivilege + cópia de .LOG1/.LOG2 + fallback VSS via WMI `Win32_ShadowCopy.Create`
 - `evidence.json` inclui `ModuleCoverage` (status, motivo, impacto forense de cada módulo)
-- CompatibilityAssistant → casting seguro de tipos registry variados (int/long/byte[]) sem InvalidCastException
-- Auto-exclusão robusta: `IsOwnProcess` cobre nomes históricos (`bypassnerfados.exe`, `echonerfados.exe`) e caminhos de build; `IsOwnToolArtifact` adiciona Publisher/ProductName para Amcache — o scanner não se acusa como suspeito
-- **SRUM** via ManagedEsent — ESE reader para SRUDB.dat com fallback de 3 page sizes
-- **ShellBags/JumpLists** — evidência forense de acesso a pastas/arquivos mesmo após deleção
-- **RecycleBin** — parser $I v1/v2 para recuperar caminhos originais de arquivos deletados
-- **SystemResetRestore** — detecta reinstalação/reset recente (cobertura forense comprometida)
-- **SystemTampering** — LabConfig/MoSetup bypass + BatchGotAdmin/getadmin.vbs
-- **BrowserDownloads** — winsqlite3.dll p/invoke sem NuGet (Chrome/Edge/Brave/Opera)
-- **ExternalToolResidue** — 28 ferramentas de análise/tampering via Prefetch + paths + registry
+- Auto-exclusão robusta: `IsOwnProcess` cobre nomes históricos e caminhos de build
+- **NVIDIA**: só High se strings suspeitas encontradas no binário nvAppTimestamps — sem false positive em PC limpo
+- **SRUM**: CopyLockedFile para SRUDB.dat + fallback FileStream; 3 page sizes (32768/16384/8192)
+- **BrowserDownloads**: suporte Chrome/Edge/Brave/Opera/Firefox; GitHub apenas via allowlist de orgs; Uri.Host para domain check
+- **BatchGotAdmin**: `SCRIPT_BATCHGOTADMIN_PRESENT`; linguagem calibrada ("autoelevação via UAC")
+- **ShellBags**: Medium sem timestamp (High requer correlação); inaccessible logados
+- **RecycleBin**: usa `config.EventWindowLookback` (não hardcoded 60 dias)
 - **Timeline** — linha do tempo unificada Prefetch/BAM/LNK/Downloads/Temp
 - **NvidiaArtifacts** — timestamps GPU de sessão FiveM via nvAppTimestamps
 
@@ -456,4 +453,4 @@ aec100829434016c0ee2f559b55f57d258cb3e3f6440f4eb9d82102a325c084c
 
 ---
 
-*Relatório gerado em: 2026-05-10 | Build: 824cf68 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-10 | Build: d56a45b | Echo Nerfados Shield XDR v1.0.0*
