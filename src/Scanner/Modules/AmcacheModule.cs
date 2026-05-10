@@ -66,6 +66,12 @@ public class AmcacheModule : BaseModule
                 (!string.IsNullOrEmpty(name) && IsOwnProcess(name))) continue;
             if (CheatDatabase.IsKnownLegitimate(path)) continue;
 
+            // Skip software signed by well-known publishers installed in standard (non-risky) paths.
+            // Publisher field in Amcache comes from PE version info and can be spoofed, so we only
+            // skip when the path is also NOT in a known high-risk location.
+            if (CheatDatabase.IsKnownLegitimatePublisher(publisher) &&
+                !CheatDatabase.IsSuspiciousPath(path.ToLowerInvariant())) continue;
+
             var fileName = Path.GetFileName(path).ToLowerInvariant();
             if (string.IsNullOrEmpty(fileName)) fileName = name.ToLowerInvariant();
 
@@ -100,6 +106,15 @@ public class AmcacheModule : BaseModule
         if (CheatDatabase.IsKnownCheatExecutable(fileName))
         {
             var entry = CheatDatabase.KnownExecutables[fileName];
+            if (entry.IsGenericName)
+            {
+                // Generic name (launcher.exe, dxsetup.exe): only flag when path matches a known
+                // cheat install location. In any other location it's almost certainly legitimate.
+                var pathLower = path.ToLowerInvariant();
+                var pathMatch = entry.KnownPaths.Any(p => pathLower.Contains(p.ToLowerInvariant()));
+                if (!pathMatch) return (RiskLevel.Info, Confidence.Low, null);
+                return (RiskLevel.Medium, Confidence.Low, entry.Name);
+            }
             return (RiskLevel.High, Confidence.High, entry.Name);
         }
 

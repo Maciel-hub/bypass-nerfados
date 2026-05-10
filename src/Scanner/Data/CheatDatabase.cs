@@ -92,33 +92,66 @@ public static class CheatDatabase
         "dusmsvc", "appinfo", "bam"
     ];
 
-    // Legitimate patterns that match suspicious keywords but are not cheats
+    // Legitimate executable/path fragments — match suspicious keywords but are not cheats
     private static readonly HashSet<string> _legitimatePatterns = new(StringComparer.OrdinalIgnoreCase)
     {
-        "citizenfx_uninstall", // FiveM official uninstaller
-        "fivem_uninstall",
-        "rockstargameslauncher",
-        "epicgameslauncher",
-        "spotify",
-        "discord",
-        "steam",
-        "onedrive",
-        "googledrive",
-        "dropbox",
-        "teams",
-        "skype",
-        "zoom",
-        "obs",
-        "nvidia",
-        "nvcontainer",
-        "nvcplui",
-        "geforce",
+        // FiveM / CitizenFX official binaries
+        "citizenfx_uninstall", "fivem_uninstall", "citizenfx.exe", "fivem.exe",
+
+        // Game launchers (legit)
+        "rockstargameslauncher", "epicgameslauncher", "gogalaxy",
+        "eadesktop", "easetup", "originclientservice", "battlenet",
+        "ubisoftconnect", "uplaybroker",
+
+        // Anti-cheat systems (legit)
+        "easyanticheat", "battleye", "eac_setup",
+
+        // DirectX / Visual C++ redistributables (common in Amcache)
+        "dxwebsetup", "directx_", "vcredist", "windowsdesktop-runtime",
+
+        // Comms / productivity
+        "spotify", "discord", "steam", "onedrive", "googledrive",
+        "dropbox", "teams", "skype", "zoom",
+
+        // Streaming / capture
+        "obs", "streamlabs",
+
+        // GPU drivers
+        "nvidia", "nvcontainer", "nvcplui", "geforce",
+        "amdinstall", "radeoninstall", "intelarc",
+
+        // Security / AV (legit)
+        "malwarebytes", "mbam", "avast", "avgui", "kaspersky", "eset",
+        "windowsdefender", "msseces",
     };
+
+    // Publisher name fragments that identify well-known legitimate vendors.
+    // Used by Amcache module to suppress FPs from signed software.
+    private static readonly string[] _legitimatePublisherFragments =
+    [
+        "microsoft", "intel corporation", "advanced micro devices", "amd",
+        "nvidia corporation", "realtek semiconductor", "qualcomm",
+        "epic games", "rockstar games", "valve corporation",
+        "cd projekt", "riot games", "electronic arts", "ea games",
+        "bethesda softworks", "activision", "ubisoft", "2k games",
+        "blizzard entertainment", "square enix", "sega", "capcom",
+        "bandai namco", "thq nordic", "focus entertainment",
+        "citizenfx", "cfx.re",
+    ];
 
     public static bool IsKnownLegitimate(string name)
     {
         var lower = name.ToLowerInvariant();
         return _legitimatePatterns.Any(p => lower.Contains(p));
+    }
+
+    // Returns true when the publisher string belongs to a known legitimate vendor.
+    // Amcache callers should combine this with a non-suspicious-path check before skipping.
+    public static bool IsKnownLegitimatePublisher(string publisher)
+    {
+        if (string.IsNullOrWhiteSpace(publisher)) return false;
+        var lower = publisher.ToLowerInvariant();
+        return _legitimatePublisherFragments.Any(p => lower.Contains(p));
     }
 
     public static bool IsKnownCheatExecutable(string filename) =>
