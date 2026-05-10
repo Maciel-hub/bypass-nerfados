@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+a552337  
-**Build:** a552337 (2026-05-09) — auto-exclusão robusta de artefatos do scanner  
-**Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `aec100829434016c0ee2f559b55f57d258cb3e3f6440f4eb9d82102a325c084c`  
+**Versão:** 1.0.0+4e203eb  
+**Build:** 4e203eb (2026-05-09) — fix: suppress LNK false positive para atalho do próprio projeto  
+**Arquivo:** `publish\EchoNerfados.exe`  
+**SHA256:** `7cb6dc7375ddc4b72f2c8e923756beb8462fd2d4239f8e305c94a878183a9484`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
