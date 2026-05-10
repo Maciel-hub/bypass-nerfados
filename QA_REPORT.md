@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+5e48db8  
-**Build:** 5e48db8 (2026-05-10) — fix: SanitizePath extensão universal; label genérico sem nome de cheat  
+**Versão:** 1.0.0+4fc2e61  
+**Build:** 4fc2e61 (2026-05-10) — fix: VSS cleanup com retry, verificação e LogPartialError em falha  
 **Arquivo:** `publish\EchoNerfados.exe`  
-**SHA256:** `ffb91ac6c355d30fad1d5ea9dff814a21e27a6414abb822d870c7c8aa0f05cff`  
+**SHA256:** `dc42a533bfb845a0620e44dc551ad704f52bd3e94d83b6e9a25169711d51e956`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
