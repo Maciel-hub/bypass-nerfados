@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+4e203eb  
-**Build:** 4e203eb (2026-05-09) — fix: suppress LNK false positive para atalho do próprio projeto  
+**Versão:** 1.0.0+94af1d3  
+**Build:** 94af1d3 (2026-05-09) — fix: redução de falsos positivos no Amcache (nomes genéricos e publishers legítimos)  
 **Arquivo:** `publish\EchoNerfados.exe`  
-**SHA256:** `7cb6dc7375ddc4b72f2c8e923756beb8462fd2d4239f8e305c94a878183a9484`  
+**SHA256:** `c062315388742a306be9ad4ac1d104e4ab06a7b474d6e2aeb01cb05aae2d3e39`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
