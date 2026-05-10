@@ -226,6 +226,14 @@ public class ScanOrchestrator
         Queue(new SystemResetRestoreModule(),  "Reinstalação, reset e restauração do Windows — perda de cobertura forense");
         Queue(new SystemTamperingModule(),     "LabConfig/MoSetup bypass, BatchGotAdmin, scripts de elevação UAC");
         Queue(new BrowserDownloadsModule(),    "Downloads do Chrome/Edge/Brave/Opera — executáveis e URLs suspeitos");
+        Queue(new ShellBagsModule(),           "Histórico de navegação de pastas — acesso a diretórios suspeitos mesmo após deleção");
+        Queue(new JumpListsModule(),           "Histórico de acesso recente por aplicação — executáveis e caminhos suspeitos");
+        Queue(new NvidiaArtifactsModule(),     "Timestamps de uso de GPU — confirma execução de app na sessão FiveM");
+        Queue(new ExternalToolResidueModule(), "Ferramentas de análise/tampering — Process Hacker, CheatEngine, Everything, x64dbg");
+        Queue(new RecycleBinModule(),          "Lixeira — caminho original e data de deleção de arquivos suspeitos");
+        Queue(new TimelineInvestigationModule(), "Linha do tempo unificada — Prefetch, BAM, LNK, Downloads, Temp");
+
+        Queue(new SrumModule(), "Uso de rede/CPU por processo via SRUDB.dat (~30-60 dias)");
 
         if (_result.IsAdministrator)
         {
