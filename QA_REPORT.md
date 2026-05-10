@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+05ecb42  
-**Build:** 05ecb42 (2026-05-09) — Amcache VSS fallback + chave única por run  
+**Versão:** 1.0.0+e59a445  
+**Build:** e59a445 (2026-05-09) — VSS via WMI Win32_ShadowCopy (sem vssadmin.exe)  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `65507f1288142bb4f7ca1495a702f7f987563b65b5c9b5baeabdb758d6104e02`  
+**SHA256:** `3ab448c4d6981b37e48749e7a38005ce24e8bd655b6b3a7ed819336ed60e1a77`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
@@ -381,13 +381,13 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout 05ecb42
+git checkout e59a445
 .\publish.ps1
 ```
 
-**SHA256 do artefato entregue (build 05ecb42):**
+**SHA256 do artefato entregue (build e59a445):**
 ```
-65507f1288142bb4f7ca1495a702f7f987563b65b5c9b5baeabdb758d6104e02
+3ab448c4d6981b37e48749e7a38005ce24e8bd655b6b3a7ed819336ed60e1a77
 ```
 
 **Nota:** Este hash identifica o artefato `EchoNerfados.exe` entregue para QA — gerado em 2026-05-09. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` e fixar `SourceRevisionId` no `.csproj` (fora do escopo desta release).
@@ -396,7 +396,7 @@ git checkout 05ecb42
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build 05ecb42):**
+**O que está pronto e testável (build e59a445):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
@@ -413,7 +413,7 @@ git checkout 05ecb42
 - LNK parser suporta `LocalBasePathUnicode` (caminhos Unicode)
 - Amcache/ShimCache com linguagem forense calibrada ("presença/indício", não "execução confirmada")
 - BAM/DAM sem admin → PARCIAL com motivo (SecurityException capturada), nunca FALHOU
-- Amcache com admin → SeBackupPrivilege + SeRestorePrivilege + cópia de .LOG1/.LOG2 + fallback VSS via `vssadmin.exe` quando o hive estiver exclusivamente lockado pelo OS
+- Amcache com admin → SeBackupPrivilege + SeRestorePrivilege + cópia de .LOG1/.LOG2 + fallback VSS via WMI `Win32_ShadowCopy.Create` (sem dependência de `vssadmin.exe`) quando o hive estiver exclusivamente lockado pelo OS
 - `evidence.json` inclui `ModuleCoverage` (status, motivo, impacto forense de cada módulo)
 - CompatibilityAssistant → casting seguro de tipos registry variados (int/long/byte[]) sem InvalidCastException
 
@@ -421,4 +421,4 @@ git checkout 05ecb42
 
 ---
 
-*Relatório gerado em: 2026-05-09 | Build: 05ecb42 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-09 | Build: e59a445 | Echo Nerfados Shield XDR v1.0.0*
