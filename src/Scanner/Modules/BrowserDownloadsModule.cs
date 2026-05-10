@@ -54,11 +54,12 @@ public class BrowserDownloadsModule : BaseModule
     private static extern int sqlite3_close(IntPtr db);
 
     // ── URL domains considered safe for executable downloads ─────────────────
+    // Matched against Uri.Host (exact or parent-domain suffix), not substring.
 
     private static readonly string[] SafeDomains =
     [
         "microsoft.com",
-        "github.com/citizenfx",
+        "github.com",
         "cfx.re",
         "rockstargames.com",
         "epicgames.com",
@@ -67,25 +68,26 @@ public class BrowserDownloadsModule : BaseModule
         "discordapp.com",
         "discord.com",
         "mozilla.org",
-        "google.com/chrome",
+        "google.com",
         "visualstudio.com",
+        "nuget.org",
+        "dotnet.microsoft.com",
     ];
 
-    // URL fragments that indicate a suspicious cheat-related download origin
+    // URL path/host fragments that indicate a suspicious cheat-related download origin.
+    // Kept to specific identifiers — avoid generic terms that match legitimate content.
     private static readonly string[] SuspiciousUrlKeywords =
     [
         "foxee69",
         "echo-bypass-fivem",
         "batchgotadmin",
-        "cheat",
-        "hack",
-        "spoofer",
-        "eulen",
-        "redengine",
-        "gosth",
-        "farinha",
-        "cherax",
-        "susano",
+        "cheat-fivem",
+        "hack-fivem",
+        "spoofer-hwid",
+        "eulen.cc",
+        "redengine.",
+        "cherax.",
+        "susano.",
     ];
 
     // Executable-type extensions that are flagged if not from a safe domain
@@ -167,31 +169,44 @@ public class BrowserDownloadsModule : BaseModule
         return rows;
     }
 
+    // ── URL safe-domain helper ────────────────────────────────────────────────
+
+    /// <summary>
+    /// Returns true when the URL's registered host is in SafeDomains (exact match
+    /// or parent-domain suffix — e.g., "update.microsoft.com" passes "microsoft.com").
+    /// Uses Uri.Host to avoid substring false matches like "evil-microsoft.com".
+    /// </summary>
+    private static bool IsFromSafeDomain(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return false;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return false;
+        var host = uri.Host.ToLowerInvariant();
+        return SafeDomains.Any(safe =>
+            host == safe || host.EndsWith("." + safe, StringComparison.Ordinal));
+    }
+
     // ── Browser profile discovery ─────────────────────────────────────────────
 
     /// <summary>
-    /// Enumerates all browser history database paths for Chrome, Edge, Brave, and Opera.
-    /// Returns (browserName, historyPath) tuples for paths that exist on disk.
-    /// Expands "Profile *" glob patterns via Directory.GetDirectories.
+    /// Enumerates all browser history database paths for Chrome, Edge, Brave, Opera, and Firefox.
+    /// Returns (browserName, historyPath, isFirefox) tuples for paths that exist on disk.
     /// </summary>
-    private static IEnumerable<(string Browser, string HistoryPath)> GetBrowserProfiles()
+    private static IEnumerable<(string Browser, string HistoryPath, bool IsFirefox)> GetBrowserProfiles()
     {
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var appData      = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
 
         // Helper: yield Default + all Profile N sub-folders for a Chromium User Data root
-        IEnumerable<(string, string)> ChromiumProfiles(string browser, string userDataRoot)
+        IEnumerable<(string, string, bool)> ChromiumProfiles(string browser, string userDataRoot)
         {
-            // Default profile
             var def = Path.Combine(userDataRoot, "Default", "History");
-            if (File.Exists(def)) yield return (browser, def);
+            if (File.Exists(def)) yield return (browser, def, false);
 
-            // Named profiles: "Profile 1", "Profile 2", etc.
             if (!Directory.Exists(userDataRoot)) yield break;
             foreach (var dir in Directory.GetDirectories(userDataRoot, "Profile *"))
             {
                 var p = Path.Combine(dir, "History");
-                if (File.Exists(p)) yield return (browser, p);
+                if (File.Exists(p)) yield return (browser, p, false);
             }
         }
 
@@ -207,9 +222,23 @@ public class BrowserDownloadsModule : BaseModule
             Path.Combine(localAppData, "BraveSoftware", "Brave-Browser", "User Data")))
             yield return t;
 
-        // Opera uses a flat profile (no "User Data" sub-dir with multiple profiles)
         var opera = Path.Combine(appData, "Opera Software", "Opera Stable", "History");
-        if (File.Exists(opera)) yield return ("Opera", opera);
+        if (File.Exists(opera)) yield return ("Opera", opera, false);
+
+        // Firefox: enumerate all profiles in %APPDATA%\Mozilla\Firefox\Profiles\
+        var ffProfiles = Path.Combine(appData, "Mozilla", "Firefox", "Profiles");
+        if (Directory.Exists(ffProfiles))
+        {
+            string[] ffDirs;
+            try { ffDirs = Directory.GetDirectories(ffProfiles); }
+            catch { ffDirs = []; }
+
+            foreach (var dir in ffDirs)
+            {
+                var places = Path.Combine(dir, "places.sqlite");
+                if (File.Exists(places)) yield return ("Firefox", places, true);
+            }
+        }
     }
 
     // ── Module entry point ────────────────────────────────────────────────────
@@ -218,11 +247,11 @@ public class BrowserDownloadsModule : BaseModule
     {
         var findings = new List<Finding>();
 
-        // Cutoff: 60-day lookback expressed as a WebKit timestamp
-        var cutoffWebKit = DateTimeToWebKit(DateTime.UtcNow.AddDays(-60));
+        var lookbackDays = (int)config.EventWindowLookback.TotalDays;
+        var cutoffWebKit = DateTimeToWebKit(DateTime.UtcNow.AddDays(-lookbackDays));
 
-        // SQL query for the Chromium downloads table
-        var sql = $"""
+        // Chromium downloads table query
+        var chromiumSql = $"""
             SELECT target_path, tab_url, referrer, start_time, state, received_bytes, mime_type
             FROM downloads
             WHERE start_time > {cutoffWebKit}
@@ -230,13 +259,25 @@ public class BrowserDownloadsModule : BaseModule
             LIMIT 500
             """;
 
+        // Firefox places.sqlite: downloads stored in moz_annos (destination URI annotation)
+        var firefoxSql = """
+            SELECT p.url, a.content, a.dateAdded
+            FROM moz_places p
+            JOIN moz_annos a ON a.place_id = p.id
+            JOIN moz_anno_attributes attr ON attr.id = a.anno_attribute_id
+            WHERE attr.name = 'downloads/destinationFileURI'
+            ORDER BY a.dateAdded DESC
+            LIMIT 500
+            """;
+
         await Task.Run(() =>
         {
-            foreach (var (browser, historyPath) in GetBrowserProfiles())
+            foreach (var (browser, historyPath, isFirefox) in GetBrowserProfiles())
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                AnalyzeBrowserHistory(browser, historyPath, sql, findings);
+                var sql = isFirefox ? firefoxSql : chromiumSql;
+                AnalyzeBrowserHistory(browser, historyPath, sql, isFirefox, findings);
             }
         }, cancellationToken);
 
@@ -246,26 +287,32 @@ public class BrowserDownloadsModule : BaseModule
     // ── Per-profile analysis ──────────────────────────────────────────────────
 
     /// <summary>
-    /// Copies the SQLite history file to a temp path (avoids locking the live DB),
+    /// Copies the SQLite history file via CopyLockedFile (VSS-backed, handles open browsers),
     /// queries it, and analyses each download row for suspicious indicators.
     /// </summary>
     private void AnalyzeBrowserHistory(
-        string browser, string historyPath, string sql, List<Finding> findings)
+        string browser, string historyPath, string sql, bool isFirefox, List<Finding> findings)
     {
-        var tmpPath = Path.Combine(Path.GetTempPath(), $"echo_brdl_{Guid.NewGuid():N}.tmp");
+        var tmpPath = CopyLockedFile(historyPath);
+        if (tmpPath == null)
+        {
+            LogPartialError($"Browser Downloads — {browser}: não foi possível copiar histórico ({historyPath})");
+            return;
+        }
 
         try
         {
-            // Copy to temp so we don't lock the live browser file
-            File.Copy(historyPath, tmpPath, overwrite: true);
-
-            var rows = QueryDb(tmpPath, sql, cols: 7);
+            var cols = isFirefox ? 3 : 7;
+            var rows = QueryDb(tmpPath, sql, cols);
 
             foreach (var row in rows)
             {
-                if (row.Length < 7) continue;
+                if (row.Length < cols) continue;
 
-                AnalyzeDownloadRow(browser, row, findings);
+                if (isFirefox)
+                    AnalyzeFirefoxRow(browser, row, findings);
+                else
+                    AnalyzeDownloadRow(browser, row, findings);
             }
         }
         catch (Exception ex)
@@ -274,8 +321,82 @@ public class BrowserDownloadsModule : BaseModule
         }
         finally
         {
-            // Always clean up the temp copy
             try { if (File.Exists(tmpPath)) File.Delete(tmpPath); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// Analyses a single Firefox download row (url, destinationFileURI, dateAdded).
+    /// Firefox stores the destination as a file:// URI; we extract the local path from it.
+    /// </summary>
+    private void AnalyzeFirefoxRow(string browser, string[] row, List<Finding> findings)
+    {
+        var tabUrl       = row[0] ?? string.Empty;
+        var destUri      = row[1] ?? string.Empty;
+        var dateAddedRaw = row[2] ?? "0";
+
+        // Convert file:// URI to local path
+        string targetPath;
+        try
+        {
+            targetPath = Uri.TryCreate(destUri, UriKind.Absolute, out var uri) && uri.IsFile
+                ? uri.LocalPath
+                : destUri;
+        }
+        catch { targetPath = destUri; }
+
+        DateTime? startTime = null;
+        if (long.TryParse(dateAddedRaw, out var usec) && usec > 0)
+            startTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                .AddMicroseconds(usec).ToLocalTime();
+
+        // Re-use the Chromium row analyser by constructing a compatible row
+        var syntheticRow = new[] { targetPath, tabUrl, string.Empty, "0", "0", "0", string.Empty };
+        // Override timestamp via direct analysis
+        AnalyzeFirefoxEntry(browser, targetPath, tabUrl, startTime, findings);
+    }
+
+    private void AnalyzeFirefoxEntry(
+        string browser, string targetPath, string tabUrl, DateTime? startTime, List<Finding> findings)
+    {
+        var fileName = Path.GetFileName(targetPath).ToLowerInvariant();
+        var ext      = Path.GetExtension(fileName).ToLowerInvariant();
+        var urlLower = tabUrl.ToLowerInvariant();
+
+        if (CheatDatabase.HasSuspiciousKeyword(fileName) || CheatDatabase.HasSuspiciousKeyword(targetPath))
+        {
+            findings.Add(new Finding(
+                RiskLevel.High, FindingCategory.Cheat, Name,
+                $"Download suspeito — nome de arquivo: {fileName} ({browser})",
+                $"Arquivo com nome suspeito baixado pelo {browser}.\nArquivo: {targetPath}\nURL: {tabUrl}",
+                $"URL: {tabUrl} | Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}",
+                timestamp: startTime, confidence: Confidence.Medium,
+                ruleId: $"BROWSER_DL_SUSPICIOUS_NAME_{fileName.ToUpperInvariant()}",
+                entity: targetPath));
+        }
+
+        var matchedKw = SuspiciousUrlKeywords.FirstOrDefault(kw => urlLower.Contains(kw));
+        if (matchedKw != null)
+        {
+            findings.Add(new Finding(
+                RiskLevel.High, FindingCategory.Cheat, Name,
+                $"Download com URL suspeita ({browser}): {fileName}",
+                $"Arquivo baixado de URL associada a cheats.\nArquivo: {targetPath}\nURL: {tabUrl}\nIndicador: '{matchedKw}'",
+                $"URL: {tabUrl} | Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}",
+                timestamp: startTime, confidence: Confidence.Medium,
+                ruleId: "BROWSER_DL_SUSPICIOUS_URL", entity: targetPath));
+        }
+
+        if (ExecExtensions.Contains(ext) && !IsFromSafeDomain(tabUrl))
+        {
+            findings.Add(new Finding(
+                RiskLevel.Medium, FindingCategory.SuspiciousExecution, Name,
+                $"Download de executável de fonte não verificada ({browser}): {fileName}",
+                $"Arquivo executável baixado de origem não listada como segura.\nArquivo: {targetPath}\nURL: {tabUrl}",
+                $"URL: {tabUrl} | Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}",
+                timestamp: startTime, confidence: Confidence.Low,
+                ruleId: $"BROWSER_DL_EXEC_{ext.TrimStart('.').ToUpperInvariant()}",
+                entity: targetPath));
         }
     }
 
@@ -342,7 +463,7 @@ public class BrowserDownloadsModule : BaseModule
 
         // ── Condition C: executable from untrusted source ─────────────────────
         if (ExecExtensions.Contains(ext) &&
-            !SafeDomains.Any(domain => urlLower.Contains(domain)))
+            !IsFromSafeDomain(tabUrl) && !IsFromSafeDomain(referrer))
         {
             findings.Add(new Finding(
                 RiskLevel.Medium,

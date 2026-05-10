@@ -15,10 +15,9 @@ namespace BypassNerfados.Scanner.Modules;
 public class RecycleBinModule : BaseModule
 {
     public override string Name        => "Recycle Bin";
-    public override string Description => "Arquivos deletados — caminho original e data de deleção via $I (60 dias)";
+    public override string Description => "Arquivos deletados — caminho original e data de deleção via $I";
 
     private const string RecycleBinRoot = @"C:\$RECYCLE.BIN\";
-    private const int    LookbackDays   = 60;
 
     // Extensões executáveis que disparam análise por caminho suspeito
     private static readonly HashSet<string> ExecutableExtensions =
@@ -48,7 +47,7 @@ public class RecycleBinModule : BaseModule
             return findings;
         }
 
-        var cutoff = DateTime.Now.AddDays(-LookbackDays);
+        var cutoff = DateTime.Now - config.EventWindowLookback;
 
         foreach (var sidDir in sidDirs)
         {

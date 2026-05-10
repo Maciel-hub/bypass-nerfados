@@ -36,7 +36,8 @@ public class SystemTamperingModule : BaseModule
         "shell.application",
         "bypasscpucheck",
         "bypasstpmcheck",
-        "bypasstaoragecheck",   // intentional spelling from spec (matches BypassStorageCheck typos)
+        "bypassstoragecheck",   // correct Windows spelling
+        "bypasstaoragecheck",   // known typo variant found in bypass scripts
         "bypassramcheck",
         "bypasssecurebootcheck",
         "allowupgradeswithunsupportedtpmorcpu",
@@ -277,14 +278,14 @@ public class SystemTamperingModule : BaseModule
             FindingCategory.SystemTampering,
             Name,
             isBatchGotAdmin
-                ? $"BATCHGOTADMIN EXECUTADO: {Path.GetFileName(filePath)}"
+                ? $"BATCHGOTADMIN DETECTADO: {Path.GetFileName(filePath)}"
                 : $"Script com indicadores de adulteração: {Path.GetFileName(filePath)}",
             detail,
             $"SHA256: {sha256} | Tamanho: {fileSize} bytes | " +
             $"Modificado: {lastWrite:yyyy-MM-dd HH:mm:ss}",
             timestamp: lastWrite,
             confidence: isBatchGotAdmin ? Confidence.High : Confidence.Medium,
-            ruleId: isBatchGotAdmin ? "SCRIPT_BATCHGOTADMIN_EXECUTED" : "SCRIPT_TAMPERING_DETECTED",
+            ruleId: isBatchGotAdmin ? "SCRIPT_BATCHGOTADMIN_PRESENT" : "SCRIPT_TAMPERING_DETECTED",
             entity: filePath
         ));
     }

@@ -37,6 +37,14 @@ public class ExternalToolResidueModule : BaseModule
             "DUMPCAP", "TSHARK",
             "MEMORIZE", "RAMMAP64", "VMMAP64",
             "USBDEVIEW", "NIRSOFT",
+            // Nirsoft forensic viewers
+            "LASTACTIVITYVIEW", "WINPREFETCHVIEW", "SHELLBAGSVIEW",
+            "BROWSINGHISTORYVIEW", "USBLOGVIEW", "VOLUMESSHADOWCOPYVIEW",
+            "JUMPLISTSVIEW", "RECENTFILESVIEW",
+            // Journal / BAM parsers
+            "JOURNALTRACE", "BAMPARSER", "BAMVIEW",
+            // Path analysis
+            "PATHPARSER", "PATHANALYZER",
         };
 
     // Executáveis cujos caminhos de disco são inspecionados em locais sensíveis

@@ -47,6 +47,7 @@ public class JumpListsModule : BaseModule
         {
             if (Directory.Exists(autoDestDir))
             {
+                var inaccessible = 0;
                 foreach (var file in Directory.EnumerateFiles(
                              autoDestDir, "*.automaticDestinations-ms"))
                 {
@@ -55,8 +56,10 @@ public class JumpListsModule : BaseModule
 
                     try { AnalyzeDestinationFile(file, findings, seen, ct); }
                     catch (OperationCanceledException) { throw; }
-                    catch { /* silently skip corrupt or inaccessible files */ }
+                    catch { inaccessible++; }
                 }
+                if (inaccessible > 0)
+                    LogPartialError($"Jump Lists — {inaccessible} AutomaticDestinations inacessível(is)");
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -65,7 +68,6 @@ public class JumpListsModule : BaseModule
             LogPartialError("Jump Lists — erro ao enumerar AutomaticDestinations", ex);
         }
 
-        // CustomDestinations — populated by applications via ICustomDestinationList
         var customDestDir = Path.Combine(
             appData,
             @"Microsoft\Windows\Recent\CustomDestinations");
@@ -74,6 +76,7 @@ public class JumpListsModule : BaseModule
         {
             if (Directory.Exists(customDestDir))
             {
+                var inaccessible = 0;
                 foreach (var file in Directory.EnumerateFiles(
                              customDestDir, "*.customDestinations-ms"))
                 {
@@ -82,8 +85,10 @@ public class JumpListsModule : BaseModule
 
                     try { AnalyzeDestinationFile(file, findings, seen, ct); }
                     catch (OperationCanceledException) { throw; }
-                    catch { /* silently skip corrupt or inaccessible files */ }
+                    catch { inaccessible++; }
                 }
+                if (inaccessible > 0)
+                    LogPartialError($"Jump Lists — {inaccessible} CustomDestinations inacessível(is)");
             }
         }
         catch (OperationCanceledException) { throw; }

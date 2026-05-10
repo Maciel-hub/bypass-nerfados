@@ -182,7 +182,7 @@ public class TimelineInvestigationModule : BaseModule
         try
         {
             foreach (var file in Directory.EnumerateFiles(downloadsDir, "*",
-                new EnumerationOptions { IgnoreInaccessible = true, MaxRecursionDepth = 2 }))
+                new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = true, MaxRecursionDepth = 2 }))
             {
                 ct.ThrowIfCancellationRequested();
 
@@ -223,7 +223,7 @@ public class TimelineInvestigationModule : BaseModule
         try
         {
             foreach (var file in Directory.EnumerateFiles(tempDir, "*",
-                new EnumerationOptions { IgnoreInaccessible = true, MaxRecursionDepth = 1 }))
+                new EnumerationOptions { IgnoreInaccessible = true, RecurseSubdirectories = true, MaxRecursionDepth = 1 }))
             {
                 ct.ThrowIfCancellationRequested();
 

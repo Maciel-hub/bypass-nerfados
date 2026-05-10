@@ -78,27 +78,12 @@ public class NvidiaArtifactsModule : BaseModule
                 var fileName   = fi.Name;
                 var ageInDays  = (DateTime.Now - lastWrite).TotalDays;
 
-                // Emite se modificado nos últimos 60 dias — confirma uso recente de GPU
-                if (ageInDays <= 60)
-                {
-                    findings.Add(new Finding(
-                        RiskLevel.Medium,
-                        FindingCategory.SuspiciousExecution,
-                        Name,
-                        "NVIDIA: nvAppTimestamps modificado recentemente",
-                        "O arquivo nvAppTimestamps registra a última vez que cada aplicativo utilizou a GPU " +
-                        "e é atualizado toda vez que qualquer app acessa a placa. " +
-                        $"Modificado há {ageInDays:F0} dias — correlacionar com sessão FiveM.",
-                        evidence:    $"Arquivo: {filePath} | LastWriteTime: {lastWrite:dd/MM/yyyy HH:mm:ss}",
-                        timestamp:   lastWrite,
-                        confidence:  Confidence.Medium,
-                        ruleId:      "NVIDIA_TIMESTAMPS_MODIFIED",
-                        entity:      fileName
-                    ));
-                }
-
                 // Extrai strings UTF-16 do binário e verifica cheats
-                ExtractAndFlagCheatStrings(findings, filePath, fileName);
+                // Nota: não emitimos finding só pela data de modificação — nvAppTimestamps
+                // é atualizado por qualquer app que use GPU e dispararia em todo PC com NVIDIA.
+                // Apenas High é emitido quando strings suspeitas são encontradas no binário.
+                if (ageInDays <= 60)
+                    ExtractAndFlagCheatStrings(findings, filePath, fileName);
             }
             catch (Exception ex)
             {
@@ -236,41 +221,23 @@ public class NvidiaArtifactsModule : BaseModule
 
                 if (ageInDays > 7) continue;
 
-                if (hasRecentTimestamps)
-                {
-                    // Atualização recente dos perfis de driver junto com timestamps suspeitos
-                    findings.Add(new Finding(
-                        RiskLevel.Medium,
-                        FindingCategory.SuspiciousExecution,
-                        Name,
-                        "NVIDIA: banco de perfis DRS atualizado recentemente",
-                        "O arquivo nvdrsdb*.bin armazena perfis de driver por aplicativo e foi modificado " +
-                        $"há {ageInDays:F0} dias. Combinado com nvAppTimestamps recente, sugere atividade " +
-                        "de GPU próxima à sessão investigada. Correlacionar com timestamps FiveM.",
-                        evidence:   $"Arquivo: {filePath} | LastWriteTime: {lastWrite:dd/MM/yyyy HH:mm:ss}",
-                        timestamp:  lastWrite,
-                        confidence: Confidence.Low,
-                        ruleId:     "NVIDIA_DRSDB_RECENT",
-                        entity:     fi.Name
-                    ));
-                }
-                else
-                {
-                    findings.Add(new Finding(
-                        RiskLevel.Info,
-                        FindingCategory.FileSystem,
-                        Name,
-                        "NVIDIA: nvdrsdb*.bin modificado recentemente (sem nvAppTimestamps recente)",
-                        "O banco de perfis de driver NVIDIA foi atualizado recentemente. " +
-                        $"Arquivo modificado há {ageInDays:F0} dias. " +
-                        "Correlacionar com sessão FiveM para determinar relevância.",
-                        evidence:   $"Arquivo: {filePath} | LastWriteTime: {lastWrite:dd/MM/yyyy HH:mm:ss}",
-                        timestamp:  lastWrite,
-                        confidence: Confidence.Low,
-                        ruleId:     "NVIDIA_DRSDB_INFO",
-                        entity:     fi.Name
-                    ));
-                }
+                // Emitimos Info para cobertura — sozinho não é indicador de cheat.
+                // Apenas escalamos quando strings suspeitas forem encontradas no nvAppTimestamps.
+                _ = hasRecentTimestamps; // capturado para possível correlação futura
+                findings.Add(new Finding(
+                    RiskLevel.Info,
+                    FindingCategory.FileSystem,
+                    Name,
+                    "NVIDIA: nvdrsdb*.bin modificado recentemente",
+                    "O banco de perfis de driver NVIDIA foi atualizado recentemente. " +
+                    $"Arquivo modificado há {ageInDays:F0} dias. " +
+                    "Correlacionar com sessão FiveM e strings suspeitas em nvAppTimestamps para escalação.",
+                    evidence:   $"Arquivo: {filePath} | LastWriteTime: {lastWrite:dd/MM/yyyy HH:mm:ss}",
+                    timestamp:  lastWrite,
+                    confidence: Confidence.Low,
+                    ruleId:     "NVIDIA_DRSDB_INFO",
+                    entity:     fi.Name
+                ));
             }
             catch (Exception ex)
             {

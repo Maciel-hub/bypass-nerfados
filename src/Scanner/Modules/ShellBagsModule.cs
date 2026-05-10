@@ -111,6 +111,7 @@ public class ShellBagsModule : BaseModule
         // Recurse into subkeys (each represents a subfolder level in the MRU tree)
         try
         {
+            var inaccessible = 0;
             foreach (var subKeyName in key.GetSubKeyNames())
             {
                 ct.ThrowIfCancellationRequested();
@@ -123,8 +124,10 @@ public class ShellBagsModule : BaseModule
                     ScanBagMruKey(sub, $@"{path}\{subKeyName}", findings, seen, depth + 1, ct);
                 }
                 catch (OperationCanceledException) { throw; }
-                catch { /* skip inaccessible subkey */ }
+                catch { inaccessible++; }
             }
+            if (inaccessible > 0)
+                LogPartialError($"ShellBags — {inaccessible} subkey(s) inacessível(is) em {path}");
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
@@ -156,8 +159,9 @@ public class ShellBagsModule : BaseModule
             var ruleId = $"SHELLBAG_SUSPICIOUS_{hash8}";
             if (!seen.Add(ruleId)) return;
 
+            // ShellBags have no timestamp — Medium until correlated with Prefetch/BAM/USN
             findings.Add(new Finding(
-                RiskLevel.High,
+                RiskLevel.Medium,
                 FindingCategory.RegistryArtifact,
                 "ShellBags",
                 $"ShellBag — pasta suspeita navegada: {Path.GetFileName(extractedPath)}",
@@ -167,7 +171,7 @@ public class ShellBagsModule : BaseModule
                 confidence: Confidence.Medium,
                 ruleId: ruleId,
                 entity: extractedPath,
-                validationHint: "ShellBags registram navegação mesmo após deleção da pasta — correlacionar com USN Journal e Prefetch"
+                validationHint: "ShellBags não têm timestamp — correlacionar com Prefetch/BAM/USN Journal para escalação de risco"
             ));
             return;
         }

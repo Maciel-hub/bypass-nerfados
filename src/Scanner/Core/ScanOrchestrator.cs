@@ -233,7 +233,7 @@ public class ScanOrchestrator
         Queue(new RecycleBinModule(),          "Lixeira — caminho original e data de deleção de arquivos suspeitos");
         Queue(new TimelineInvestigationModule(), "Linha do tempo unificada — Prefetch, BAM, LNK, Downloads, Temp");
 
-        Queue(new SrumModule(), "Uso de rede/CPU por processo via SRUDB.dat (~30-60 dias)");
+        Queue(new SrumModule(), "Uso de rede por processo via SRUDB.dat (~30-60 dias)");
 
         if (_result.IsAdministrator)
         {

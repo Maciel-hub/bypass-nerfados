@@ -10,7 +10,7 @@ namespace BypassNerfados.Scanner.Modules;
 public class SrumModule : BaseModule
 {
     public override string Name        => "SRUM";
-    public override string Description => "Uso de rede/CPU por processo (~30-60 dias) via SRUDB.dat";
+    public override string Description => "Uso de rede por processo (~30-60 dias) via SRUDB.dat";
 
     private const string SruDir  = @"C:\Windows\System32\sru";
     private const string SruDb   = "SRUDB.dat";
@@ -64,21 +64,47 @@ public class SrumModule : BaseModule
 
     private void CopySruDir(string src, string dst)
     {
+        var skipped = new List<string>();
         try
         {
             foreach (var file in Directory.GetFiles(src))
             {
-                try
+                var dstFile = Path.Combine(dst, Path.GetFileName(file));
+                var copied  = false;
+
+                // Use CopyLockedFile (VSS-backed) for SRUDB.dat — it may be locked by SruUsageSvc
+                if (string.Equals(Path.GetFileName(file), SruDb, StringComparison.OrdinalIgnoreCase))
                 {
-                    using var s = new FileStream(file, FileMode.Open, FileAccess.Read,
-                        FileShare.ReadWrite | FileShare.Delete);
-                    using var d = File.Create(Path.Combine(dst, Path.GetFileName(file)));
-                    s.CopyTo(d);
+                    var vssTemp = CopyLockedFile(file);
+                    if (vssTemp != null)
+                    {
+                        try { File.Move(vssTemp, dstFile, overwrite: true); copied = true; }
+                        catch { try { File.Delete(vssTemp); } catch { } }
+                    }
                 }
-                catch { /* skip individual files that can't be copied */ }
+
+                // Fallback (log files and failed VSS): permissive FileStream copy
+                if (!copied)
+                {
+                    try
+                    {
+                        using var s = new FileStream(file, FileMode.Open, FileAccess.Read,
+                            FileShare.ReadWrite | FileShare.Delete);
+                        using var d = File.Create(dstFile);
+                        s.CopyTo(d);
+                        copied = true;
+                    }
+                    catch { }
+                }
+
+                if (!copied)
+                    skipped.Add(Path.GetFileName(file));
             }
         }
-        catch (Exception ex) { LogPartialError("Falha ao copiar arquivos SRU", ex); }
+        catch (Exception ex) { LogPartialError("SRUM: falha ao enumerar arquivos SRU", ex); }
+
+        if (skipped.Count > 0)
+            LogPartialError($"SRUM: {skipped.Count} arquivo(s) SRU não copiado(s): {string.Join(", ", skipped)}");
     }
 
     // Attempts to open and read SRUDB.dat with the given page size.

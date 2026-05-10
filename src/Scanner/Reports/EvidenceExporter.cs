@@ -38,11 +38,23 @@ public static class EvidenceExporter
         WriteModuleJson(result, runFolder, "Services",            "services_60d.json",     lookback);
 
         // Artifact-trail modules: no event-log coverage backing; coverage estimated from findings
-        WriteModuleJson(result, runFolder, "Amcache",             "amcache_60d.json",      lookback);
-        WriteModuleJson(result, runFolder, "UserAssist",          "userassist_60d.json",   lookback);
-        WriteModuleJson(result, runFolder, "ShimCache",           "shimcache_60d.json",    lookback);
-        WriteModuleJson(result, runFolder, "LNK Recent",            "lnk_60d.json",                    lookback);
-        WriteModuleJson(result, runFolder, "RegistryPersistence",  "registrypersistence_60d.json",    lookback);
+        WriteModuleJson(result, runFolder, "Amcache",               "amcache_60d.json",               lookback);
+        WriteModuleJson(result, runFolder, "UserAssist",            "userassist_60d.json",            lookback);
+        WriteModuleJson(result, runFolder, "ShimCache",             "shimcache_60d.json",             lookback);
+        WriteModuleJson(result, runFolder, "LNK Recent",            "lnk_60d.json",                  lookback);
+        WriteModuleJson(result, runFolder, "RegistryPersistence",   "registrypersistence_60d.json",  lookback);
+
+        // P0/P1/P2 modules — always exported even if empty
+        WriteModuleJson(result, runFolder, "System Reset/Restore",  "systemreset_60d.json",          lookback);
+        WriteModuleJson(result, runFolder, "System Tampering",      "systemtampering_60d.json",      lookback);
+        WriteModuleJson(result, runFolder, "Browser Downloads",     "browserdownloads_60d.json",     lookback);
+        WriteModuleJson(result, runFolder, "ShellBags",             "shellbags_60d.json",            lookback);
+        WriteModuleJson(result, runFolder, "Jump Lists",            "jumplists_60d.json",            lookback);
+        WriteModuleJson(result, runFolder, "NVIDIA Artifacts",      "nvidia_60d.json",               lookback);
+        WriteModuleJson(result, runFolder, "External Tool Residue", "externaltools_60d.json",        lookback);
+        WriteModuleJson(result, runFolder, "Recycle Bin",           "recyclebin_60d.json",           lookback);
+        WriteModuleJson(result, runFolder, "Timeline",              "timeline_60d.json",             lookback);
+        WriteModuleJson(result, runFolder, "SRUM",                  "srum_60d.json",                 lookback);
     }
 
     private static void WriteModuleJson(
