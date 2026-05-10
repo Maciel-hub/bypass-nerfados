@@ -120,7 +120,7 @@ public class UserAssistModule : BaseModule
         {
             var wasGeneric = CheatDatabase.KnownExecutables[fileName].IsGenericName;
             return wasGeneric
-                ? (RiskLevel.Medium, Confidence.Low, cheat.Name)
+                ? (RiskLevel.Medium, Confidence.Low, null)  // use fileName in title, not cheat name
                 : (RiskLevel.High, Confidence.High, cheat.Name);
         }
         if (CheatDatabase.IsKnownCheatExecutable(fileName))

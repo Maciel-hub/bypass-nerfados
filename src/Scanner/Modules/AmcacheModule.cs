@@ -109,8 +109,10 @@ public class AmcacheModule : BaseModule
         if (cheatEntry != null)
         {
             var wasGeneric = CheatDatabase.KnownExecutables[fileName].IsGenericName;
+            // Generic entries use null label so the title shows the filename, not the cheat name.
+            // "GOSTH Loader (dxsetup)" in the title is misleading without a hash/path-specific match.
             return wasGeneric
-                ? (RiskLevel.Medium, Confidence.Low, cheatEntry.Name)
+                ? (RiskLevel.Medium, Confidence.Low, null)
                 : (RiskLevel.High, Confidence.High, cheatEntry.Name);
         }
         if (CheatDatabase.IsKnownCheatExecutable(fileName))

@@ -164,7 +164,7 @@ public class ShimCacheModule : BaseModule
         {
             var wasGeneric = CheatDatabase.KnownExecutables[fileName].IsGenericName;
             return wasGeneric
-                ? (RiskLevel.Medium, Confidence.Low, cheat.Name)
+                ? (RiskLevel.Medium, Confidence.Low, null)  // use fileName in title, not cheat name
                 : (RiskLevel.High, Confidence.High, cheat.Name);
         }
         if (CheatDatabase.IsKnownCheatExecutable(fileName))
@@ -182,12 +182,10 @@ public class ShimCacheModule : BaseModule
         return (RiskLevel.Info, Confidence.Low, null);
     }
 
-    // PE extensions that ShimCache records; used to find the end of a valid path.
-    private static readonly string[] _peExtensions = [".exe", ".dll", ".sys", ".drv", ".scr", ".com"];
-
     // Strips leading garbage before the drive letter, removes embedded nulls, and
-    // truncates at the end of the last recognized PE extension so that Unicode characters
-    // appended after the extension (e.g. "cmd.exe[ᙣ額ꫨ...]") are discarded.
+    // truncates right after the last valid file extension (any dot + 1–6 ASCII-alnum chars).
+    // This handles both PE extensions (.exe, .dll) and installer temps (.tmp, .msi, etc.)
+    // and removes Unicode garbage that the ShimCache binary parsers sometimes append.
     private static string? SanitizePath(string raw)
     {
         if (string.IsNullOrEmpty(raw)) return null;
@@ -211,28 +209,30 @@ public class ShimCacheModule : BaseModule
         var nullIdx = path.IndexOf('\0');
         if (nullIdx >= 0) path = path[..nullIdx];
 
-        // Truncate at the end of the last known PE extension.
-        // This removes any garbage Unicode chars appended after ".exe" etc.
-        // LastIndexOf searches right-to-left so overlapping extensions (foo.exe.dll) keep the last.
-        var truncated = false;
-        foreach (var ext in _peExtensions)
+        // Scan right-to-left for the rightmost dot followed by 1–6 ASCII-alnum chars.
+        // Truncate there so garbage after the extension (including Unicode codepoints) is dropped.
+        // Example: "cmd.exe[糃竬죩]" → finds ".exe", truncates to "cmd.exe".
+        // Example: "setup.tmp[糃竬죩]" → finds ".tmp", truncates to "setup.tmp".
+        for (var i = path.Length - 1; i >= 1; i--)
         {
-            var extIdx = path.LastIndexOf(ext, StringComparison.OrdinalIgnoreCase);
-            if (extIdx >= 0)
+            if (path[i] != '.') continue;
+
+            var extStart = i + 1;
+            var extLen = 0;
+            while (extStart + extLen < path.Length && extLen < 7)
             {
-                path = path[..(extIdx + ext.Length)];
-                truncated = true;
+                var c = path[extStart + extLen];
+                if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))
+                    extLen++;
+                else
+                    break;
+            }
+
+            if (extLen >= 1 && extLen <= 6)
+            {
+                path = path[..(i + 1 + extLen)];
                 break;
             }
-        }
-
-        if (!truncated)
-        {
-            // No recognized extension — fall back to stripping trailing control chars only
-            var trimLen = path.Length;
-            while (trimLen > 0 && path[trimLen - 1] < ' ')
-                trimLen--;
-            path = path[..trimLen];
         }
 
         return path.Length >= 4 ? path : null;
