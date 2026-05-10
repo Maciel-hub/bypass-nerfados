@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+6cfbc4c  
-**Build:** 6cfbc4c (2026-05-09) — fix: classificação centralizada de nomes genéricos + redução FP cross-module  
+**Versão:** 1.0.0+9736a1b  
+**Build:** 9736a1b (2026-05-09) — fix: ShimCache truncagem em extension, VS Code/CitizenFX/FiveM FPs cross-module  
 **Arquivo:** `publish\EchoNerfados.exe`  
-**SHA256:** `10fef4e85041a74267d0df9dde67d5d4862e7e336f210fccb216b48f360105e8`  
+**SHA256:** `d5d48d14704096588199f2e73be0ac4e36480875ec9c386d07bfb7b50d232aa2`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
