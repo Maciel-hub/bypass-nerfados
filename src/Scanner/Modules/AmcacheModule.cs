@@ -102,21 +102,19 @@ public class AmcacheModule : BaseModule
 
     private static (RiskLevel, Confidence, string?) ClassifyAmcacheEntry(string fileName, string path, string publisher)
     {
-        // Known cheat executable name → High confidence
-        if (CheatDatabase.IsKnownCheatExecutable(fileName))
+        // Known cheat executable name — use centralized credibility check.
+        // TryGetCredibleCheat returns null for generic names (launcher.exe, dxsetup.exe)
+        // when the path does not match a known cheat install location.
+        var cheatEntry = CheatDatabase.TryGetCredibleCheat(fileName, path);
+        if (cheatEntry != null)
         {
-            var entry = CheatDatabase.KnownExecutables[fileName];
-            if (entry.IsGenericName)
-            {
-                // Generic name (launcher.exe, dxsetup.exe): only flag when path matches a known
-                // cheat install location. In any other location it's almost certainly legitimate.
-                var pathLower = path.ToLowerInvariant();
-                var pathMatch = entry.KnownPaths.Any(p => pathLower.Contains(p.ToLowerInvariant()));
-                if (!pathMatch) return (RiskLevel.Info, Confidence.Low, null);
-                return (RiskLevel.Medium, Confidence.Low, entry.Name);
-            }
-            return (RiskLevel.High, Confidence.High, entry.Name);
+            var wasGeneric = CheatDatabase.KnownExecutables[fileName].IsGenericName;
+            return wasGeneric
+                ? (RiskLevel.Medium, Confidence.Low, cheatEntry.Name)
+                : (RiskLevel.High, Confidence.High, cheatEntry.Name);
         }
+        if (CheatDatabase.IsKnownCheatExecutable(fileName))
+            return (RiskLevel.Info, Confidence.Low, null); // generic name, wrong path — suppress
 
         // Known cheat DLL
         if (CheatDatabase.IsKnownCheatDll(fileName))

@@ -57,15 +57,18 @@ public class RegistryArtifactsModule : BaseModule
                 if (IsOwnProcess(fileName)) continue;
                 if (CheatDatabase.IsKnownLegitimate(fileName) || CheatDatabase.IsKnownLegitimate(valueName)) continue;
 
-                if (CheatDatabase.KnownExecutables.TryGetValue(fileName, out var cheat))
+                var cheat = CheatDatabase.TryGetCredibleCheat(fileName, valueName);
+                if (cheat != null || (CheatDatabase.IsKnownCheatExecutable(fileName) && cheat == null))
                 {
-                    var confidence = cheat.IsGenericName ? Confidence.Low : Confidence.Medium;
-                    var risk       = cheat.IsGenericName ? RiskLevel.Medium : RiskLevel.High;
+                    if (cheat == null) continue; // generic name, path doesn't match — suppress
+                    var wasGeneric = CheatDatabase.KnownExecutables[fileName].IsGenericName;
+                    var confidence = wasGeneric ? Confidence.Low   : Confidence.Medium;
+                    var risk       = wasGeneric ? RiskLevel.Medium : RiskLevel.High;
                     findings.Add(new Finding(
                         risk,
                         FindingCategory.Cheat,
                         ModuleName,
-                        cheat.IsGenericName
+                        wasGeneric
                             ? $"Executável com nome de cheat na Store (baixa confiança): {fileName}"
                             : $"CHEAT NA STORE: {cheat.Name} ({fileName})",
                         $"Executável encontrado na chave PCA Store.\n{cheat.Description}",
@@ -73,7 +76,7 @@ public class RegistryArtifactsModule : BaseModule
                         confidence: confidence,
                         ruleId: $"STORE_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}",
                         entity: valueName,
-                        validationHint: cheat.IsGenericName ? "Confirmar por hash ou caminho típico do GOSTH" : null
+                        validationHint: wasGeneric ? "Confirmar por hash ou caminho típico do GOSTH" : null
                     ));
                     continue;
                 }
@@ -117,15 +120,18 @@ public class RegistryArtifactsModule : BaseModule
                 if (IsOwnProcess(fileName) || IsOwnProcess(exePath)) continue;
                 if (CheatDatabase.IsKnownLegitimate(fileName) || CheatDatabase.IsKnownLegitimate(exePath)) continue;
 
-                if (CheatDatabase.KnownExecutables.TryGetValue(fileName, out var cheat))
+                var cheat = CheatDatabase.TryGetCredibleCheat(fileName, exePath);
+                if (cheat != null || CheatDatabase.IsKnownCheatExecutable(fileName))
                 {
-                    var confidence = cheat.IsGenericName ? Confidence.Low : Confidence.Medium;
-                    var risk       = cheat.IsGenericName ? RiskLevel.Medium : RiskLevel.High;
+                    if (cheat == null) continue; // generic name, path doesn't match — suppress
+                    var wasGeneric = CheatDatabase.KnownExecutables[fileName].IsGenericName;
+                    var confidence = wasGeneric ? Confidence.Low   : Confidence.Medium;
+                    var risk       = wasGeneric ? RiskLevel.Medium : RiskLevel.High;
                     findings.Add(new Finding(
                         risk,
                         FindingCategory.Cheat,
                         ModuleName,
-                        cheat.IsGenericName
+                        wasGeneric
                             ? $"Executável com nome de cheat no MuiCache (baixa confiança): {fileName}"
                             : $"CHEAT NO MUICACHE: {cheat.Name} ({fileName})",
                         $"Executável registrado no MuiCache (confirma execução).\n{cheat.Description}",
@@ -133,7 +139,7 @@ public class RegistryArtifactsModule : BaseModule
                         confidence: confidence,
                         ruleId: $"MUICACHE_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}",
                         entity: exePath,
-                        validationHint: cheat.IsGenericName ? "Confirmar por hash ou caminho típico do GOSTH" : null
+                        validationHint: wasGeneric ? "Confirmar por hash ou caminho típico do GOSTH" : null
                     ));
                     continue;
                 }

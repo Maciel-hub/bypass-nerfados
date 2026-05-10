@@ -109,11 +109,18 @@ public class UserAssistModule : BaseModule
 
     private static (RiskLevel, Confidence, string?) ClassifyEntry(string fileName, string fullPath)
     {
-        if (CheatDatabase.IsKnownCheatExecutable(fileName))
+        // Use centralized credibility check: generic names require path match to be flagged.
+        var cheat = CheatDatabase.TryGetCredibleCheat(fileName, fullPath);
+        if (cheat != null)
         {
-            var e = CheatDatabase.KnownExecutables[fileName];
-            return (RiskLevel.High, Confidence.High, e.Name);
+            var wasGeneric = CheatDatabase.KnownExecutables[fileName].IsGenericName;
+            return wasGeneric
+                ? (RiskLevel.Medium, Confidence.Low, cheat.Name)
+                : (RiskLevel.High, Confidence.High, cheat.Name);
         }
+        if (CheatDatabase.IsKnownCheatExecutable(fileName))
+            return (RiskLevel.Info, Confidence.Low, null); // generic name, wrong path — suppress
+
         if (CheatDatabase.HasSuspiciousKeyword(fileName))
             return (RiskLevel.Medium, Confidence.Medium, null);
         if (CheatDatabase.IsSuspiciousPath(fullPath.ToLowerInvariant()))

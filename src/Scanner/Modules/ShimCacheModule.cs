@@ -104,7 +104,8 @@ public class ShimCacheModule : BaseModule
 
             if (dataLen <= 0 || pathLen <= 0 || offset + 14 + pathLen + 8 > data.Length) break;
 
-            var path = System.Text.Encoding.Unicode.GetString(data, offset + 14, pathLen);
+            var rawPath = System.Text.Encoding.Unicode.GetString(data, offset + 14, pathLen);
+            var path    = SanitizePath(rawPath);
 
             var ftOffset = offset + 14 + pathLen;
             DateTime? lastWrite = null;
@@ -114,7 +115,7 @@ public class ShimCacheModule : BaseModule
                 lastWrite = FileTimeToDateTime(ft);
             }
 
-            if (!string.IsNullOrEmpty(path))
+            if (path != null)
                 results.Add((path, lastWrite));
 
             // Advance: 4 (sig) + 4 (unk) + 4 (datalen) + 2 (pathlen) + pathlen + datalen remainder
@@ -148,12 +149,9 @@ public class ShimCacheModule : BaseModule
                 j += 2;
             }
 
-            var candidate = new string([.. chars]).Trim('\0', ' ');
-            if (candidate.Length >= 5 && candidate.Contains('\\') &&
-                !candidate.Contains('\0') && seen.Add(candidate))
-            {
+            var candidate = SanitizePath(new string([.. chars]));
+            if (candidate != null && seen.Add(candidate))
                 results.Add((candidate, null));
-            }
 
             i = j > i ? j : i + 2;
         }
@@ -161,11 +159,17 @@ public class ShimCacheModule : BaseModule
 
     private static (RiskLevel, Confidence, string?) ClassifyEntry(string fileName, string path)
     {
-        if (CheatDatabase.IsKnownCheatExecutable(fileName))
+        var cheat = CheatDatabase.TryGetCredibleCheat(fileName, path);
+        if (cheat != null)
         {
-            var e = CheatDatabase.KnownExecutables[fileName];
-            return (RiskLevel.High, Confidence.High, e.Name);
+            var wasGeneric = CheatDatabase.KnownExecutables[fileName].IsGenericName;
+            return wasGeneric
+                ? (RiskLevel.Medium, Confidence.Low, cheat.Name)
+                : (RiskLevel.High, Confidence.High, cheat.Name);
         }
+        if (CheatDatabase.IsKnownCheatExecutable(fileName))
+            return (RiskLevel.Info, Confidence.Low, null); // generic name, wrong path — suppress
+
         if (CheatDatabase.IsKnownCheatDll(fileName))
         {
             var e = CheatDatabase.KnownDlls[fileName];
@@ -176,5 +180,40 @@ public class ShimCacheModule : BaseModule
         if (CheatDatabase.IsSuspiciousPath(path.ToLowerInvariant()))
             return (RiskLevel.Medium, Confidence.Low, null);
         return (RiskLevel.Info, Confidence.Low, null);
+    }
+
+    // Strips leading garbage before the drive letter and trailing non-printable chars.
+    // ShimCache binary parsers can misalign and produce paths like "hC:\..." or
+    // "C:\foo.exe[garbage]"; this normalizes them or rejects obviously corrupt entries.
+    private static string? SanitizePath(string raw)
+    {
+        if (string.IsNullOrEmpty(raw)) return null;
+
+        // Find first valid drive letter followed by ":\"
+        var start = -1;
+        for (var i = 0; i < raw.Length - 2; i++)
+        {
+            if ((raw[i] is >= 'A' and <= 'Z' or >= 'a' and <= 'z')
+                && raw[i + 1] == ':' && raw[i + 2] == '\\')
+            {
+                start = i;
+                break;
+            }
+        }
+        if (start < 0) return null;
+
+        var path = raw[start..];
+
+        // Strip null terminators embedded in the string
+        var nullIdx = path.IndexOf('\0');
+        if (nullIdx >= 0) path = path[..nullIdx];
+
+        // Trim trailing control characters (common in fallback UTF-16 extraction)
+        var trimLen = path.Length;
+        while (trimLen > 0 && path[trimLen - 1] < ' ')
+            trimLen--;
+        path = path[..trimLen];
+
+        return path.Length >= 4 ? path : null; // at minimum "C:\x"
     }
 }

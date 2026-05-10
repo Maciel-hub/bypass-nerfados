@@ -92,7 +92,9 @@ public static class CheatDatabase
         "dusmsvc", "appinfo", "bam"
     ];
 
-    // Legitimate executable/path fragments — match suspicious keywords but are not cheats
+    // Legitimate executable/path fragments — match suspicious keywords but are not cheats.
+    // Checked via IsKnownLegitimate(path) where path is the full file path, so fragments
+    // should be distinct enough to avoid collision with cheat paths.
     private static readonly HashSet<string> _legitimatePatterns = new(StringComparer.OrdinalIgnoreCase)
     {
         // FiveM / CitizenFX official binaries
@@ -106,8 +108,8 @@ public static class CheatDatabase
         // Anti-cheat systems (legit)
         "easyanticheat", "battleye", "eac_setup",
 
-        // DirectX / Visual C++ redistributables (common in Amcache)
-        "dxwebsetup", "directx_", "vcredist", "windowsdesktop-runtime",
+        // DirectX / Visual C++ redistributables (common in Amcache/AppData)
+        "dxwebsetup", "directx_", "vcredist", "vc_redist", "windowsdesktop-runtime",
 
         // Comms / productivity
         "spotify", "discord", "steam", "onedrive", "googledrive",
@@ -122,7 +124,19 @@ public static class CheatDatabase
 
         // Security / AV (legit)
         "malwarebytes", "mbam", "avast", "avgui", "kaspersky", "eset",
-        "windowsdefender", "msseces",
+        "msseces",
+
+        // Windows Defender platform directory (mpcmdrun.exe, msmpeng.exe, nissrv.exe)
+        // Path: C:\ProgramData\Microsoft\Windows Defender\Platform\...
+        @"\windows defender\",
+
+        // Visual Studio Code internals (rg.exe, code-tunnel.exe, openconsole.exe, etc.)
+        // Path: AppData\Local\Programs\Microsoft VS Code\...
+        "microsoft vs code",
+
+        // .NET SDK / runtime / global tools in user profile hidden folder
+        // Path: C:\Users\<user>\.dotnet\...
+        @"\.dotnet\",
     };
 
     // Publisher name fragments that identify well-known legitimate vendors.
@@ -156,6 +170,18 @@ public static class CheatDatabase
 
     public static bool IsKnownCheatExecutable(string filename) =>
         KnownExecutables.ContainsKey(filename);
+
+    // Returns CheatInfo only when the match is credible for the given path.
+    // For IsGenericName entries (launcher.exe, dxsetup.exe), requires the path to match
+    // a known cheat install location; otherwise returns null to suppress the finding.
+    // This is the canonical entry point — all modules with a full path must use this.
+    public static CheatInfo? TryGetCredibleCheat(string fileName, string path)
+    {
+        if (!KnownExecutables.TryGetValue(fileName, out var entry)) return null;
+        if (!entry.IsGenericName) return entry;
+        var lower = path.ToLowerInvariant();
+        return entry.KnownPaths.Any(p => lower.Contains(p.ToLowerInvariant())) ? entry : null;
+    }
 
     public static bool IsKnownCheatDll(string filename) =>
         KnownDlls.ContainsKey(filename);
