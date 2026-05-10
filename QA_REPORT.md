@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+d56a45b  
-**Build:** d56a45b (2026-05-10) — fix: linguagem forense, GitHub allowlist por org, comentários CopyLockedFile  
+**Versão:** 1.0.0+94a8e6b  
+**Build:** 94a8e6b (2026-05-10) — fix: SrumModule remove referências a CPU e VSS; mensagem de erro de cópia corrigida  
 **Arquivo:** `publish\EchoNerfados.exe`  
-**SHA256:** `e90cbe8207dd6274bc5767d87201be7aa5555161ffdc914d9dbfaa5108c9712b`  
+**SHA256:** `a8bdc87dd09355833a631980d0c34e88635ccdfc959d4f09f9a2ff40ffad0281`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
@@ -392,13 +392,13 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout d56a45b
+git checkout 94a8e6b
 dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
 ```
 
-**SHA256 do artefato entregue para QA (build d56a45b — 2026-05-10):**
+**SHA256 do artefato entregue para QA (build 94a8e6b — 2026-05-10):**
 ```
-e90cbe8207dd6274bc5767d87201be7aa5555161ffdc914d9dbfaa5108c9712b
+a8bdc87dd09355833a631980d0c34e88635ccdfc959d4f09f9a2ff40ffad0281
 ```
 
 **Nota:** Este hash identifica o artefato `EchoNerfados.exe` gerado nesta sessão. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` no `.csproj` (fora do escopo desta release).
@@ -453,4 +453,4 @@ e90cbe8207dd6274bc5767d87201be7aa5555161ffdc914d9dbfaa5108c9712b
 
 ---
 
-*Relatório gerado em: 2026-05-10 | Build: d56a45b | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-10 | Build: 94a8e6b | Echo Nerfados Shield XDR v1.0.0*
