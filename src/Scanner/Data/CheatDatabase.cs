@@ -42,6 +42,60 @@ public static class CheatDatabase
                 [@"AppData\Local\Programs\Common", @"AppData\Local\Temp\"],
                 IsGenericName: true   // "dxsetup.exe" é o instalador legítimo do DirectX redistribuível
             ),
+
+            // --- Famílias FiveM conhecidas ---
+
+            ["eulen.exe"] = new CheatInfo(
+                "Eulen",
+                "Cheat FiveM da família Eulen. Inclui aimbot, ESP e bypass de anti-cheat.",
+                [@"AppData\", @"Downloads\", @"Desktop\"]
+            ),
+            ["eulen loader.exe"] = new CheatInfo(
+                "Eulen",
+                "Loader do cheat FiveM Eulen.",
+                [@"AppData\", @"Downloads\", @"Desktop\"]
+            ),
+            ["redengine.exe"] = new CheatInfo(
+                "RedEngine",
+                "Cheat FiveM redENGINE. Loader com módulos de aimbot e ESP.",
+                [@"AppData\", @"Downloads\", @"Desktop\"]
+            ),
+            ["susano.exe"] = new CheatInfo(
+                "Susano",
+                "Cheat FiveM Susano.",
+                [@"AppData\", @"Downloads\", @"Desktop\"]
+            ),
+            ["nightfall.exe"] = new CheatInfo(
+                "Nightfall",
+                "Cheat FiveM Nightfall.",
+                [@"AppData\", @"Downloads\", @"Desktop\"]
+            ),
+            ["cherax.exe"] = new CheatInfo(
+                "Cherax",
+                "Script executor / cheat para FiveM e GTA V.",
+                [@"AppData\", @"Downloads\", @"Desktop\"]
+            ),
+            ["hamafia.exe"] = new CheatInfo(
+                "HaMafia",
+                "Cheat FiveM HaMafia.",
+                [@"AppData\", @"Downloads\", @"Desktop\"]
+            ),
+            ["cheathub.exe"] = new CheatInfo(
+                "CheatHub",
+                "Loader multi-cheat CheatHub.",
+                [@"AppData\", @"Downloads\", @"Desktop\"]
+            ),
+            ["0xcheats.exe"] = new CheatInfo(
+                "0xCheats",
+                "Cheat FiveM 0xCheats.",
+                [@"AppData\", @"Downloads\", @"Desktop\"]
+            ),
+            ["spoofer.exe"] = new CheatInfo(
+                "HWID Spoofer",
+                "Ferramenta de bypass de HWID (hardware ID). Usada para evadir banimentos baseados em hardware.",
+                [@"AppData\", @"Downloads\", @"Desktop\", @"Temp\"],
+                IsGenericName: true
+            ),
         };
 
     public static readonly Dictionary<string, CheatInfo> KnownDlls =
@@ -61,7 +115,10 @@ public static class CheatDatabase
         "esp", "triggerbot", "bhop", "spinbot", "ragebot", "hvh",
         "keyauth", "skript", "skid", "ghost", "gosth", "farinha",
         "citizen", "fivem_bypass", "norecoil", "aimassist", "triggerassist",
-        "storm", "xrc", "wexize", "regedit_cleaner", "logcleaner"
+        "storm", "xrc", "wexize", "regedit_cleaner", "logcleaner",
+        // Famílias FiveM conhecidas
+        "eulen", "redengine", "susano", "tzproject", "spoofer",
+        "phaze", "cherax", "hamafia", "cheathub"
     ];
 
     public static readonly string[] SuspiciousStrings =

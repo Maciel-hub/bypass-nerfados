@@ -10,6 +10,7 @@ public static class Correlator
         DetectCheatWithHiddenLogs(result);
         CorrelateTemporalBurst(result);
         DetectSystemServiceTampering(result);
+        CorrelateFiveMSession(result);
     }
 
     private static void DetectAntiForensicsPattern(ScanResult result)
@@ -124,6 +125,72 @@ public static class Correlator
                 ));
                 break;
             }
+        }
+    }
+
+    private static void CorrelateFiveMSession(ScanResult result)
+    {
+        // Find when FiveM last ran by reading Prefetch .pf files directly.
+        // FiveM.exe itself is in _legitimatePatterns so it generates no findings —
+        // we go to the filesystem instead of findings list.
+        var prefetchDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Prefetch");
+
+        var fivemTimes = new List<DateTime>();
+        if (Directory.Exists(prefetchDir))
+        {
+            try
+            {
+                foreach (var pf in Directory.GetFiles(prefetchDir, "FIVEM*.PF")
+                    .Concat(Directory.GetFiles(prefetchDir, "GTA5*.PF")))
+                    fivemTimes.Add(File.GetLastWriteTime(pf));
+            }
+            catch { /* prefetch inacessível */ }
+        }
+
+        if (fivemTimes.Count == 0) return;
+
+        var suspiciousFindings = result.Findings
+            .Where(f => f.Timestamp.HasValue &&
+                        f.Risk >= RiskLevel.Medium &&
+                        f.Category is FindingCategory.Cheat or FindingCategory.SuspiciousExecution)
+            .ToList();
+
+        if (suspiciousFindings.Count == 0) return;
+
+        foreach (var sessionTime in fivemTimes.OrderByDescending(t => t))
+        {
+            var windowStart = sessionTime.AddMinutes(-30);
+            var windowEnd   = sessionTime.AddHours(2);
+
+            var inWindow = suspiciousFindings
+                .Where(f => f.Timestamp!.Value >= windowStart && f.Timestamp!.Value <= windowEnd)
+                .ToList();
+
+            if (inWindow.Count == 0) continue;
+
+            var entities  = string.Join(", ", inWindow.Take(5).Select(f => f.Entity ?? f.Title).Distinct());
+            var modules   = string.Join(", ", inWindow.Select(f => f.Module).Distinct());
+            var ruleKey   = $"CORR_FIVEM_SESSION_{sessionTime:yyyyMMddHH}";
+
+            // Don't emit duplicate session correlations
+            if (result.Findings.Any(f => f.RuleId == ruleKey)) continue;
+
+            result.Findings.Add(new Finding(
+                RiskLevel.Critical,
+                FindingCategory.Cheat,
+                "Correlação",
+                $"EXECUÇÃO SUSPEITA NA SESSÃO FIVEM ({inWindow.Count} evento(s))",
+                $"Loader ou cheat executado na janela de -30min/+2h da sessão FiveM.\n" +
+                $"Sessão FiveM: {sessionTime:dd/MM/yyyy HH:mm:ss} | Fontes: {modules}\n" +
+                $"Eventos correlacionados: {entities}",
+                $"Sessão: {sessionTime:HH:mm:ss} | {inWindow.Count} evento(s) na janela",
+                timestamp: sessionTime,
+                confidence: inWindow.Count >= 2 ? Confidence.High : Confidence.Medium,
+                ruleId: ruleKey,
+                entity: $"fivem-session@{sessionTime:yyyyMMddHH}"
+            ));
+            break; // uma correlação por run é suficiente
         }
     }
 

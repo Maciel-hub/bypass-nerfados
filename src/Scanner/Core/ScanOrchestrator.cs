@@ -223,6 +223,9 @@ public class ScanOrchestrator
         Queue(new ShimCacheModule(),           "Indício de carregamento de executáveis (AppCompatCache)");
         Queue(new LnkRecentModule(),           "Atalhos recentes — evidência de acesso a arquivos");
         Queue(new RegistryPersistenceModule(), "Persistência via IFEO, AppInit, Winlogon, BootExecute");
+        Queue(new SystemResetRestoreModule(),  "Reinstalação, reset e restauração do Windows — perda de cobertura forense");
+        Queue(new SystemTamperingModule(),     "LabConfig/MoSetup bypass, BatchGotAdmin, scripts de elevação UAC");
+        Queue(new BrowserDownloadsModule(),    "Downloads do Chrome/Edge/Brave/Opera — executáveis e URLs suspeitos");
 
         if (_result.IsAdministrator)
         {
