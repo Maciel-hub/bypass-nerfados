@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+e59a445  
-**Build:** e59a445 (2026-05-09) — VSS via WMI Win32_ShadowCopy (sem vssadmin.exe)  
+**Versão:** 1.0.0+a552337  
+**Build:** a552337 (2026-05-09) — auto-exclusão robusta de artefatos do scanner  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `3ab448c4d6981b37e48749e7a38005ce24e8bd655b6b3a7ed819336ed60e1a77`  
+**SHA256:** `aec100829434016c0ee2f559b55f57d258cb3e3f6440f4eb9d82102a325c084c`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
@@ -381,13 +381,13 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout e59a445
+git checkout a552337
 .\publish.ps1
 ```
 
-**SHA256 do artefato entregue (build e59a445):**
+**SHA256 do artefato entregue (build a552337):**
 ```
-3ab448c4d6981b37e48749e7a38005ce24e8bd655b6b3a7ed819336ed60e1a77
+aec100829434016c0ee2f559b55f57d258cb3e3f6440f4eb9d82102a325c084c
 ```
 
 **Nota:** Este hash identifica o artefato `EchoNerfados.exe` entregue para QA — gerado em 2026-05-09. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` e fixar `SourceRevisionId` no `.csproj` (fora do escopo desta release).
@@ -396,7 +396,7 @@ git checkout e59a445
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build e59a445):**
+**O que está pronto e testável (build a552337):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
@@ -416,9 +416,10 @@ git checkout e59a445
 - Amcache com admin → SeBackupPrivilege + SeRestorePrivilege + cópia de .LOG1/.LOG2 + fallback VSS via WMI `Win32_ShadowCopy.Create` (sem dependência de `vssadmin.exe`) quando o hive estiver exclusivamente lockado pelo OS
 - `evidence.json` inclui `ModuleCoverage` (status, motivo, impacto forense de cada módulo)
 - CompatibilityAssistant → casting seguro de tipos registry variados (int/long/byte[]) sem InvalidCastException
+- Auto-exclusão robusta: `IsOwnProcess` cobre nomes históricos (`bypassnerfados.exe`, `echonerfados.exe`) e caminhos de build; `IsOwnToolArtifact` adiciona Publisher/ProductName para Amcache — o scanner não se acusa como suspeito
 
 **Prioridade de teste:** Focar nos cenários 9.1, 9.2, 9.3, 9.4 — são os mais críticos para validar o produto. Os outros podem ser smoke test.
 
 ---
 
-*Relatório gerado em: 2026-05-09 | Build: e59a445 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-09 | Build: a552337 | Echo Nerfados Shield XDR v1.0.0*
