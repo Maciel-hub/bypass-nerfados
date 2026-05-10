@@ -167,41 +167,67 @@ public abstract class BaseModule
 
     // ── Offline registry hive helpers (Amcache, UserAssist, ShimCache) ─────────────
 
-    // Copies a locked system file (e.g. Amcache.hve, NTUSER.DAT) to a temp path
-    // using FILE_SHARE_READ|WRITE|DELETE so the OS doesn't block the copy.
+    // Copies a locked system file using FILE_SHARE_READ|WRITE|DELETE; returns true on success.
+    private static bool TryCopyLocked(string src, string dst)
+    {
+        try
+        {
+            using var s = new FileStream(src, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            using var d = File.Create(dst);
+            s.CopyTo(d);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    // Kept for callers that still use the single-file copy path.
     protected static string? CopyLockedFile(string sourcePath)
     {
         var temp = Path.Combine(Path.GetTempPath(), $"echo_scan_{Guid.NewGuid():N}.tmp");
-        try
-        {
-            using var src = new FileStream(sourcePath, FileMode.Open, FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete);
-            using var dst = File.Create(temp);
-            src.CopyTo(dst);
-            return temp;
-        }
-        catch { try { File.Delete(temp); } catch { } return null; }
+        return TryCopyLocked(sourcePath, temp) ? temp : null;
     }
 
-    // Loads an offline hive copy under HKLM\<tempKeyName>. Returns the RegistryKey
-    // (caller must dispose it before calling UnloadOfflineHive).
-    // RegLoadKey requires SeBackupPrivilege and SeRestorePrivilege to be explicitly
-    // enabled in the process token — being an Administrator is not sufficient.
+    // Loads an offline hive under HKLM\<tempKeyName>. Returns the RegistryKey on success;
+    // caller must dispose the key then call UnloadOfflineHive(tempKeyName, tempFile).
+    //
+    // Key points:
+    // 1. RegLoadKey requires SeBackupPrivilege + SeRestorePrivilege explicitly enabled.
+    // 2. Windows replays dirty transactions via .LOG1/.LOG2 — without those files the
+    //    load fails whenever the OS hasn't yet flushed the hive to disk.
+    //    We copy the hive AND its log files into a dedicated temp directory.
+    // 3. tempFile is the temp DIRECTORY (not a single file); UnloadOfflineHive deletes it.
     protected static RegistryKey? LoadOfflineHive(string hivePath, string tempKeyName, out string tempFile)
     {
         tempFile = string.Empty;
-        var copy = CopyLockedFile(hivePath);
-        if (copy == null) return null;
-        tempFile = copy;
+
+        var tempDir = Path.Combine(Path.GetTempPath(), $"echo_hive_{Guid.NewGuid():N}");
+        try { Directory.CreateDirectory(tempDir); }
+        catch { return null; }
+
+        var destHive = Path.Combine(tempDir, Path.GetFileName(hivePath));
+        if (!TryCopyLocked(hivePath, destHive))
+        {
+            try { Directory.Delete(tempDir, true); } catch { }
+            return null;
+        }
+
+        // Copy transaction logs (best-effort — clean hives have none; dirty ones need them)
+        foreach (var ext in new[] { ".LOG1", ".LOG2", ".LOG" })
+            TryCopyLocked(hivePath + ext, destHive + ext);
+
+        tempFile = tempDir;
 
         EnablePrivilege("SeBackupPrivilege");
         EnablePrivilege("SeRestorePrivilege");
 
-        if (RegLoadKey(HklmHandle, tempKeyName, copy) != 0)
+        if (RegLoadKey(HklmHandle, tempKeyName, destHive) != 0)
         {
-            try { File.Delete(copy); } catch { }
+            try { Directory.Delete(tempDir, true); } catch { }
+            tempFile = string.Empty;
             return null;
         }
+
         return Registry.LocalMachine.OpenSubKey(tempKeyName);
     }
 
@@ -210,7 +236,9 @@ public abstract class BaseModule
         // Force GC to release any cached RegistryKey handles before unloading
         GC.Collect(); GC.WaitForPendingFinalizers();
         RegUnLoadKey(HklmHandle, tempKeyName);
-        if (!string.IsNullOrEmpty(tempFile)) try { File.Delete(tempFile); } catch { }
+        // tempFile is the temp directory created by LoadOfflineHive
+        if (!string.IsNullOrEmpty(tempFile))
+            try { Directory.Delete(tempFile, recursive: true); } catch { }
     }
 
     // Converts a Windows FILETIME (100-ns intervals since 1601-01-01) to DateTime?

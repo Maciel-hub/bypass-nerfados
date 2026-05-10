@@ -45,8 +45,14 @@ public class RegistryArtifactsModule : BaseModule
                 var lower = valueName.ToLowerInvariant();
                 var fileName = Path.GetFileName(lower);
                 var data = key.GetValue(valueName);
-                // Data contains hex PCA flags like 0x4477000
-                string pca = data != null ? $"PCA: 0x{Convert.ToInt32(data):X}" : "";
+                // PCA flags can be DWORD, QWORD, or BINARY depending on Windows version
+                string pca = data switch
+                {
+                    int    i => $"PCA: 0x{i:X}",
+                    long   l => $"PCA: 0x{l:X}",
+                    byte[] b => b.Length > 0 ? $"PCA: 0x{Convert.ToHexString(b)}" : "",
+                    _        => data != null ? $"PCA: {data}" : ""
+                };
 
                 if (IsOwnProcess(fileName)) continue;
                 if (CheatDatabase.IsKnownLegitimate(fileName) || CheatDatabase.IsKnownLegitimate(valueName)) continue;
