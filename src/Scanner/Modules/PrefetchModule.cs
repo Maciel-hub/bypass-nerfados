@@ -78,7 +78,9 @@ public class PrefetchModule : BaseModule
                     $"Prefetch: {Path.GetFileName(pfFile)} | Última execução: {lastWriteTime:dd/MM/yyyy HH:mm:ss}",
                     lastWriteTime,
                     confidence: confidence,
-                    ruleId: $"PREFETCH_{cheatInfo.Name.ToUpperInvariant().Replace(" ", "_")}",
+                    ruleId: cheatInfo.IsGenericName
+                        ? $"PREFETCH_GENERIC_{exeName.ToUpperInvariant().Replace('.', '_')}"
+                        : $"PREFETCH_{cheatInfo.Name.ToUpperInvariant().Replace(' ', '_')}",
                     entity: exeName,
                     validationHint: cheatInfo.IsGenericName
                         ? "Confirmar caminho e hash — nome genérico pode ser launcher legítimo"

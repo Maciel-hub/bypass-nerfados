@@ -85,7 +85,7 @@ public class KnownCheatsModule : BaseModule
                         // Generic filename (launcher.exe, dxsetup.exe) — needs path or hash to be credible
                         confidence = Confidence.Low;
                         risk = RiskLevel.Medium;
-                        validationHint = "Nome genérico — confirmar por hash SHA1, caminho típico ou Prefetch/MuiCache";
+                        validationHint = "Nome genérico associado a cheats — confirmar por hash, assinatura, caminho típico da família ou correlação com Prefetch/MuiCache/BAM/UserAssist";
                     }
                     else
                     {
@@ -95,9 +95,10 @@ public class KnownCheatsModule : BaseModule
                         validationHint = null;
                     }
 
-                    var ruleId = hashMatch ? $"CHEAT_HASH_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}"
-                               : pathMatch ? $"CHEAT_PATH_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}"
-                               :             $"CHEAT_NAME_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}";
+                    var ruleId = hashMatch  ? $"CHEAT_HASH_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}"
+                               : pathMatch  ? $"CHEAT_PATH_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}"
+                               : cheat.IsGenericName ? $"CHEAT_NAME_GENERIC_{fileName.ToUpperInvariant().Replace('.', '_')}"
+                               :                       $"CHEAT_NAME_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}";
 
                     findings.Add(new Finding(
                         risk,

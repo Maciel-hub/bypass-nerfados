@@ -74,9 +74,11 @@ public class RegistryArtifactsModule : BaseModule
                         $"Executável encontrado na chave PCA Store.\n{cheat.Description}",
                         $"Caminho: {valueName} | {pca}",
                         confidence: confidence,
-                        ruleId: $"STORE_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}",
+                        ruleId: wasGeneric
+                            ? $"STORE_GENERIC_{fileName.ToUpperInvariant().Replace('.', '_')}"
+                            : $"STORE_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}",
                         entity: valueName,
-                        validationHint: wasGeneric ? "Confirmar por hash ou caminho típico do GOSTH" : null
+                        validationHint: wasGeneric ? "Confirmar por hash, caminho típico da família ou correlação com Prefetch/MuiCache/BAM/UserAssist" : null
                     ));
                     continue;
                 }
@@ -137,9 +139,11 @@ public class RegistryArtifactsModule : BaseModule
                         $"Executável registrado no MuiCache (confirma execução).\n{cheat.Description}",
                         $"Caminho: {exePath}",
                         confidence: confidence,
-                        ruleId: $"MUICACHE_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}",
+                        ruleId: wasGeneric
+                            ? $"MUICACHE_GENERIC_{fileName.ToUpperInvariant().Replace('.', '_')}"
+                            : $"MUICACHE_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}",
                         entity: exePath,
-                        validationHint: wasGeneric ? "Confirmar por hash ou caminho típico do GOSTH" : null
+                        validationHint: wasGeneric ? "Confirmar por hash, caminho típico da família ou correlação com Prefetch/MuiCache/BAM/UserAssist" : null
                     ));
                     continue;
                 }

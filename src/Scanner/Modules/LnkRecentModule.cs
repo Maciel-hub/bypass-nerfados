@@ -139,7 +139,7 @@ public class LnkRecentModule : BaseModule
                             confidence: cheat.IsGenericName ? Confidence.Low : Confidence.Medium,
                             ruleId: $"LNK_DEST_{exeName.ToUpperInvariant().Replace('.', '_')}",
                             entity: exeName,
-                            validationHint: cheat.IsGenericName ? "Confirmar por hash ou caminho típico" : null
+                            validationHint: cheat.IsGenericName ? "Confirmar por hash, caminho típico da família ou correlação com Prefetch/MuiCache/BAM/UserAssist" : null
                         ));
                     }
                     else if (CheatDatabase.HasSuspiciousKeyword(exeName))
@@ -284,9 +284,11 @@ public class LnkRecentModule : BaseModule
                 $"LNK: {Path.GetFileName(lnkPath)} | Alvo: {targetPath}",
                 timestamp: timestamp,
                 confidence: cheat.IsGenericName ? Confidence.Low : Confidence.Medium,
-                ruleId: $"LNK_{cheat.Name.ToUpperInvariant().Replace(' ', '_')}",
+                ruleId: cheat.IsGenericName
+                    ? $"LNK_GENERIC_{fileName.ToUpperInvariant().Replace('.', '_')}"
+                    : $"LNK_{cheat.Name.ToUpperInvariant().Replace(' ', '_')}",
                 entity: targetPath,
-                validationHint: cheat.IsGenericName ? "Confirmar por hash ou caminho típico do GOSTH" : null
+                validationHint: cheat.IsGenericName ? "Confirmar por hash, caminho típico da família ou correlação com Prefetch/MuiCache/BAM/UserAssist" : null
             ));
             return;
         }

@@ -365,7 +365,7 @@ public class RegistryPersistenceModule : BaseModule
                             confidence: cheat.IsGenericName ? Confidence.Low : Confidence.High,
                             ruleId: $"RUN_CHEAT_{exeName.ToUpperInvariant().Replace('.', '_')}",
                             entity: exePath,
-                            validationHint: cheat.IsGenericName ? "Confirmar por hash ou caminho típico do GOSTH" : null
+                            validationHint: cheat.IsGenericName ? "Confirmar por hash, caminho típico da família ou correlação com Prefetch/MuiCache/BAM/UserAssist" : null
                         ));
                         continue;
                     }

@@ -283,7 +283,7 @@ public static class HtmlTemplate
 """);
         }
 
-        Card("Cheats confirmados",      "#dc2626", confirmed,       "hash ou caminho GOSTH verificado");
+        Card("Cheats confirmados",      "#dc2626", confirmed,       "hash, assinatura ou caminho de cheat conhecido verificado");
         Card("Indícios fortes",         "#ea580c", strong,          "High/Critical com média confiança");
         Card("Requer validação manual", "#ca8a04", needsValidation, "sinal fraco — investigar antes de concluir");
         Card("Possíveis falsos positivos", "#6b7280", likelyFp,     "nome genérico sem contexto adicional");
