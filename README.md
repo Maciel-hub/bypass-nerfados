@@ -2,7 +2,7 @@
 
 **Plataforma forense anti-cheat para investigação de screen-share em gaming.**
 
-Scanner Windows local que automatiza a coleta e análise de artefatos forenses de cheats (FiveM, GTA V e similares), gerando relatório HTML + TXT com score de risco, timeline unificada, 21 JSONs por módulo e manifesto criptográfico de cadeia de custódia.
+Scanner Windows local que automatiza a coleta e análise de artefatos forenses de cheats (FiveM, GTA V e similares), gerando relatório HTML + TXT com score de risco, timeline unificada, 20 JSONs por módulo + evidence.json e manifesto criptográfico de cadeia de custódia.
 
 > **Uso autorizado apenas.** Esta ferramenta é para uso exclusivamente defensivo, em ambientes próprios ou com permissão formal documentada. Não deve ser usada para evasão, limpeza de rastros ou qualquer finalidade ofensiva.
 
@@ -77,7 +77,7 @@ EchoNerfados.exe --output "C:\Investigacoes\2026"
 
 ## Módulos de detecção
 
-22 módulos core + 2 opcionais (requerem Administrador) + 2 opcionais por flag:
+23 módulos base + 2 requerem Administrador + 2 opcionais por flag (até 27 no scan completo):
 
 | Módulo | O que verifica |
 |---|---|
@@ -89,7 +89,7 @@ EchoNerfados.exe --output "C:\Investigacoes\2026"
 | **Windows Defender** | Detecções (1116–1119), config alterada (5007), status via registry |
 | **Known Cheats** | Hashes SHA1/SHA256, caminhos e padrões de famílias conhecidas de cheats |
 | **File System** | Temp, Downloads, CrashDumps, AppData, FiveM Plugins — arquivos suspeitos |
-| **Network Usage** | Histórico de redes Wi-Fi conectadas |
+| **Network Usage** | Conexões TCP ativas por processo (P/Invoke iphlpapi + netstat) — cheats com tráfego ativo |
 | **Services** | Serviços com nomes suspeitos instalados via SCM |
 | **ShimCache** | AppCompatCache — indício de carregamento de executáveis (inclusive deletados) |
 | **LNK Recent** | Atalhos recentes — acesso a arquivos e pastas com timestamp |

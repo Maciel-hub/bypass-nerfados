@@ -61,7 +61,7 @@ public class NetworkModule : BaseModule
                         findings.Add(new Finding(
                             isKnownCheat ? RiskLevel.Critical : RiskLevel.High,
                             isKnownCheat ? FindingCategory.Cheat : FindingCategory.NetworkActivity,
-                            "Network",
+                            Name,
                             isKnownCheat
                                 ? $"CHEAT COM CONEXÃO ATIVA: {proc.ProcessName}"
                                 : $"Conexão suspeita: {proc.ProcessName} (PID {proc.Id})",
@@ -82,7 +82,7 @@ public class NetworkModule : BaseModule
                         findings.Add(new Finding(
                             RiskLevel.Medium,
                             FindingCategory.NetworkActivity,
-                            "Network",
+                            Name,
                             $"Conexão em porta suspeita: {proc.ProcessName}:{conn.RemotePort}",
                             $"Processo conectando em porta não padrão.\nRemoto: {conn.RemoteAddress}:{conn.RemotePort}",
                             $"PID: {proc.Id} | Caminho: {exePath}"
@@ -129,7 +129,7 @@ public class NetworkModule : BaseModule
                     findings.Add(new Finding(
                         RiskLevel.Critical,
                         FindingCategory.Cheat,
-                        "Network",
+                        Name,
                         $"CHEAT COM TRÁFEGO ATIVO: {cheat.Name} ({exeName})",
                         $"Cheat detectado com conexão de rede estabelecida.\n{cheat.Description}",
                         $"Linha netstat: {trimmed}"

@@ -17,8 +17,14 @@ echo  [INFO] .NET SDK encontrado:
 dotnet --version
 
 echo.
+echo  [INFO] Limpando artefatos anteriores em publish\win-x64\...
+if exist "publish\win-x64\" (
+    rmdir /s /q "publish\win-x64\"
+)
+
+echo.
 echo  [INFO] Publicando executavel self-contained...
-dotnet publish "src\Scanner\Scanner.csproj" /p:PublishProfile=win-x64
+dotnet publish "src\Scanner\Scanner.csproj" -p:PublishProfile=win-x64
 if %errorlevel% neq 0 (
     echo  [ERRO] Falha ao publicar!
     pause

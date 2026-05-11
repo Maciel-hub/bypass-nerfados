@@ -46,7 +46,7 @@ O executável exige login antes de qualquer varredura.
 
 ---
 
-## 4. Módulos de Varredura (22 módulos + 2 opcionais)
+## 4. Módulos de Varredura (23 módulos base + 2 requerem Admin + 2 opcionais por flag)
 
 ### Módulos sem requisito de admin (funcionam com asInvoker)
 
@@ -60,14 +60,14 @@ O executável exige login antes de qualquer varredura.
 | **Windows Defender** | Event log + MPLog | Detecções, exclusões, deleções de definição, reconfiguração |
 | **Known Cheats** | File system scan | Varredura de nomes conhecidos de cheat nos drives especificados |
 | **File System** | Paths suspeitos | Arquivos em AppData\Roaming, Temp, Downloads com nomes/extensões suspeitos |
-| **Network Usage** | HKCU\...\NetworkList | Redes Wi-Fi conectadas; rede com nome de cheat = High |
+| **Network Usage** | iphlpapi P/Invoke + netstat | Conexões TCP ativas por processo; cheat com tráfego ativo = Critical |
 | **Services** | SCM + Event 7045 | Serviços instalados com nomes suspeitos ou por publishers não-Microsoft |
 | **ShimCache** | HKLM AppCompatCache | Histórico de carregamento de executáveis pelo kernel — sobrevive a reboots |
 | **LNK Recent** | %APPDATA%\...\Recent + AutomaticDestinations | Atalhos de arquivos recentemente acessados → evidência de abertura de arquivos |
 | **RegistryPersistence** | IFEO, AppInit_DLLs, AppCertDlls, Winlogon, BootExecute, Run keys | Técnicas de persistência e hijack de processo |
 | **SystemResetRestore** | InstallDate, Windows.old, Panther logs, PendingRename | Reinstalação/reset recente do Windows — perda de cobertura forense |
 | **SystemTampering** | LabConfig/MoSetup keys, getadmin.vbs, scripts bat/ps1 | Bypass de requisitos Windows 11, BatchGotAdmin, scripts de elevação UAC |
-| **BrowserDownloads** | Chrome/Edge/Brave/Opera History SQLite | Downloads de executáveis suspeitos + URLs de C2 conhecidos |
+| **BrowserDownloads** | Chrome/Edge/Brave/Opera/Firefox History SQLite | Downloads de executáveis suspeitos + URLs de C2 conhecidos |
 | **ShellBags** | HKCU BagMRU | Navegação em pastas suspeitas — persiste após deleção dos arquivos |
 | **JumpLists** | AutomaticDestinations + CustomDestinations | Histórico de arquivos abertos por aplicação — executáveis e caminhos suspeitos |
 | **NvidiaArtifacts** | nvAppTimestamps + nvdrsdb | Timestamps de uso de GPU — confirma sessão FiveM com dados de hardware |
@@ -346,7 +346,7 @@ O smoke test requer execução manual com console interativo real. Executar nas 
 - [ ] `report.html` abre no browser — seção "COBERTURA DA VARREDURA" visível
 - [ ] `report.txt` — seção "COBERTURA DA VARREDURA" visível com status PULADO para Amcache/UserAssist
 - [ ] `evidence.json` — JSON válido, parseable
-- [ ] Todos os 8 `*_60d.json` presentes (incluindo `registrypersistence_60d.json`)
+- [ ] Todos os 20 `*_60d.json` presentes + `evidence.json` (21 arquivos no total)
 - [ ] `manifest.json` — campo `"isElevated": false`
 - [ ] `manifest.sha256` verifica: `sha256sum -c manifest.sha256` → OK
 
@@ -392,13 +392,13 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout 94a8e6b
-dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish
+git checkout 2eaf44a
+dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 ```
 
-**SHA256 do artefato entregue para QA (build 94a8e6b — 2026-05-10):**
+**SHA256 do artefato entregue para QA (build 2eaf44a — 2026-05-10):**
 ```
-a8bdc87dd09355833a631980d0c34e88635ccdfc959d4f09f9a2ff40ffad0281
+846487913ed84030874c9c9f781aadd00be76b0842231ccaf830723394ac3e34
 ```
 
 **Nota:** Este hash identifica o artefato `EchoNerfados.exe` gerado nesta sessão. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` no `.csproj` (fora do escopo desta release).
