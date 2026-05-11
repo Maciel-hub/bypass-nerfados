@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+2eaf44a  
-**Build:** 2eaf44a (2026-05-10) — fix: P0/P1/P2 — module name mismatches, missing JSON exports, README rewrite  
+**Versão:** 1.0.0+9345944  
+**Build:** 9345944 (2026-05-10) — fix: P0/P1 — NetworkModule name mismatch, BUILD.bat clean, docs accuracy  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `846487913ed84030874c9c9f781aadd00be76b0842231ccaf830723394ac3e34`  
+**SHA256:** `8669b8938651b436d3530db8975bafdd0e67401cbfe9fb5204aa1bf43c4c4493`  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
 
 ---
@@ -392,13 +392,13 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout 2eaf44a
+git checkout 9345944
 dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 ```
 
-**SHA256 do artefato entregue para QA (build 2eaf44a — 2026-05-10):**
+**SHA256 do artefato entregue para QA (build 9345944 — 2026-05-10):**
 ```
-846487913ed84030874c9c9f781aadd00be76b0842231ccaf830723394ac3e34
+8669b8938651b436d3530db8975bafdd0e67401cbfe9fb5204aa1bf43c4c4493
 ```
 
 **Nota:** Este hash identifica o artefato `EchoNerfados.exe` gerado nesta sessão. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` no `.csproj` (fora do escopo desta release).
@@ -407,7 +407,7 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build 2eaf44a — apto para smoke test interativo):**
+**O que está pronto e testável (build 9345944 — apto para smoke test interativo):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
@@ -461,4 +461,4 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 
 ---
 
-*Relatório gerado em: 2026-05-10 | Build: 2eaf44a | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-10 | Build: 9345944 | Echo Nerfados Shield XDR v1.0.0*
