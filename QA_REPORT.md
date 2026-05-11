@@ -135,17 +135,22 @@ Desktop\
 └── Echo_Nerfados_HOSTNAME_20260509_180900\
     ├── report.html              ← Relatório visual completo
     ├── report.txt               ← Relatório texto (compartilhável)
-    ├── evidence.json            ← Todos os findings + dossiers em JSON
-    ├── eventviewer_60d.json     ← Findings do Event Viewer (cobertura real)
-    ├── defender_60d.json        ← Findings do Windows Defender
-    ├── services_60d.json        ← Findings de Serviços
-    ├── amcache_60d.json         ← Findings do Amcache
-    ├── userassist_60d.json      ← Findings do UserAssist
-    ├── shimcache_60d.json       ← Findings do ShimCache
-    ├── lnk_60d.json             ← Findings de LNK Recent
-    ├── registrypersistence_60d.json ← Findings de RegistryPersistence
-    ├── manifest.json            ← Metadados completos + SHA256 de todos os arquivos
-    └── manifest.sha256          ← Hash do manifest.json (verificável com sha256sum)
+    ├── evidence.json                  ← Todos os findings + dossiers em JSON
+    ├── bamdam_60d.json                ← BAM/DAM — timestamps de execução (core)
+    ├── prefetch_60d.json              ← Prefetch — evidência de execução (core)
+    ├── knowncheats_60d.json           ← Known Cheats — hits diretos confirmados
+    ├── registryartifacts_60d.json     ← Store, MuiCache, RecentDocs, 7-Zip, WinRAR
+    ├── eventviewer_60d.json           ← Findings do Event Viewer (cobertura real)
+    ├── defender_60d.json              ← Findings do Windows Defender
+    ├── services_60d.json              ← Findings de Serviços
+    ├── amcache_60d.json               ← Findings do Amcache
+    ├── userassist_60d.json            ← Findings do UserAssist
+    ├── shimcache_60d.json             ← Findings do ShimCache
+    ├── lnk_60d.json                   ← Findings de LNK Recent
+    ├── registrypersistence_60d.json   ← Findings de RegistryPersistence
+    ├── ... (25 JSONs por módulo no total)
+    ├── manifest.json                  ← Metadados completos + SHA256 de todos os arquivos
+    └── manifest.sha256                ← Hash do manifest.json (verificável com sha256sum)
 ```
 
 **Cobertura de log por arquivo `*_60d.json`:**
@@ -276,7 +281,7 @@ EchoNerfados.exe [opções]
 - [ ] `report.html` abre no browser corretamente
 - [ ] `report.txt` legível em qualquer editor
 - [ ] `evidence.json` JSON válido
-- [ ] Todos os `*_60d.json` presentes (incluindo `registrypersistence_60d.json`), mesmo que vazios
+- [ ] Todos os 25 `*_60d.json` presentes + `evidence.json`, mesmo que vazios
 - [ ] `manifest.json` presente e campos preenchidos
 - [ ] `manifest.sha256` verificável com sha256sum
 
@@ -346,7 +351,7 @@ O smoke test requer execução manual com console interativo real. Executar nas 
 - [ ] `report.html` abre no browser — seção "COBERTURA DA VARREDURA" visível
 - [ ] `report.txt` — seção "COBERTURA DA VARREDURA" visível com status PULADO para Amcache/UserAssist
 - [ ] `evidence.json` — JSON válido, parseable
-- [ ] Todos os 20 `*_60d.json` presentes + `evidence.json` (21 arquivos no total)
+- [ ] Todos os 25 `*_60d.json` presentes + `evidence.json` (26 arquivos no total)
 - [ ] `manifest.json` — campo `"isElevated": false`
 - [ ] `manifest.sha256` verifica: `sha256sum -c manifest.sha256` → OK
 
@@ -414,7 +419,7 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 - Login gate funcional com bloqueio após 3 tentativas (exit code 2)
 - **22 módulos** cobrindo todos os principais artefatos forenses Windows
 - Correlação cruzada entre módulos + artifact dossiers com bypass ±1h por sinal + correlação FiveM session (-30min/+2h)
-- Exportação: HTML, TXT, **21 JSONs dedicados** (8 originais + 12 módulos novos + evidence.json)
+- Exportação: HTML, TXT, **26 JSONs dedicados** (25 módulos + evidence.json)
 - Manifesto criptograficamente verificável (`manifest.sha256`)
 - Tabela "COBERTURA DA VARREDURA" no terminal, TXT e HTML com status Executed/Partial/Skipped/Failed
 - Todos os catches críticos logam `LogPartialError` com contexto específico; inaccessible contados, não silenciados
@@ -436,7 +441,8 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 - **NvidiaArtifacts** — timestamps GPU de sessão FiveM via nvAppTimestamps
 - **EventViewer**: todos os findings usam `"Event Viewer"` (com espaço) — eventviewer_60d.json preenchido corretamente
 - **Defender**: todos os findings usam `Name` = `"Windows Defender"` — defender_60d.json preenchido corretamente
-- **filesystem_60d.json** + **network_60d.json** adicionados ao EvidenceExporter (21 JSONs no total)
+- **filesystem_60d.json** + **network_60d.json** adicionados ao EvidenceExporter
+- **bamdam_60d.json**, **prefetch_60d.json**, **knowncheats_60d.json**, **registryartifacts_60d.json**, **usnjournal_60d.json**, **processmemory_60d.json** adicionados (26 JSONs no total)
 - **4688**: query XPath inclui janela temporal `EventWindowLookback` — sem scan ilimitado
 - **QueryDb**: falhas de sqlite3_open/prepare logadas via LogPartialError
 - **IgnoreInaccessible**: KnownCheats e FileSystem usam EnumerationOptions ao invés de GetFiles+SearchOption
@@ -449,7 +455,7 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 
 - [x] PC com NVIDIA limpo **não** gera Medium/High por nvAppTimestamps
 - [x] `bypassstoragecheck` (correto) dispara no scan de scripts de LabConfig
-- [x] Todos os 12 módulos novos aparecem em evidence.json + arquivos `*_60d.json` dedicados
+- [x] Todos os 25 módulos aparecem em evidence.json + arquivos `*_60d.json` dedicados
 - [x] Browser aberto durante o scan **não** quebra coleta (CopyLockedFile)
 - [x] Nenhum ruleId com `GOSTH` fora de: `CHEAT_HASH_GOSTH_WHATSAPP`, `CHEAT_PATH_GOSTH_DXSETUP`, `GOSTH_PATTERN_SYSTEM32`
 - [x] `SCRIPT_BATCHGOTADMIN_PRESENT` substitui `_EXECUTED` no ruleId
@@ -457,6 +463,8 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 - [x] `eventviewer_60d.json` não vazio quando há eventos no período
 - [x] `defender_60d.json` não vazio quando há eventos no período
 - [x] `filesystem_60d.json` e `network_60d.json` exportados em todo scan
+- [x] `bamdam_60d.json` e `prefetch_60d.json` exportados (core forense — sempre presentes)
+- [x] `knowncheats_60d.json` e `registryartifacts_60d.json` exportados em todo scan
 - [x] README reflete EchoNerfados.exe, publish\win-x64\, 22 módulos, multi-família
 
 ---

@@ -2,7 +2,7 @@
 
 **Plataforma forense anti-cheat para investigação de screen-share em gaming.**
 
-Scanner Windows local que automatiza a coleta e análise de artefatos forenses de cheats (FiveM, GTA V e similares), gerando relatório HTML + TXT com score de risco, timeline unificada, 20 JSONs por módulo + evidence.json e manifesto criptográfico de cadeia de custódia.
+Scanner Windows local que automatiza a coleta e análise de artefatos forenses de cheats (FiveM, GTA V e similares), gerando relatório HTML + TXT com score de risco, timeline unificada, 25 JSONs por módulo + evidence.json e manifesto criptográfico de cadeia de custódia.
 
 > **Uso autorizado apenas.** Esta ferramenta é para uso exclusivamente defensivo, em ambientes próprios ou com permissão formal documentada. Não deve ser usada para evasão, limpeza de rastros ou qualquer finalidade ofensiva.
 
@@ -145,12 +145,16 @@ Cada execução cria uma pasta timestamped no Desktop (ou `--output`):
 Echo_Nerfados_{MAQUINA}_{YYYYMMDD_HHMMSS}/
 ├── report.html          # Relatório visual (dark theme, score, timeline, artifact dossiers)
 ├── report.txt           # Texto para documentação e e-mail
-├── evidence.json        # Todos os findings + módulos + bundles (JSON estruturado)
+├── evidence.json              # Todos os findings + módulos + bundles (JSON estruturado)
+├── bamdam_60d.json            # BAM/DAM — timestamps de execução (core forense)
+├── prefetch_60d.json          # Prefetch — evidência de execução por nome (core forense)
+├── knowncheats_60d.json       # Known Cheats — hits diretos confirmados
+├── registryartifacts_60d.json # Store, MuiCache, RecentDocs, 7-Zip, WinRAR
 ├── eventviewer_60d.json
 ├── defender_60d.json
 ├── amcache_60d.json
-├── ... (21 JSONs por módulo, sempre gerados mesmo quando vazios)
-└── manifest.sha256      # Hash SHA256 de todos os arquivos — cadeia de custódia
+├── ... (25 JSONs por módulo, sempre gerados mesmo quando vazios)
+└── manifest.sha256            # Hash SHA256 de todos os arquivos — cadeia de custódia
 ```
 
 O código de saída reflete o risco: `0` (limpo/baixo) → `3` (crítico).
@@ -160,7 +164,7 @@ O código de saída reflete o risco: `0` (limpo/baixo) → `3` (crítico).
 ## Roadmap
 
 - [x] Core: 22 módulos forenses + 4 opcionais, score de risco, deduplicação, correlação cross-módulo
-- [x] Relatório: HTML dark theme, TXT, 21 JSONs por módulo, manifesto SHA256
+- [x] Relatório: HTML dark theme, TXT, 25 JSONs por módulo, manifesto SHA256
 - [x] Artifact dossiers: bypass window ±1h por sinal + correlação FiveM session (-30min/+2h)
 - [x] Cobertura: tabela Executed/Partial/Skipped/Failed no terminal, TXT e HTML
 - [x] SRUM: uso de rede por processo via SRUDB.dat (ManagedEsent)

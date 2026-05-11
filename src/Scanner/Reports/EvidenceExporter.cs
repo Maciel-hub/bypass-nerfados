@@ -32,10 +32,16 @@ public static class EvidenceExporter
         };
         WriteJson(Path.Combine(runFolder, "evidence.json"), dto);
 
+        // Core execution-evidence modules — first consulted in any FiveM investigation
+        WriteModuleJson(result, runFolder, "BAM/DAM",             "bamdam_60d.json",        lookback);
+        WriteModuleJson(result, runFolder, "Prefetch",            "prefetch_60d.json",      lookback);
+        WriteModuleJson(result, runFolder, "Known Cheats",        "knowncheats_60d.json",   lookback);
+        WriteModuleJson(result, runFolder, "Registry Artifacts",  "registryartifacts_60d.json", lookback);
+
         // Always export per-source files — even when empty, so the investigator can verify coverage
-        WriteModuleJson(result, runFolder, "Event Viewer",        "eventviewer_60d.json",  lookback);
-        WriteModuleJson(result, runFolder, "Windows Defender",    "defender_60d.json",     lookback);
-        WriteModuleJson(result, runFolder, "Services",            "services_60d.json",     lookback);
+        WriteModuleJson(result, runFolder, "Event Viewer",        "eventviewer_60d.json",   lookback);
+        WriteModuleJson(result, runFolder, "Windows Defender",    "defender_60d.json",      lookback);
+        WriteModuleJson(result, runFolder, "Services",            "services_60d.json",      lookback);
 
         // Artifact-trail modules: no event-log coverage backing; coverage estimated from findings
         WriteModuleJson(result, runFolder, "Amcache",               "amcache_60d.json",               lookback);
@@ -44,7 +50,7 @@ public static class EvidenceExporter
         WriteModuleJson(result, runFolder, "LNK Recent",            "lnk_60d.json",                  lookback);
         WriteModuleJson(result, runFolder, "RegistryPersistence",   "registrypersistence_60d.json",  lookback);
 
-        // P0/P1/P2 modules — always exported even if empty
+        // Extended modules
         WriteModuleJson(result, runFolder, "System Reset/Restore",  "systemreset_60d.json",          lookback);
         WriteModuleJson(result, runFolder, "System Tampering",      "systemtampering_60d.json",      lookback);
         WriteModuleJson(result, runFolder, "Browser Downloads",     "browserdownloads_60d.json",     lookback);
@@ -57,6 +63,10 @@ public static class EvidenceExporter
         WriteModuleJson(result, runFolder, "SRUM",                  "srum_60d.json",                 lookback);
         WriteModuleJson(result, runFolder, "File System",           "filesystem_60d.json",           lookback);
         WriteModuleJson(result, runFolder, "Network Usage",         "network_60d.json",              lookback);
+
+        // Optional modules — always written so investigator can confirm whether they ran
+        WriteModuleJson(result, runFolder, "USN Journal",           "usnjournal_60d.json",           lookback);
+        WriteModuleJson(result, runFolder, "Process Memory",        "processmemory_60d.json",        lookback);
     }
 
     private static void WriteModuleJson(
