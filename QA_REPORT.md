@@ -1,9 +1,10 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+ddf0a09  
-**Build:** ddf0a09 (2026-05-10) — feat: add 6 missing per-module JSON exports (BAM/DAM, Prefetch, Known Cheats, Registry Artifacts, USN Journal, Process Memory)  
+**Versão:** 1.0.0+7382cf9  
+**Build:** 7382cf9 (2026-05-11) — feat: live dashboard, DMA detection, behavioral correlation, QA fixes  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `293e44f493d135107ec67681593bcbb47074e5abc994e67211106d5f930bd72a`  
-**Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)
+**SHA256:** `a7f99999571981e151d9009a1a33ce41d683cb80d8cf81c7f6c625d87754327b`  
+**Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)  
+**Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
 ---
 
