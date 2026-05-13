@@ -20,178 +20,225 @@ if (Console.IsInputRedirected || Console.IsOutputRedirected || Console.IsErrorRe
     return 1;
 }
 
-// Authentication gate — must pass before any scan activity
+// Authentication gate
 if (!ConsoleUI.PromptLogin())
-    return 2; // exit code 2 = auth failed
+    return 2;
 
-var config = new ScanConfig();
+var config        = new ScanConfig();
+var noFinalPrompt = false;
 
 // Parse arguments
 for (int i = 0; i < args.Length; i++)
 {
     switch (args[i].ToLowerInvariant())
     {
-        case "--investigator" when i + 1 < args.Length:
-            config.InvestigatorName = args[++i];
-            break;
-        case "--suspect" when i + 1 < args.Length:
-            config.SuspectName = args[++i];
-            break;
-        case "--case-id" when i + 1 < args.Length:
-            config.CaseId = args[++i];
-            break;
-        case "--drive" when i + 1 < args.Length:
-            config.TargetDrive = args[++i];
-            break;
-        case "--no-usn":
-            config.RunUsnJournal = false;
-            break;
-        case "--no-memory":
-            config.DeepMemoryScan = false;
-            break;
-        case "--no-report":
-            config.SaveReport = false;
-            break;
-        case "--output" when i + 1 < args.Length:
-            config.ReportOutputPath = args[++i];
-            break;
-        case "--verbose":
-            config.VerboseOutput = true;
-            break;
-        case "--help" or "-h":
-            PrintHelp();
-            return 0;
+        case "--investigator" when i + 1 < args.Length: config.InvestigatorName = args[++i]; break;
+        case "--suspect"      when i + 1 < args.Length: config.SuspectName      = args[++i]; break;
+        case "--case-id"      when i + 1 < args.Length: config.CaseId           = args[++i]; break;
+        case "--drive"        when i + 1 < args.Length: config.TargetDrive      = args[++i]; break;
+        case "--no-usn":    config.RunUsnJournal  = false; break;
+        case "--no-memory": config.DeepMemoryScan = false; break;
+        case "--no-report": config.SaveReport     = false; break;
+        case "--output" when i + 1 < args.Length: config.ReportOutputPath = args[++i]; break;
+        case "--verbose": config.VerboseOutput = true; break;
+        case "--no-final-prompt": noFinalPrompt = true; break;
+        case "--help" or "-h": PrintHelp(); return 0;
     }
 }
+
+AnsiConsole.Clear();
+Console.Title = "Echo Nerfados Shield XDR v1.0 — Varrendo...";
+
+ScanResult? finalResult    = null;
+string?     htmlReportPath = null;
+string?     txtReportPath  = null;
+
+var spinnerFrames = new[] { "⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏" };
+var frame         = 0;
+var dashboard     = new LiveDashboard();
 
 try
 {
     using var cts = new CancellationTokenSource();
-    Console.CancelKeyPress += (_, eventArgs) =>
+    Console.CancelKeyPress += (_, e) =>
     {
-        eventArgs.Cancel = true;
+        e.Cancel = true;
         cts.Cancel();
-        ConsoleUI.PrintError("Cancelamento solicitado. Finalizando módulo atual...");
     };
 
-    ConsoleUI.PrintBanner();
+    await AnsiConsole.Live(dashboard.Build(spinnerFrames[0]))
+        .AutoClear(false)
+        .Overflow(VerticalOverflow.Ellipsis)
+        .StartAsync(async ctx =>
+        {
+            // Animation loop — sole renderer; updates at ~12 fps.
+            // try-catch inside the loop is intentional: a render exception must never kill
+            // the animation task, otherwise the display freezes with no indication of progress.
+            using var animCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+            var animTask = Task.Run(async () =>
+            {
+                while (!animCts.Token.IsCancellationRequested)
+                {
+                    frame = (frame + 1) % spinnerFrames.Length;
+                    try { ctx.UpdateTarget(dashboard.Build(spinnerFrames[frame])); }
+                    catch { /* swallow render errors — animation must survive */ }
+                    try   { await Task.Delay(80, animCts.Token); }
+                    catch (OperationCanceledException) { break; }
+                }
+            });
 
-    var progress = new InlineProgress<ScanProgressUpdate>(PrintProgress);
-    var orchestrator = new ScanOrchestrator(config, progress);
-    var result = await orchestrator.RunAsync(cts.Token);
+            // Progress callback — only mutates state, never renders
+            var progress = new InlineProgress<ScanProgressUpdate>(update =>
+            {
+                switch (update.Kind)
+                {
+                    case ScanProgressKind.Warning:
+                        // Absorbed — shown in dashboard after done
+                        break;
+                    case ScanProgressKind.ScanStarted:
+                        dashboard.SetExpectedModules(update.ModuleCount);
+                        dashboard.SetPhase("Iniciando...");
+                        break;
+                    case ScanProgressKind.ModuleStarted:
+                        dashboard.ModuleStarted(update.ModuleName ?? "");
+                        break;
+                    case ScanProgressKind.ModuleCompleted:
+                        dashboard.ModuleCompleted(
+                            update.ModuleName ?? "",
+                            update.Findings,
+                            update.Duration ?? TimeSpan.Zero);
+                        break;
+                    case ScanProgressKind.ModuleFailed:
+                        dashboard.ModuleFailed(update.ModuleName ?? "");
+                        break;
+                    case ScanProgressKind.CorrelationStarted:
+                        dashboard.SetPhase("Correlacionando módulos...");
+                        break;
+                    case ScanProgressKind.CorrelationCompleted:
+                        dashboard.SetPhase("Correlação concluída");
+                        break;
+                    case ScanProgressKind.ReportStarted:
+                        dashboard.SetPhase("Exportando relatório...");
+                        break;
+                    case ScanProgressKind.ReportGenerated:
+                        htmlReportPath = update.HtmlReportPath;
+                        txtReportPath  = update.TextReportPath;
+                        break;
+                    case ScanProgressKind.ScanCompleted:
+                        dashboard.SetDone();
+                        break;
+                }
+            });
 
-    AnsiConsole.WriteLine();
-    AnsiConsole.Write(new Rule("[bold]VARREDURA CONCLUÍDA[/]"));
-    AnsiConsole.MarkupLine($"[bold]Score: [/][bold {GetRiskColor(result.TotalScore)}]{result.TotalScore}/100 — {result.OverallRiskLabel}[/]");
-    AnsiConsole.WriteLine();
+            var orchestrator = new ScanOrchestrator(config, progress);
+            finalResult = await orchestrator.RunAsync(cts.Token);
 
-    // Return exit code based on risk
-    return result.OverallRisk switch
-    {
-        BypassNerfados.Scanner.Models.RiskLevel.Critical => 4,
-        BypassNerfados.Scanner.Models.RiskLevel.High     => 3,
-        BypassNerfados.Scanner.Models.RiskLevel.Medium   => 2,
-        BypassNerfados.Scanner.Models.RiskLevel.Low      => 1,
-        _                                                 => 0
-    };
+            dashboard.SetDone();
+            Console.Title = "Echo Nerfados Shield XDR v1.0 — Concluído";
+
+            // Stop animation, then do one final stable render
+            animCts.Cancel();
+            try { await animTask; } catch { }
+            try { ctx.UpdateTarget(dashboard.Build("✓")); } catch { }
+        });
 }
 catch (OperationCanceledException)
 {
-    ConsoleUI.PrintError("Varredura cancelada pelo usuário.");
+    AnsiConsole.WriteLine();
+    AnsiConsole.MarkupLine("[red]Varredura cancelada pelo usuário.[/]");
     return 98;
 }
 catch (Exception ex)
 {
+    AnsiConsole.WriteLine();
     AnsiConsole.WriteException(ex);
     return 99;
 }
 
-static string GetRiskColor(int score) => score switch
-{
-    >= 76 => "red",
-    >= 51 => "darkorange",
-    >= 26 => "yellow",
-    >= 1  => "green",
-    _     => "grey"
-};
+// ── Post-scan: detailed summary ───────────────────────────────────────────────
+AnsiConsole.WriteLine();
 
-static void PrintProgress(ScanProgressUpdate update)
+if (finalResult != null)
+    ConsoleUI.PrintSummary(finalResult);
+
+// Report paths
+if (htmlReportPath != null || txtReportPath != null)
 {
-    switch (update.Kind)
+    AnsiConsole.WriteLine();
+    AnsiConsole.Write(new Rule("[bold]RELATÓRIO EXPORTADO[/]"));
+    if (htmlReportPath != null)
+        AnsiConsole.MarkupLine($"[green]✓ HTML:[/] {Markup.Escape(htmlReportPath)}");
+    if (txtReportPath != null)
+        AnsiConsole.MarkupLine($"[green]✓ TXT: [/] {Markup.Escape(txtReportPath)}");
+    if (htmlReportPath != null)
     {
-        case ScanProgressKind.Warning:
-            ConsoleUI.PrintError($"AVISO: {update.Message}");
-            AnsiConsole.WriteLine();
-            break;
+        var evidencePath = Path.Combine(Path.GetDirectoryName(htmlReportPath)!, "evidence.json");
+        AnsiConsole.MarkupLine($"[green]✓ JSON:[/] {Markup.Escape(evidencePath)}");
+    }
+}
 
-        case ScanProgressKind.ScanStarted:
-            AnsiConsole.Write(new Rule($"[bold]INICIANDO VARREDURA[/] [grey]— {update.ModuleCount} módulos[/]"));
-            AnsiConsole.WriteLine();
-            break;
+AnsiConsole.WriteLine();
+AnsiConsole.Write(new Rule("[bold]VARREDURA CONCLUÍDA[/]"));
 
-        case ScanProgressKind.ModuleStarted:
-            ConsoleUI.PrintModuleStart(
-                $"{update.ModuleIndex}/{update.ModuleCount} {update.ModuleName}",
-                update.Message);
-            break;
+// ── Prompt para abrir relatório ───────────────────────────────────────────────
+if (!noFinalPrompt && htmlReportPath != null && File.Exists(htmlReportPath))
+{
+    AnsiConsole.WriteLine();
 
-        case ScanProgressKind.ModuleCompleted:
-            ConsoleUI.PrintModuleOk(
-                update.ModuleName ?? "Módulo",
-                update.Findings?.Count ?? 0,
-                update.Duration ?? TimeSpan.Zero);
+    var choice = AnsiConsole.Prompt(
+        new SelectionPrompt<string>()
+            .Title("[bold]O que deseja fazer agora?[/]")
+            .HighlightStyle(new Style(foreground: Color.Red))
+            .AddChoices(
+                "Abrir relatório HTML com evidências",
+                "Abrir pasta do relatório",
+                "Sair"
+            ));
 
-            if (update.Findings != null)
+    switch (choice)
+    {
+        case "Abrir relatório HTML com evidências":
+            try
             {
-                foreach (var finding in update.Findings.Where(f => f.Risk >= RiskLevel.Medium))
-                    ConsoleUI.PrintFinding(finding);
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(htmlReportPath)
+                    { UseShellExecute = true });
+                AnsiConsole.MarkupLine("[green]Relatório aberto no navegador padrão.[/]");
+            }
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[red]Não foi possível abrir o relatório: {Markup.Escape(ex.Message)}[/]");
+                AnsiConsole.MarkupLine($"Caminho: [dim]{Markup.Escape(htmlReportPath)}[/]");
             }
             break;
 
-        case ScanProgressKind.ModuleFailed:
-            ConsoleUI.PrintModuleError(update.ModuleName ?? "Módulo", update.Exception?.Message ?? update.Message);
-            break;
-
-        case ScanProgressKind.CorrelationStarted:
-            AnsiConsole.WriteLine();
-            AnsiConsole.MarkupLine("[bold cyan]▶[/] [bold]Correlação[/] [grey]— analisando padrões entre módulos...[/]");
-            break;
-
-        case ScanProgressKind.CorrelationCompleted:
-            AnsiConsole.MarkupLine("  [green]✓[/] Correlação concluída");
-            break;
-
-        case ScanProgressKind.ResultReady when update.Result != null:
-            ConsoleUI.PrintSummary(update.Result);
-            break;
-
-        case ScanProgressKind.ReportStarted:
-            AnsiConsole.WriteLine();
-            AnsiConsole.Write(new Rule("[bold]EXPORTANDO RELATÓRIO[/]"));
-            break;
-
-        case ScanProgressKind.ReportGenerated:
-            if (update.HtmlReportPath != null)
-                AnsiConsole.MarkupLine($"[green]✓ HTML:[/] {Markup.Escape(update.HtmlReportPath)}");
-            if (update.TextReportPath != null)
-                AnsiConsole.MarkupLine($"[green]✓ TXT: [/] {Markup.Escape(update.TextReportPath)}");
-            if (update.HtmlReportPath != null)
+        case "Abrir pasta do relatório":
+            try
             {
-                var evidencePath = Path.Combine(Path.GetDirectoryName(update.HtmlReportPath)!, "evidence.json");
-                AnsiConsole.MarkupLine($"[green]✓ JSON:[/] {Markup.Escape(evidencePath)}");
+                var folder = Path.GetDirectoryName(htmlReportPath)!;
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{folder}\"")
+                    { UseShellExecute = true });
             }
-            break;
-
-        case ScanProgressKind.ReportFailed:
-            ConsoleUI.PrintError(update.Message);
+            catch (Exception ex)
+            {
+                AnsiConsole.MarkupLine($"[red]Não foi possível abrir a pasta: {Markup.Escape(ex.Message)}[/]");
+            }
             break;
     }
 }
 
+return finalResult?.OverallRisk switch
+{
+    RiskLevel.Critical => 4,
+    RiskLevel.High     => 3,
+    RiskLevel.Medium   => 2,
+    RiskLevel.Low      => 1,
+    _                  => 0
+};
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 static void PrintHelp()
 {
-    // Plain Console.WriteLine — safe for pipes and non-interactive terminals.
-    // Never use AnsiConsole here: brackets in help text crash Spectre markup parser.
     Console.WriteLine("ECHO NERFADOS SHIELD XDR v1.0");
     Console.WriteLine("Plataforma Anti-Cheat para investigacao de Screen-Share");
     Console.WriteLine();
@@ -215,7 +262,7 @@ static void PrintHelp()
     Console.WriteLine("  EchoNerfados.exe --investigator \"Fulano\" --suspect \"Ciclano\" --case-id \"CASO-001\"");
     Console.WriteLine("  EchoNerfados.exe --no-memory --output C:\\Relatorios");
     Console.WriteLine();
-    Console.WriteLine("IMPORTANTE: Execute como Administrador para acesso completo (Amcache, UserAssist, USN Journal).");
+    Console.WriteLine("IMPORTANTE: Execute como Administrador para acesso completo.");
 }
 
 internal sealed class InlineProgress<T>(Action<T> handler) : IProgress<T>

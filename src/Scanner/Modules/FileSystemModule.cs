@@ -9,6 +9,59 @@ public class FileSystemModule : BaseModule
     public override string Name => "File System";
     public override string Description => "Lixeira, Temp, Downloads, CrashDumps e arquivos suspeitos";
 
+    // Centralizes IsGenericName logic: generic-named cheats (launcher.exe, spotify.exe)
+    // are only flagged when TryGetCredibleCheat confirms the path matches a known cheat location.
+    // Returns null when path is not suspicious for that name — prevents Critical false positives.
+    private Finding? TryBuildCheatFinding(string filePath, string contextLabel)
+    {
+        var name = Path.GetFileName(filePath).ToLowerInvariant();
+        var cheat = CheatDatabase.TryGetCredibleCheat(name, filePath);
+        if (cheat == null) return null;
+
+        var isGeneric = CheatDatabase.KnownExecutables[name].IsGenericName;
+        var sha256    = GetFileHash(filePath);
+        var sha1      = GetFileSha1(filePath);
+        var hashMatch = cheat.Hashes?.Contains(sha1 ?? "", StringComparer.OrdinalIgnoreCase) == true;
+
+        if (hashMatch)
+        {
+            return new Finding(
+                RiskLevel.Critical, FindingCategory.Cheat, Name,
+                $"CHEAT CONFIRMADO POR HASH: {cheat.Name} ({Path.GetFileName(filePath)})",
+                $"Hash SHA1 bate com o banco de cheats.\nArquivo: {filePath}\n{cheat.Description}",
+                $"SHA256: {sha256 ?? "N/A"}",
+                confidence: Confidence.Confirmed,
+                ruleId: $"FS_HASH_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}",
+                entity: filePath
+            );
+        }
+
+        if (isGeneric)
+        {
+            return new Finding(
+                RiskLevel.Medium, FindingCategory.Cheat, Name,
+                $"Executável com nome genérico de cheat em caminho suspeito ({contextLabel}): {Path.GetFileName(filePath)}",
+                $"Nome de arquivo coincide com cheat conhecido, mas o nome é genérico — requer confirmação por hash ou correlação.\n" +
+                $"Arquivo: {filePath}\n{cheat.Description}",
+                $"SHA256: {sha256 ?? "N/A"}",
+                confidence: Confidence.Low,
+                ruleId: $"FS_GENERIC_{name.ToUpperInvariant().Replace('.', '_')}",
+                entity: filePath,
+                validationHint: "Nome genérico — confirmar por hash SHA1, assinatura digital, correlação BAM/Prefetch/MuiCache/FiveM"
+            );
+        }
+
+        return new Finding(
+            RiskLevel.Critical, FindingCategory.Cheat, Name,
+            $"CHEAT {contextLabel.ToUpperInvariant()}: {cheat.Name}",
+            $"Arquivo de cheat encontrado.\nArquivo: {filePath}\n{cheat.Description}",
+            $"SHA256: {sha256 ?? "N/A"}",
+            confidence: Confidence.High,
+            ruleId: $"FS_CHEAT_{cheat.Name.ToUpperInvariant().Replace(" ", "_")}",
+            entity: filePath
+        );
+    }
+
     protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken cancellationToken)
     {
         var findings = new List<Finding>();
@@ -115,18 +168,8 @@ public class FileSystemModule : BaseModule
 
                     var name = Path.GetFileName(file).ToLowerInvariant();
 
-                    if (CheatDatabase.KnownExecutables.TryGetValue(name, out var cheat))
-                    {
-                        findings.Add(new Finding(
-                            RiskLevel.Critical,
-                            FindingCategory.Cheat,
-                            "File System",
-                            $"CHEAT NA PASTA TEMP: {cheat.Name}",
-                            $"Executável de cheat na pasta temporária.\nArquivo: {file}",
-                            $"SHA256: {GetFileHash(file) ?? "N/A"}"
-                        ));
-                        continue;
-                    }
+                    var cheatFinding = TryBuildCheatFinding(file, "Temp");
+                    if (cheatFinding != null) { findings.Add(cheatFinding); continue; }
 
                     if (CheatDatabase.HasSuspiciousKeyword(name) &&
                         !IsOwnProcess(name) &&
@@ -169,18 +212,8 @@ public class FileSystemModule : BaseModule
 
                 if (ext is not (".exe" or ".dll" or ".zip" or ".rar" or ".7z")) continue;
 
-                if (CheatDatabase.KnownExecutables.TryGetValue(name, out var cheat))
-                {
-                    findings.Add(new Finding(
-                        RiskLevel.Critical,
-                        FindingCategory.Cheat,
-                        "File System",
-                        $"CHEAT NOS DOWNLOADS: {cheat.Name}",
-                        $"Arquivo de cheat encontrado na pasta de Downloads.\nArquivo: {file}",
-                        $"SHA256: {GetFileHash(file) ?? "N/A"}"
-                    ));
-                    continue;
-                }
+                var cheatFinding = TryBuildCheatFinding(file, "Downloads");
+                if (cheatFinding != null) { findings.Add(cheatFinding); continue; }
 
                 if (CheatDatabase.HasSuspiciousKeyword(name) &&
                     !IsOwnProcess(name) &&
@@ -268,16 +301,8 @@ public class FileSystemModule : BaseModule
 
                     var name = Path.GetFileName(file).ToLowerInvariant();
 
-                    if (CheatDatabase.KnownExecutables.TryGetValue(name, out var cheat))
-                    {
-                        findings.Add(new Finding(
-                            RiskLevel.Critical,
-                            FindingCategory.Cheat,
-                            "File System",
-                            $"CHEAT NO APPDATA: {cheat.Name}",
-                            $"Executável de cheat em AppData.\nArquivo: {file}"
-                        ));
-                    }
+                    var cheatFinding = TryBuildCheatFinding(file, "AppData");
+                    if (cheatFinding != null) findings.Add(cheatFinding);
                 }
             }
             catch (OperationCanceledException) { throw; }

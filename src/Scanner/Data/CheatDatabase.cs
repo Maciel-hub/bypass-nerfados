@@ -19,7 +19,14 @@ public static class CheatDatabase
                 "Cheat para FiveM. Gera arquivo de 8-10 chars aleatórios na System32 e arquivo de 8-10 números com 0kb.",
                 [@"AppData\Local\Programs\Common", @"AppData\Local\Temp\"],
                 AssociatedFiles: ["dxsetup"],
-                IsGenericName: true   // "launcher.exe" é usado por Rockstar, Steam, Epic etc.
+                IsGenericName: true   // "launcher.exe" é usado por Rockstar, Steam, Epic etc. — só paths muito específicos confirmam
+            ),
+
+            ["spotify.exe"] = new CheatInfo(
+                "GOSTH",
+                "Cheat GOSTH disfarçado como Spotify para evitar detecção. Loader renomeado — o binário legítimo do Spotify reside em AppData\\Roaming\\Spotify\\.",
+                [@"AppData\Local\Temp\", @"Downloads\", @"Desktop\", @"AppData\Local\Programs\Common"],
+                IsGenericName: true   // spotify.exe legítimo está em AppData\Roaming\Spotify\ — fora desses paths é suspeito
             ),
 
             ["farinhafree.exe"] = new CheatInfo(
@@ -172,8 +179,10 @@ public static class CheatDatabase
         // DirectX / Visual C++ redistributables (common in Amcache/AppData)
         "dxwebsetup", "directx_", "vcredist", "vc_redist", "windowsdesktop-runtime",
 
-        // Comms / productivity
-        "spotify", "discord", "steam", "onedrive", "googledrive",
+        // Comms / productivity — Spotify: only whitelist the real install paths; spotify.exe outside of
+        // AppData\Roaming\Spotify\ or WindowsApps\SpotifyAB is flagged as GOSTH loader (see KnownExecutables)
+        @"roaming\spotify\", @"windowsapps\spotifyab",
+        "discord", "steam", "onedrive", "googledrive",
         "dropbox", "teams", "skype", "zoom",
 
         // Streaming / capture

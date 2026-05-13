@@ -1,3 +1,4 @@
+using Microsoft.Win32;
 using BypassNerfados.Scanner.Models;
 
 namespace BypassNerfados.Scanner.Core;
@@ -130,13 +131,13 @@ public static class Correlator
 
     private static void CorrelateFiveMSession(ScanResult result)
     {
-        // Find when FiveM last ran by reading Prefetch .pf files directly.
-        // FiveM.exe itself is in _legitimatePatterns so it generates no findings —
-        // we go to the filesystem instead of findings list.
+        // Collect FiveM/GTA5 session timestamps from all available sources.
+        // Priority: Prefetch (most precise) → BAM/DAM registry (survives Prefetch deletion).
+        var fivemTimes = new List<DateTime>();
+
+        // 1. Prefetch
         var prefetchDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.Windows), "Prefetch");
-
-        var fivemTimes = new List<DateTime>();
         if (Directory.Exists(prefetchDir))
         {
             try
@@ -147,6 +148,51 @@ public static class Correlator
             }
             catch { /* prefetch inacessível */ }
         }
+
+        // 2. BAM/DAM — fallback when Prefetch was deleted or SSD has it disabled.
+        //    Value names are device paths; we match by filename suffix only.
+        if (fivemTimes.Count == 0)
+        {
+            foreach (var svcName in new[] { "bam", "dam" })
+            {
+                try
+                {
+                    using var hive = Registry.LocalMachine.OpenSubKey(
+                        $@"SYSTEM\CurrentControlSet\Services\{svcName}\State\UserSettings");
+                    if (hive == null) continue;
+
+                    foreach (var sid in hive.GetSubKeyNames())
+                    {
+                        using var userKey = hive.OpenSubKey(sid);
+                        if (userKey == null) continue;
+
+                        foreach (var valueName in userKey.GetValueNames())
+                        {
+                            if (string.IsNullOrEmpty(valueName)) continue;
+                            var lower = valueName.ToLowerInvariant();
+                            if (!lower.EndsWith("\\fivem.exe") && !lower.EndsWith("\\gta5.exe")) continue;
+
+                            var data = userKey.GetValue(valueName, null,
+                                RegistryValueOptions.DoNotExpandEnvironmentNames) as byte[];
+                            if (data == null || data.Length < 8) continue;
+
+                            var fileTime = BitConverter.ToInt64(data, 0);
+                            if (fileTime <= 0) continue;
+                            try { fivemTimes.Add(DateTime.FromFileTime(fileTime)); }
+                            catch { /* invalid timestamp */ }
+                        }
+                    }
+                }
+                catch { /* BAM/DAM inacessível sem Admin */ }
+            }
+        }
+
+        // 3. BAM co-execution findings already emitted by BamDamModule carry FiveM session timestamps
+        var bamCoExecTimes = result.Findings
+            .Where(f => f.RuleId?.StartsWith("BAM_COEXEC_") == true && f.Timestamp.HasValue)
+            .Select(f => f.Timestamp!.Value)
+            .ToList();
+        fivemTimes.AddRange(bamCoExecTimes);
 
         if (fivemTimes.Count == 0) return;
 

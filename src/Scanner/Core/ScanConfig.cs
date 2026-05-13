@@ -28,7 +28,7 @@ public class ScanConfig
     public bool DeepMemoryScan { get; set; } = true;
     public bool ScanNetworkUsage { get; set; } = true;
     public bool RunUsnJournal { get; set; } = true;
-    public TimeSpan EventWindowLookback { get; set; } = TimeSpan.FromDays(60);
+    public TimeSpan EventWindowLookback { get; set; } = TimeSpan.FromDays(90);
 
     public string ReportFileName =>
         $"Echo_Nerfados_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}";

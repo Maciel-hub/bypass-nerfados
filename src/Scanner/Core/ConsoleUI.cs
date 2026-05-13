@@ -16,22 +16,6 @@ public static class ConsoleUI
         AnsiConsole.WriteLine();
     }
 
-    public static void PrintModuleStart(string name, string description)
-    {
-        AnsiConsole.MarkupLine($"[bold cyan]▶[/] [bold]{name}[/] [grey]— {description}[/]");
-    }
-
-    public static void PrintModuleOk(string name, int findingsCount, TimeSpan duration)
-    {
-        var color = findingsCount > 0 ? "yellow" : "green";
-        AnsiConsole.MarkupLine($"  [green]✓[/] [{color}]{findingsCount} findings[/] [grey]({duration.TotalMilliseconds:F0}ms)[/]");
-    }
-
-    public static void PrintModuleError(string name, string error)
-    {
-        AnsiConsole.MarkupLine($"  [red]✗[/] [grey]{Markup.Escape(error)}[/]");
-    }
-
     public static void PrintSummary(ScanResult result)
     {
         AnsiConsole.WriteLine();
@@ -242,23 +226,6 @@ public static class ConsoleUI
         return path[..keep] + "..." + path[^keep..];
     }
 
-    public static void PrintFinding(Finding finding)
-    {
-        if (finding.Risk < RiskLevel.Medium) return;
-
-        var color = finding.Risk switch
-        {
-            RiskLevel.Critical => "red",
-            RiskLevel.High     => "darkorange",
-            RiskLevel.Medium   => "yellow",
-            _                  => "white"
-        };
-
-        AnsiConsole.MarkupLine($"    [{color}]■[/] [{color}]{finding.RiskLabel}[/] {Markup.Escape(finding.Title)}");
-        if (finding.Evidence != null)
-            AnsiConsole.MarkupLine($"       [grey]{Markup.Escape(finding.Evidence)}[/]");
-    }
-
     public static void PrintInfo(string message) =>
         AnsiConsole.MarkupLine($"[grey]{Markup.Escape(message)}[/]");
 
@@ -272,6 +239,7 @@ public static class ConsoleUI
     public static bool PromptLogin(int maxAttempts = 3)
     {
         if (!Console.IsOutputRedirected) AnsiConsole.Clear();
+        Console.Title = "Echo Nerfados Shield XDR v1.0";
         AnsiConsole.Write(new Rule("[bold red]Echo Nerfados Shield XDR — Acesso Restrito[/]"));
         AnsiConsole.WriteLine();
 

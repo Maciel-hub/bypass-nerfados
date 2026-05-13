@@ -17,9 +17,9 @@ echo  [INFO] .NET SDK encontrado:
 dotnet --version
 
 echo.
-echo  [INFO] Limpando artefatos anteriores em publish\win-x64\...
-if exist "publish\win-x64\" (
-    rmdir /s /q "publish\win-x64\"
+echo  [INFO] Limpando pasta publish\ inteira (artefatos antigos)...
+if exist "publish\" (
+    rmdir /s /q "publish\"
 )
 
 echo.

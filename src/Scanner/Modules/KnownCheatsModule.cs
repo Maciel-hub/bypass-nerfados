@@ -40,6 +40,9 @@ public class KnownCheatsModule : BaseModule
         // Check d3d10.dll in FiveM Plugins
         CheckFiveMPlugins(findings, cancellationToken);
 
+        // Check behavioral impact: unexpected files the cheat dropped into FiveM/GTA5
+        CheckFiveMGameImpact(findings, cancellationToken);
+
         // Check PSReadLine history
         CheckPsReadLine(findings, cancellationToken);
 
@@ -269,7 +272,8 @@ public class KnownCheatsModule : BaseModule
 
         if (!Directory.Exists(fivemData)) return;
 
-        foreach (var file in Directory.GetFiles(fivemData, "*.dll", SearchOption.AllDirectories))
+        foreach (var file in Directory.EnumerateFiles(fivemData, "*.dll",
+            new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true }))
         {
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -301,6 +305,178 @@ public class KnownCheatsModule : BaseModule
                     $"DLL não padrão encontrada na pasta de Plugins do FiveM.\nArquivo: {file}",
                     $"Tamanho: {sizeKb} KB"
                 ));
+            }
+        }
+    }
+
+    private void CheckFiveMGameImpact(List<Finding> findings, CancellationToken cancellationToken)
+    {
+        // Behavioral: cheats often drop files INTO the game installation or FiveM cache.
+        // These artifacts survive even after the cheat loader is deleted.
+
+        // 1. .asi files in GTA V directory — ASI loaders and cheat mods
+        var gtaDirs = new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Rockstar Games", "Grand Theft Auto V"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86), "Steam", "steamapps", "common", "Grand Theft Auto V"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Games", "Grand Theft Auto V"),
+        };
+        foreach (var gtaDir in gtaDirs)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!Directory.Exists(gtaDir)) continue;
+
+            foreach (var file in Directory.GetFiles(gtaDir, "*.asi"))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var name = Path.GetFileNameWithoutExtension(file).ToLowerInvariant();
+
+                // Known legit ASI mods (ScriptHookV, ScriptHookVDotNet)
+                if (name is "scripthookv" or "scripthookvdotnet" or "scripthookvdotnet2" or
+                           "scripthookvdotnet3" or "dinput8" or "asiloader") continue;
+
+                var sizeKb = new FileInfo(file).Length / 1024;
+                var sha256 = GetFileHash(file);
+
+                findings.Add(new Finding(
+                    RiskLevel.High,
+                    FindingCategory.Cheat,
+                    "Known Cheats",
+                    $"ASI MOD suspeito no GTA V: {Path.GetFileName(file)}",
+                    $"Arquivo .asi desconhecido encontrado na pasta do GTA V. " +
+                    $"Cheats como Eulen, Cherax e RedEngine usam ASI loaders.\nArquivo: {file}",
+                    $"SHA256: {sha256 ?? "N/A"} | Tamanho: {sizeKb} KB",
+                    confidence: Confidence.Medium,
+                    ruleId: $"IMPACT_ASI_{name.ToUpperInvariant().Replace(' ', '_')}",
+                    entity: file
+                ));
+            }
+        }
+
+        // 2. Unexpected scripts/mods in FiveM citizen folder
+        var fivemCitizen = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FiveM", "FiveM Application Data", "citizen");
+
+        if (Directory.Exists(fivemCitizen))
+        {
+            var scriptExts = new[] { ".lua", ".js", ".dll" };
+            foreach (var file in Directory.EnumerateFiles(fivemCitizen, "*",
+                new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, MaxRecursionDepth = 4 }))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                var ext  = Path.GetExtension(file).ToLowerInvariant();
+                if (!scriptExts.Contains(ext)) continue;
+
+                var rel  = Path.GetRelativePath(fivemCitizen, file);
+                var name = Path.GetFileNameWithoutExtension(file).ToLowerInvariant();
+
+                if (CheatDatabase.HasSuspiciousKeyword(name) ||
+                    CheatDatabase.HasSuspiciousKeyword(rel))
+                {
+                    findings.Add(new Finding(
+                        RiskLevel.High,
+                        FindingCategory.Cheat,
+                        "Known Cheats",
+                        $"Script suspeito na pasta citizen do FiveM: {rel}",
+                        $"Arquivo de script com nome suspeito na instalação do FiveM.\nArquivo: {file}",
+                        $"SHA256: {GetFileHash(file) ?? "N/A"}",
+                        confidence: Confidence.Medium,
+                        ruleId: $"IMPACT_FIVEM_SCRIPT_{name.ToUpperInvariant()}",
+                        entity: file
+                    ));
+                }
+            }
+        }
+
+        // 3. CitizenFX.log — check for DLL injection evidence ("DLL loaded" of non-CFX paths)
+        var logPaths = new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "FiveM", "FiveM Application Data", "CitizenFX.log"),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "FiveM", "FiveM Application Data", "CitizenFX.log.1"),
+        };
+        foreach (var logPath in logPaths)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!File.Exists(logPath)) continue;
+
+            try
+            {
+                // Read last 4000 lines — the log can be very large
+                var lines = File.ReadLines(logPath).TakeLast(4000).ToList();
+                foreach (var line in lines)
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    var lower = line.ToLowerInvariant();
+                    if (!lower.Contains("dll") && !lower.Contains("inject") && !lower.Contains("hook")) continue;
+                    if (CheatDatabase.IsKnownLegitimate(lower)) continue;
+
+                    if (CheatDatabase.HasSuspiciousKeyword(lower) ||
+                        (lower.Contains("loaded") && lower.Contains("dll") &&
+                         !lower.Contains(@"fivem application data") &&
+                         !lower.Contains(@"\citizen\") &&
+                         !lower.Contains(@"\windows\") &&
+                         !lower.Contains(@"\system32\")))
+                    {
+                        findings.Add(new Finding(
+                            RiskLevel.High,
+                            FindingCategory.Cheat,
+                            "Known Cheats",
+                            "CitizenFX.log: DLL suspeita carregada no FiveM",
+                            $"Log do FiveM registrou carregamento de DLL fora das pastas oficiais, " +
+                            $"indicativo de injeção por cheat.\nLinha: {line.Trim()[..Math.Min(200, line.Trim().Length)]}",
+                            $"Arquivo de log: {logPath}",
+                            confidence: Confidence.Medium,
+                            ruleId: "IMPACT_CITIZENFX_DLL_INJECT",
+                            entity: logPath
+                        ));
+                        break; // one finding per log file is enough
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { LogPartialError($"CitizenFX.log inacessível: {logPath}", ex); }
+        }
+
+        // 4. FiveM game-storage: modified RPF cache (weapon data files outside game dir)
+        var fivemStorage = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "FiveM", "FiveM Application Data", "data", "game-storage");
+
+        if (Directory.Exists(fivemStorage))
+        {
+            foreach (var file in Directory.EnumerateFiles(fivemStorage, "*.rpf",
+                new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, MaxRecursionDepth = 3 }))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var name = Path.GetFileNameWithoutExtension(file).ToLowerInvariant();
+
+                // Only known weapon/ped RPFs are interesting — DLC packs are legitimate
+                if (name is "weapons_player" or "resident" or "ped" or "weapon" ||
+                    name.Contains("weapon") || name.Contains("ped_"))
+                {
+                    var sizeKb = new FileInfo(file).Length / 1024;
+                    var modified = File.GetLastWriteTime(file);
+
+                    findings.Add(new Finding(
+                        RiskLevel.High,
+                        FindingCategory.Cheat,
+                        "Known Cheats",
+                        $"RPF de dados de jogo modificado no cache do FiveM: {Path.GetFileName(file)}",
+                        $"Arquivo RPF de dados de armas/personagens encontrado no cache do FiveM. " +
+                        $"Técnica usada por cheats para modificar comportamento de armas/players sem alterar arquivos do jogo.\n" +
+                        $"Arquivo: {file}\nModificado: {modified:dd/MM/yyyy HH:mm:ss}",
+                        $"Tamanho: {sizeKb} KB | Modificado: {modified:dd/MM/yyyy}",
+                        modified,
+                        confidence: Confidence.Medium,
+                        ruleId: $"IMPACT_RPF_{name.ToUpperInvariant().Replace(' ', '_')}",
+                        entity: file
+                    ));
+                }
             }
         }
     }

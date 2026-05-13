@@ -416,7 +416,7 @@ public static class EvidenceEnricher
         "Registry Artifacts"    => "Registry",
         "BAM/DAM"               => "BAM",
         "Event Viewer"          => "EventLog",
-        "Defender"              => "Defender",
+        "Windows Defender"      => "Defender",
         "Amcache"               => "Amcache",
         "UserAssist"            => "UserAssist",
         "ShimCache"             => "ShimCache",

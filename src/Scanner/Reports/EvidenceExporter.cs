@@ -32,41 +32,44 @@ public static class EvidenceExporter
         };
         WriteJson(Path.Combine(runFolder, "evidence.json"), dto);
 
+        var d = $"{lookback}d";
+
         // Core execution-evidence modules — first consulted in any FiveM investigation
-        WriteModuleJson(result, runFolder, "BAM/DAM",             "bamdam_60d.json",        lookback);
-        WriteModuleJson(result, runFolder, "Prefetch",            "prefetch_60d.json",      lookback);
-        WriteModuleJson(result, runFolder, "Known Cheats",        "knowncheats_60d.json",   lookback);
-        WriteModuleJson(result, runFolder, "Registry Artifacts",  "registryartifacts_60d.json", lookback);
+        WriteModuleJson(result, runFolder, "BAM/DAM",             $"bamdam_{d}.json",             lookback);
+        WriteModuleJson(result, runFolder, "Prefetch",            $"prefetch_{d}.json",           lookback);
+        WriteModuleJson(result, runFolder, "Known Cheats",        $"knowncheats_{d}.json",        lookback);
+        WriteModuleJson(result, runFolder, "Registry Artifacts",  $"registryartifacts_{d}.json",  lookback);
 
         // Always export per-source files — even when empty, so the investigator can verify coverage
-        WriteModuleJson(result, runFolder, "Event Viewer",        "eventviewer_60d.json",   lookback);
-        WriteModuleJson(result, runFolder, "Windows Defender",    "defender_60d.json",      lookback);
-        WriteModuleJson(result, runFolder, "Services",            "services_60d.json",      lookback);
+        WriteModuleJson(result, runFolder, "Event Viewer",        $"eventviewer_{d}.json",        lookback);
+        WriteModuleJson(result, runFolder, "Windows Defender",    $"defender_{d}.json",           lookback);
+        WriteModuleJson(result, runFolder, "Services",            $"services_{d}.json",           lookback);
+        WriteModuleJson(result, runFolder, "System Info",         $"systeminfo_{d}.json",         lookback);
 
         // Artifact-trail modules: no event-log coverage backing; coverage estimated from findings
-        WriteModuleJson(result, runFolder, "Amcache",               "amcache_60d.json",               lookback);
-        WriteModuleJson(result, runFolder, "UserAssist",            "userassist_60d.json",            lookback);
-        WriteModuleJson(result, runFolder, "ShimCache",             "shimcache_60d.json",             lookback);
-        WriteModuleJson(result, runFolder, "LNK Recent",            "lnk_60d.json",                  lookback);
-        WriteModuleJson(result, runFolder, "RegistryPersistence",   "registrypersistence_60d.json",  lookback);
+        WriteModuleJson(result, runFolder, "Amcache",               $"amcache_{d}.json",              lookback);
+        WriteModuleJson(result, runFolder, "UserAssist",            $"userassist_{d}.json",           lookback);
+        WriteModuleJson(result, runFolder, "ShimCache",             $"shimcache_{d}.json",            lookback);
+        WriteModuleJson(result, runFolder, "LNK Recent",            $"lnk_{d}.json",                 lookback);
+        WriteModuleJson(result, runFolder, "RegistryPersistence",   $"registrypersistence_{d}.json", lookback);
 
         // Extended modules
-        WriteModuleJson(result, runFolder, "System Reset/Restore",  "systemreset_60d.json",          lookback);
-        WriteModuleJson(result, runFolder, "System Tampering",      "systemtampering_60d.json",      lookback);
-        WriteModuleJson(result, runFolder, "Browser Downloads",     "browserdownloads_60d.json",     lookback);
-        WriteModuleJson(result, runFolder, "ShellBags",             "shellbags_60d.json",            lookback);
-        WriteModuleJson(result, runFolder, "Jump Lists",            "jumplists_60d.json",            lookback);
-        WriteModuleJson(result, runFolder, "NVIDIA Artifacts",      "nvidia_60d.json",               lookback);
-        WriteModuleJson(result, runFolder, "External Tool Residue", "externaltools_60d.json",        lookback);
-        WriteModuleJson(result, runFolder, "Recycle Bin",           "recyclebin_60d.json",           lookback);
-        WriteModuleJson(result, runFolder, "Timeline",              "timeline_60d.json",             lookback);
-        WriteModuleJson(result, runFolder, "SRUM",                  "srum_60d.json",                 lookback);
-        WriteModuleJson(result, runFolder, "File System",           "filesystem_60d.json",           lookback);
-        WriteModuleJson(result, runFolder, "Network Usage",         "network_60d.json",              lookback);
+        WriteModuleJson(result, runFolder, "System Reset/Restore",  $"systemreset_{d}.json",         lookback);
+        WriteModuleJson(result, runFolder, "System Tampering",      $"systemtampering_{d}.json",     lookback);
+        WriteModuleJson(result, runFolder, "Browser Downloads",     $"browserdownloads_{d}.json",    lookback);
+        WriteModuleJson(result, runFolder, "ShellBags",             $"shellbags_{d}.json",           lookback);
+        WriteModuleJson(result, runFolder, "Jump Lists",            $"jumplists_{d}.json",           lookback);
+        WriteModuleJson(result, runFolder, "NVIDIA Artifacts",      $"nvidia_{d}.json",              lookback);
+        WriteModuleJson(result, runFolder, "External Tool Residue", $"externaltools_{d}.json",       lookback);
+        WriteModuleJson(result, runFolder, "Recycle Bin",           $"recyclebin_{d}.json",          lookback);
+        WriteModuleJson(result, runFolder, "Timeline",              $"timeline_{d}.json",            lookback);
+        WriteModuleJson(result, runFolder, "SRUM",                  $"srum_{d}.json",               lookback);
+        WriteModuleJson(result, runFolder, "File System",           $"filesystem_{d}.json",          lookback);
+        WriteModuleJson(result, runFolder, "Network Usage",         $"network_{d}.json",             lookback);
 
         // Optional modules — always written so investigator can confirm whether they ran
-        WriteModuleJson(result, runFolder, "USN Journal",           "usnjournal_60d.json",           lookback);
-        WriteModuleJson(result, runFolder, "Process Memory",        "processmemory_60d.json",        lookback);
+        WriteModuleJson(result, runFolder, "USN Journal",           $"usnjournal_{d}.json",          lookback);
+        WriteModuleJson(result, runFolder, "Process Memory",        $"processmemory_{d}.json",       lookback);
     }
 
     private static void WriteModuleJson(
