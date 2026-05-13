@@ -39,7 +39,11 @@ for (int i = 0; i < args.Length; i++)
         case "--no-usn":    config.RunUsnJournal  = false; break;
         case "--no-memory": config.DeepMemoryScan = false; break;
         case "--no-report": config.SaveReport     = false; break;
-        case "--output" when i + 1 < args.Length: config.ReportOutputPath = args[++i]; break;
+        case "--output"   when i + 1 < args.Length: config.ReportOutputPath = args[++i]; break;
+        case "--lookback" when i + 1 < args.Length:
+            if (int.TryParse(args[++i], out var days) && days > 0)
+                config.EventWindowLookback = TimeSpan.FromDays(days);
+            break;
         case "--verbose": config.VerboseOutput = true; break;
         case "--no-final-prompt": noFinalPrompt = true; break;
         case "--help" or "-h": PrintHelp(); return 0;
@@ -251,9 +255,11 @@ static void PrintHelp()
     Console.WriteLine("  --case-id <id>          ID do caso/investigacao");
     Console.WriteLine("  --drive <letra>         Drive a ser analisado (padrao: C:)");
     Console.WriteLine("  --output <caminho>      Pasta de saida do relatorio");
+    Console.WriteLine("  --lookback <dias>       Janela de analise em dias (padrao: 90)");
     Console.WriteLine("  --no-usn                Pular analise do USN Journal");
     Console.WriteLine("  --no-memory             Pular analise de memoria de processos");
     Console.WriteLine("  --no-report             Nao gerar relatorio em arquivo");
+    Console.WriteLine("  --no-final-prompt       Nao exibir menu apos conclusao (modo automatico)");
     Console.WriteLine("  --verbose               Mostrar todos os findings (incluindo INFO)");
     Console.WriteLine("  --help                  Exibir esta ajuda");
     Console.WriteLine();

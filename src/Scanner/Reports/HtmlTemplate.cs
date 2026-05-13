@@ -6,6 +6,26 @@ namespace BypassNerfados.Scanner.Reports;
 
 public static class HtmlTemplate
 {
+    private static readonly HashSet<string> s_execModules     = ["BAM/DAM", "Prefetch", "Amcache", "UserAssist", "ShimCache", "Registry Artifacts"];
+    private static readonly HashSet<string> s_downloadModules = ["Browser Downloads", "External Tool Residue"];
+    private static readonly HashSet<string> s_deletionModules = ["USN Journal", "Recycle Bin"];
+    private static readonly HashSet<string> s_folderModules   = ["ShellBags", "Jump Lists", "LNK Recent"];
+
+    private static string GetTabId(Finding f) =>
+        f.Category == FindingCategory.LogCoverage                  ? "cobertura" :
+        f.Category == FindingCategory.Cheat                        ? "cheats" :
+        f.Category is FindingCategory.AntiForensics
+            or FindingCategory.SystemTampering
+            or FindingCategory.ServiceTampering                    ? "bypass" :
+        f.Category == FindingCategory.MemoryAnomaly
+            || f.Module == "Process Memory"                        ? "memoria" :
+        s_execModules.Contains(f.Module)
+            || f.Category == FindingCategory.SuspiciousExecution   ? "execucoes" :
+        s_downloadModules.Contains(f.Module)                       ? "downloads" :
+        s_deletionModules.Contains(f.Module)                       ? "delecoes" :
+        s_folderModules.Contains(f.Module)                         ? "pastas" :
+        "outros";
+
     public static string Build(ScanResult result, ScanConfig config)
     {
         var sb = new StringBuilder();
@@ -33,33 +53,51 @@ public static class HtmlTemplate
             ? $"""<div><span class="label">Investigador</span><span class="value">{Esc(config.InvestigatorName)}</span></div>"""
             : "";
 
-        // Pre-compute sections so nav links are conditional
-        var cheatFindings  = result.CheatFindings.OrderByDescending(f => f.Risk).ToList();
-        var bypassFindings = result.BypassFindings.OrderByDescending(f => f.Risk).ToList();
-        var antiForensics  = result.Findings
-            .Where(f => f.Category is FindingCategory.AntiForensics or FindingCategory.SystemTampering or FindingCategory.ServiceTampering)
-            .Where(f => f.Risk >= RiskLevel.High)
-            .ToList();
-        var others = result.Findings
-            .Where(f => f.Category != FindingCategory.Cheat &&
-                        !(f.Category is FindingCategory.AntiForensics or FindingCategory.SystemTampering or FindingCategory.ServiceTampering && f.Risk >= RiskLevel.High))
-            .OrderByDescending(f => f.Risk)
-            .ToList();
+        // Pre-compute tabs
+        var byTab      = result.Findings.GroupBy(GetTabId).ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.Risk).ToList());
         var allTimed   = result.SortedByTime.ToList();
         var hasBundles = result.EvidenceBundles.Count > 0;
 
-        var navSb = new StringBuilder();
-        navSb.Append("""<a class="nav-btn" href="#sec-summary">Resumo</a>""");
-        if (hasBundles)               navSb.Append("""<a class="nav-btn" href="#sec-dossier">Dossiê</a>""");
-        if (cheatFindings.Count > 0)  navSb.Append("""<a class="nav-btn" href="#sec-cheats">Cheats</a>""");
-        if (bypassFindings.Count > 0) navSb.Append("""<a class="nav-btn" href="#sec-bypass">Bypass</a>""");
-        if (antiForensics.Count > 0)  navSb.Append("""<a class="nav-btn" href="#sec-anti">Anti-Forense</a>""");
-        if (others.Count > 0)         navSb.Append("""<a class="nav-btn" href="#sec-others">Outros</a>""");
-        if (allTimed.Count > 0)       navSb.Append("""<a class="nav-btn" href="#sec-timeline">Timeline</a>""");
-        if (result.ModuleCoverage.Count > 0) navSb.Append("""<a class="nav-btn" href="#sec-coverage">Cobertura</a>""");
-        var navLinksHtml = navSb.ToString();
+        List<Finding> TabFindings(string id) => byTab.TryGetValue(id, out var l) ? l : [];
 
-        // $$""" raw string: CSS/JS braces are literal { }, C# interpolations use {{ }}
+        // Tab definitions in display order
+        var tabDefs = new (string Id, string Label, string BadgeClass)[]
+        {
+            ("resumo",      "Resumo",         ""),
+            ("cheats",      "Cheats",         "danger"),
+            ("diagnostico", "Diagnóstico",    "purple"),
+            ("execucoes",   "Execuções",      "warn"),
+            ("downloads",   "Downloads",      ""),
+            ("delecoes",    "Deleções/USN",   ""),
+            ("pastas",      "Pastas",         ""),
+            ("memoria",     "Memória",        "warn"),
+            ("bypass",      "Bypass",         "danger"),
+            ("outros",      "Outros",         ""),
+            ("timeline",    "Timeline",       ""),
+            ("cobertura",   "Cobertura",      ""),
+        };
+
+        bool HasTab(string id) => id switch
+        {
+            "resumo"      => true,
+            "diagnostico" => hasBundles,
+            "timeline"    => allTimed.Count > 0,
+            "cobertura"   => result.ModuleCoverage.Count > 0 || TabFindings("cobertura").Count > 0,
+            _             => TabFindings(id).Count > 0
+        };
+
+        int TabCount(string id) => id switch
+        {
+            "resumo"      => result.Findings.Count,
+            "diagnostico" => result.EvidenceBundles.Count,
+            "timeline"    => allTimed.Count,
+            "cobertura"   => result.ModuleCoverage.Count,
+            _             => TabFindings(id).Count
+        };
+
+        var visibleTabs = tabDefs.Where(t => HasTab(t.Id)).ToList();
+
+        // ── CSS + JS ─────────────────────────────────────────────────────────────
         sb.Append($$"""
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -87,23 +125,31 @@ public static class HtmlTemplate
   .stat { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px 20px; text-align: center; min-width: 80px; }
   .stat .n { font-size: 22px; font-weight: 700; }
   .stat .l { font-size: 11px; color: #64748b; text-transform: uppercase; margin-top: 2px; }
-  /* Sticky nav */
-  .nav-bar { position: sticky; top: 0; z-index: 100; background: #0d1117; border-bottom: 1px solid #1e293b; padding: 8px 32px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
-  .nav-btn { color: #64748b; text-decoration: none; padding: 4px 14px; border-radius: 4px; font-size: 12px; font-weight: 600; letter-spacing: 0.5px; border: 1px solid transparent; }
-  .nav-btn:hover { background: #1e293b; color: #e2e8f0; border-color: #334155; }
+  /* Tab bar */
+  .tab-bar { position: sticky; top: 0; z-index: 100; background: #0d1117; border-bottom: 2px solid #1e293b; padding: 0 24px; display: flex; align-items: flex-end; overflow-x: auto; }
+  .tab-btn { padding: 10px 15px; background: transparent; border: none; border-bottom: 3px solid transparent; color: #64748b; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; margin-bottom: -2px; display: flex; align-items: center; gap: 5px; letter-spacing: 0.3px; }
+  .tab-btn:hover { color: #94a3b8; background: #1e293b22; }
+  .tab-btn.active { color: #e2e8f0; border-bottom-color: #dc2626; }
+  .tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 9px; font-size: 10px; font-weight: 700; padding: 0 5px; }
+  .tab-count.danger { background: #dc262222; color: #dc2626; }
+  .tab-count.warn   { background: #ea580c22; color: #ea580c; }
+  .tab-count.purple { background: #7c3aed22; color: #a78bfa; }
+  .tab-count.plain  { background: #1e293b; color: #64748b; }
+  /* Tab panels */
+  .tab-panels { padding: 24px 32px; }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+  /* Tab heading */
+  .tab-heading { font-size: 15px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; padding-bottom: 12px; border-bottom: 1px solid #1e293b; margin-bottom: 18px; }
+  .tab-heading span { color: #475569; font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 10px; }
   /* Filter bar */
-  .filter-bar { display: flex; gap: 6px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; padding: 10px 14px; background: #111827; border: 1px solid #1e293b; border-radius: 6px; }
+  .filter-bar { display: flex; gap: 6px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; padding: 10px 14px; background: #111827; border: 1px solid #1e293b; border-radius: 6px; }
   .filter-btn { padding: 3px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; cursor: pointer; border: 1px solid #334155; background: transparent; color: #64748b; }
   .filter-btn:hover { background: #1e293b; color: #e2e8f0; }
   .filter-btn.active { background: #1e293b; color: #e2e8f0; border-color: #475569; }
-  /* Content */
-  .content { padding: 24px 32px; }
-  .section { margin-bottom: 32px; scroll-margin-top: 50px; }
-  .section-title { font-size: 16px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; padding-bottom: 8px; border-bottom: 1px solid #1e293b; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 8px; }
-  .section-title::after { content: '▾'; font-size: 12px; margin-left: auto; color: #475569; }
-  .section-title.collapsed::after { content: '▸'; }
-  .section-content { padding-top: 12px; }
-  .section-content.hidden { display: none; }
+  /* Module group */
+  .module-group { margin-bottom: 20px; }
+  .module-group-hdr { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 1px; padding: 6px 0; border-bottom: 1px solid #1e293b; margin-bottom: 8px; }
   /* Findings */
   .finding { background: #1a1a2e; border: 1px solid #334155; border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; border-left: 4px solid; }
   .finding.critical { border-left-color: #dc2626; }
@@ -113,7 +159,7 @@ public static class HtmlTemplate
   .finding.info { border-left-color: #475569; }
   .finding-header { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
   .badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; flex-shrink: 0; }
-  .badge.critical { background: #dc262622; color: #dc2626; }
+  .badge.critical { background: #dc262222; color: #dc2626; }
   .badge.high { background: #ea580c22; color: #ea580c; }
   .badge.medium { background: #ca8a0422; color: #ca8a04; }
   .badge.low { background: #16a34a22; color: #16a34a; }
@@ -161,7 +207,10 @@ public static class HtmlTemplate
   .footer { background: #0a0a0f; border-top: 1px solid #1e293b; padding: 16px 32px; color: #334155; font-size: 12px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
   /* Print */
   @media print {
-    .nav-bar, .filter-bar, .expand-btn { display: none !important; }
+    .tab-bar, .filter-bar, .expand-btn { display: none !important; }
+    .tab-pane { display: block !important; }
+    .tab-heading { color: #333 !important; border-bottom: 2px solid #dc2626; margin-top: 32px; page-break-before: always; }
+    .tab-heading:first-child { page-break-before: auto; }
     body { background: #fff; color: #111; font-size: 12px; }
     .header { background: #f0f4f8 !important; border-bottom: 2px solid #dc2626; }
     .header h1 { color: #dc2626; }
@@ -169,7 +218,6 @@ public static class HtmlTemplate
     .header .meta .label { color: #666; }
     .score-bar { background: #f8f8f8; border-bottom: 1px solid #ddd; }
     .score-circle .pts { color: #666; }
-    .section-content.hidden { display: block !important; }
     .timeline-extra { display: flex !important; }
     .finding { break-inside: avoid; page-break-inside: avoid; background: #f9f9f9; border-color: #ddd; }
     .finding-detail { color: #444; }
@@ -179,16 +227,18 @@ public static class HtmlTemplate
   }
 </style>
 <script>
-function toggleSection(el) {
-  var c = el.nextElementSibling;
-  var hidden = c.classList.toggle('hidden');
-  el.classList.toggle('collapsed', hidden);
+function switchTab(id, btn) {
+  document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.getElementById('tab-' + id).classList.add('active');
+  btn.classList.add('active');
 }
-function filterRisk(risk, btn) {
-  document.querySelectorAll('.finding[data-risk]').forEach(function(f) {
+function filterRisk(risk, btn, scope) {
+  var container = scope ? document.getElementById(scope) : document;
+  container.querySelectorAll('.finding[data-risk]').forEach(function(f) {
     f.style.display = (risk === 'all' || f.dataset.risk === risk) ? '' : 'none';
   });
-  document.querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
+  btn.closest('.filter-bar').querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
 }
 function expandTimeline() {
@@ -235,120 +285,85 @@ function expandTimeline() {
             sb.AppendLine($"""<div class="stat"><div class="n" style="color:{color}">{group.Count()}</div><div class="l">{group.Key}</div></div>""");
         }
 
-        sb.AppendLine($"  </div>\n</div>");
+        sb.AppendLine("  </div>\n</div>");
 
-        // Sticky nav bar
-        sb.AppendLine($"""<div class="nav-bar">{navLinksHtml}</div>""");
-
-        // Global risk filter bar
-        sb.AppendLine("""
-<div style="padding: 12px 32px 0;">
-<div class="filter-bar">
-  <span style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Filtrar findings:</span>
-  <button class="filter-btn active" onclick="filterRisk('all',this)">Todos</button>
-  <button class="filter-btn" onclick="filterRisk('critical',this)" style="color:#dc2626;border-color:#dc262644">Critical</button>
-  <button class="filter-btn" onclick="filterRisk('high',this)" style="color:#ea580c;border-color:#ea580c44">High</button>
-  <button class="filter-btn" onclick="filterRisk('medium',this)" style="color:#ca8a04;border-color:#ca8a0444">Medium</button>
-  <button class="filter-btn" onclick="filterRisk('low',this)" style="color:#16a34a;border-color:#16a34a44">Low</button>
-  <button class="filter-btn" onclick="filterRisk('info',this)">Info</button>
-</div>
-</div>
-""");
-
-        sb.AppendLine("""<div class="content">""");
-
-        // Executive summary
-        sb.AppendLine(ExecutiveSummaryHtml(result));
-
-        // Artifact dossier
-        if (hasBundles)
-            sb.AppendLine(ArtifactDossierHtml(result));
-
-        // Cheats detected (dedicated section)
-        if (cheatFindings.Count > 0)
+        // ── Tab bar ───────────────────────────────────────────────────────────────
+        sb.AppendLine("""<div class="tab-bar">""");
+        bool firstBtn = true;
+        foreach (var tab in visibleTabs)
         {
-            sb.AppendLine($"""<div class="section" id="sec-cheats">""");
-            sb.AppendLine($"""<div class="section-title" style="color:#dc2626" onclick="toggleSection(this)">CHEATS DETECTADOS ({cheatFindings.Count})</div>""");
-            sb.AppendLine("""<div class="section-content">""");
-            foreach (var f in cheatFindings)
-                sb.AppendLine(FindingHtml(f));
-            sb.AppendLine("</div></div>");
+            var activeClass  = firstBtn ? " active" : "";
+            firstBtn = false;
+            var count        = TabCount(tab.Id);
+            var badgeClass   = string.IsNullOrEmpty(tab.BadgeClass) ? "plain" : tab.BadgeClass;
+            var countBadge   = count > 0 ? $"""<span class="tab-count {badgeClass}">{count}</span>""" : "";
+            sb.AppendLine($"""  <button class="tab-btn{activeClass}" onclick="switchTab('{tab.Id}',this)">{Esc(tab.Label)}{countBadge}</button>""");
         }
+        sb.AppendLine("</div>");
 
-        // Bypass / anti-forensics
-        if (bypassFindings.Count > 0)
+        // ── Tab panels ────────────────────────────────────────────────────────────
+        sb.AppendLine("""<div class="tab-panels">""");
+        bool firstPane = true;
+        foreach (var tab in visibleTabs)
         {
-            sb.AppendLine($"""<div class="section" id="sec-bypass">""");
-            sb.AppendLine($"""<div class="section-title" style="color:#ea580c" onclick="toggleSection(this)">TENTATIVAS DE BYPASS / ANTI-FORENSE ({bypassFindings.Count})</div>""");
-            sb.AppendLine("""<div class="section-content">""");
-            foreach (var f in bypassFindings)
-                sb.AppendLine(FindingHtml(f));
-            sb.AppendLine("</div></div>");
-        }
+            var activeClass = firstPane ? " active" : "";
+            firstPane = false;
+            sb.AppendLine($"""<div id="tab-{tab.Id}" class="tab-pane{activeClass}">""");
 
-        // Anti-forensics / system tampering
-        if (antiForensics.Count > 0)
-        {
-            sb.AppendLine($"""<div class="section" id="sec-anti">""");
-            sb.AppendLine($"""<div class="section-title" style="color:#ea580c" onclick="toggleSection(this)">ADULTERAÇÃO DO SISTEMA / ANTI-FORENSE ({antiForensics.Count})</div>""");
-            sb.AppendLine("""<div class="section-content">""");
-            foreach (var f in antiForensics)
-                sb.AppendLine(FindingHtml(f));
-            sb.AppendLine("</div></div>");
-        }
-
-        // Other indicators
-        if (others.Count > 0)
-        {
-            sb.AppendLine($"""<div class="section" id="sec-others">""");
-            sb.AppendLine($"""<div class="section-title" onclick="toggleSection(this)">OUTROS INDICADORES ({others.Count})</div>""");
-            sb.AppendLine("""<div class="section-content">""");
-            foreach (var f in others)
-                sb.AppendLine(FindingHtml(f));
-            sb.AppendLine("</div></div>");
-        }
-
-        // Timeline (30 visible by default, expand button for the rest)
-        if (allTimed.Count > 0)
-        {
-            sb.AppendLine($"""<div class="section" id="sec-timeline">""");
-            sb.AppendLine($"""<div class="section-title" onclick="toggleSection(this)">TIMELINE ({allTimed.Count} eventos)</div>""");
-            sb.AppendLine("""<div class="section-content">""");
-
-            const int TimelinePageSize = 30;
-            for (int i = 0; i < allTimed.Count; i++)
+            switch (tab.Id)
             {
-                var f = allTimed[i];
-                var rColor = f.Risk switch
-                {
-                    RiskLevel.Critical => "#dc2626",
-                    RiskLevel.High     => "#ea580c",
-                    RiskLevel.Medium   => "#ca8a04",
-                    _                  => "#475569"
-                };
-                var extraClass = i >= TimelinePageSize ? " timeline-extra" : "";
-                sb.AppendLine($"""
-<div class="timeline-item{extraClass}">
-  <span class="timeline-ts">{f.Timestamp:dd/MM/yyyy HH:mm:ss}</span>
-  <span class="mod-badge">{Esc(f.Module)}</span>
-  <span class="badge {f.Risk.ToString().ToLower()}">{Esc(f.RiskLabel)}</span>
-  <span style="color:#e2e8f0">{Esc(f.Title)}</span>
-</div>
-""");
+                case "resumo":
+                    sb.AppendLine(ExecutiveSummaryHtml(result));
+                    break;
+                case "cheats":
+                    sb.AppendLine(FindingsTabHtml("CHEATS DETECTADOS", TabFindings("cheats"), "cheats", "#dc2626",
+                        "Execuções, arquivos e comportamentos de cheats identificados"));
+                    break;
+                case "diagnostico":
+                    sb.AppendLine(ArtifactDossierTabHtml(result));
+                    break;
+                case "execucoes":
+                    sb.AppendLine(FindingsTabHtml("TRILHA DE EXECUÇÃO", TabFindings("execucoes"), "execucoes", "#ea580c",
+                        "BAM/DAM · Prefetch · Amcache · UserAssist · ShimCache · Registry Artifacts"));
+                    break;
+                case "downloads":
+                    sb.AppendLine(FindingsTabHtml("DOWNLOADS E FERRAMENTAS EXTERNAS", TabFindings("downloads"), "downloads", "#ca8a04",
+                        "Browser Downloads · External Tool Residue"));
+                    break;
+                case "delecoes":
+                    sb.AppendLine(FindingsTabHtml("DELEÇÕES / USN JOURNAL", TabFindings("delecoes"), "delecoes", "#ca8a04",
+                        "USN Journal · Recycle Bin — rastros de arquivos deletados"));
+                    break;
+                case "pastas":
+                    sb.AppendLine(FindingsTabHtml("PASTAS ACESSADAS", TabFindings("pastas"), "pastas", "#64748b",
+                        "ShellBags · Jump Lists · LNK Recent — navegação de pastas"));
+                    break;
+                case "memoria":
+                    sb.AppendLine(FindingsTabHtml("MEMÓRIA / PROCESSOS", TabFindings("memoria"), "memoria", "#ea580c",
+                        "Process Memory — DLLs injetadas, módulos suspeitos em memória"));
+                    break;
+                case "bypass":
+                    sb.AppendLine(FindingsTabHtml("BYPASS / ANTI-FORENSE", TabFindings("bypass"), "bypass", "#dc2626",
+                        "Anti-Forensics · System Tampering · Service Tampering — evasão forense"));
+                    break;
+                case "outros":
+                    sb.AppendLine(FindingsTabHtml("OUTROS INDICADORES", TabFindings("outros"), "outros", "#64748b",
+                        "System Info · Event Viewer · Defender · Rede · SRUM · File System"));
+                    break;
+                case "timeline":
+                    sb.AppendLine(TimelineTabHtml(allTimed));
+                    break;
+                case "cobertura":
+                    sb.AppendLine(ModuleCoverageTabHtml(result, TabFindings("cobertura")));
+                    break;
             }
 
-            if (allTimed.Count > TimelinePageSize)
-                sb.AppendLine($"""<button class="expand-btn" id="tl-expand-btn" onclick="expandTimeline()">Mostrar todos ({allTimed.Count - TimelinePageSize} ocultos)</button>""");
-
-            sb.AppendLine("</div></div>");
+            sb.AppendLine("</div>");
         }
 
-        // Module coverage table
-        if (result.ModuleCoverage.Count > 0)
-            sb.AppendLine(ModuleCoverageHtml(result));
+        sb.AppendLine("</div>"); // tab-panels
 
         sb.AppendLine($"""
-</div>
 <div class="footer">
   <span>Echo Nerfados Shield XDR v1.0 — Uso Defensivo Autorizado</span>
   <span>Gerado em {DateTime.Now:dd/MM/yyyy HH:mm:ss} | {result.ModulesRun.Count} módulos | {result.Findings.Count} findings</span>
@@ -360,89 +375,193 @@ function expandTimeline() {
         return sb.ToString();
     }
 
-    private static string ExecutiveSummaryHtml(ScanResult result)
+    // ── Tab content builders ──────────────────────────────────────────────────────
+
+    private static string FindingsTabHtml(
+        string heading, List<Finding> findings, string tabId, string headingColor, string? subtitle = null)
     {
-        var confirmed = result.Findings
-            .Where(f => f.Category == FindingCategory.Cheat && f.Confidence >= Confidence.High)
-            .ToList();
-        var strong = result.Findings
-            .Where(f => f.Risk >= RiskLevel.High && f.Confidence >= Confidence.Medium && f.Category != FindingCategory.Cheat)
-            .ToList();
-        var needsValidation = result.Findings
-            .Where(f => f.ValidationHint != null)
-            .ToList();
-        var likelyFp = result.Findings
-            .Where(f => f.Confidence == Confidence.Low)
-            .ToList();
-        var correlated = result.Findings
-            .Where(f => f.RuleId?.StartsWith("CORR_") == true)
-            .ToList();
-
         var sb = new StringBuilder();
-        sb.AppendLine("""<div class="section" id="sec-summary"><div class="section-title" style="color:#94a3b8" onclick="toggleSection(this)">RESUMO EXECUTIVO</div>""");
-        sb.AppendLine("""<div class="section-content">""");
-        sb.AppendLine("""<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:8px">""");
 
-        void Card(string label, string color, IList<Finding> items, string hint)
+        var subtitleHtml = subtitle != null ? $"<span>{Esc(subtitle)}</span>" : "";
+        sb.AppendLine($"""<div class="tab-heading" style="color:{headingColor}">{Esc(heading)}{subtitleHtml}</div>""");
+
+        if (findings.Count == 0)
         {
+            sb.AppendLine("""<div style="color:#475569;font-style:italic;padding:20px 0">Nenhum finding nesta categoria.</div>""");
+            return sb.ToString();
+        }
+
+        var crit = findings.Count(f => f.Risk == RiskLevel.Critical);
+        var high = findings.Count(f => f.Risk == RiskLevel.High);
+        var med  = findings.Count(f => f.Risk == RiskLevel.Medium);
+        var low  = findings.Count(f => f.Risk == RiskLevel.Low);
+        var info = findings.Count(f => f.Risk == RiskLevel.Info);
+
+        sb.AppendLine($"""
+<div class="filter-bar">
+  <span style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Filtrar:</span>
+  <button class="filter-btn active" onclick="filterRisk('all',this,'tab-{tabId}')">Todos ({findings.Count})</button>
+  <button class="filter-btn" onclick="filterRisk('critical',this,'tab-{tabId}')" style="color:#dc2626;border-color:#dc262644">Critical ({crit})</button>
+  <button class="filter-btn" onclick="filterRisk('high',this,'tab-{tabId}')" style="color:#ea580c;border-color:#ea580c44">High ({high})</button>
+  <button class="filter-btn" onclick="filterRisk('medium',this,'tab-{tabId}')" style="color:#ca8a04;border-color:#ca8a0444">Medium ({med})</button>
+  <button class="filter-btn" onclick="filterRisk('low',this,'tab-{tabId}')" style="color:#16a34a;border-color:#16a34a44">Low ({low})</button>
+  <button class="filter-btn" onclick="filterRisk('info',this,'tab-{tabId}')">Info ({info})</button>
+</div>
+""");
+
+        foreach (var moduleGroup in findings.GroupBy(f => f.Module).OrderByDescending(g => g.Max(f => (int)f.Risk)))
+        {
+            sb.AppendLine($"""<div class="module-group">""");
+            sb.AppendLine($"""<div class="module-group-hdr">{Esc(moduleGroup.Key)} <span style="color:#334155;font-size:10px;font-weight:400">({moduleGroup.Count()})</span></div>""");
+            foreach (var f in moduleGroup.OrderByDescending(f => f.Risk))
+                sb.AppendLine(FindingHtml(f));
+            sb.AppendLine("</div>");
+        }
+
+        return sb.ToString();
+    }
+
+    private static string TimelineTabHtml(List<Finding> allTimed)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"""<div class="tab-heading">LINHA DO TEMPO<span>{allTimed.Count} eventos com timestamp, ordem decrescente</span></div>""");
+
+        if (allTimed.Count == 0)
+        {
+            sb.AppendLine("""<div style="color:#475569;font-style:italic;padding:20px 0">Nenhum evento com timestamp registrado.</div>""");
+            return sb.ToString();
+        }
+
+        const int PageSize = 50;
+        for (int i = 0; i < allTimed.Count; i++)
+        {
+            var f = allTimed[i];
+            var rColor = f.Risk switch
+            {
+                RiskLevel.Critical => "#dc2626",
+                RiskLevel.High     => "#ea580c",
+                RiskLevel.Medium   => "#ca8a04",
+                _                  => "#475569"
+            };
+            var extraClass = i >= PageSize ? " timeline-extra" : "";
             sb.AppendLine($"""
-<div style="background:#1a1a2e;border:1px solid #334155;border-left:4px solid {color};border-radius:8px;padding:12px 16px">
-  <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px">{label}</div>
-  <div style="font-size:28px;font-weight:800;color:{color};margin:4px 0">{items.Count}</div>
-  <div style="font-size:11px;color:#475569">{hint}</div>
+<div class="timeline-item{extraClass}">
+  <span class="timeline-ts">{f.Timestamp:dd/MM/yyyy HH:mm:ss}</span>
+  <span class="mod-badge">{Esc(f.Module)}</span>
+  <span class="badge {f.Risk.ToString().ToLower()}">{Esc(f.RiskLabel)}</span>
+  <span style="color:#e2e8f0">{Esc(f.Title)}</span>
 </div>
 """);
         }
 
-        Card("Cheats confirmados",         "#dc2626", confirmed,       "hash, assinatura ou caminho de cheat conhecido verificado");
-        Card("Indícios fortes",            "#ea580c", strong,          "High/Critical com média confiança");
-        Card("Requer validação manual",    "#ca8a04", needsValidation, "sinal fraco — investigar antes de concluir");
-        Card("Possíveis falsos positivos", "#6b7280", likelyFp,        "nome genérico sem contexto adicional");
+        if (allTimed.Count > PageSize)
+            sb.AppendLine($"""<button class="expand-btn" id="tl-expand-btn" onclick="expandTimeline()">Mostrar todos ({allTimed.Count - PageSize} ocultos)</button>""");
+
+        return sb.ToString();
+    }
+
+    private static string ModuleCoverageTabHtml(ScanResult result, List<Finding> coverageFindings)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("""<div class="tab-heading">COBERTURA E INTEGRIDADE<span>status de execução de cada módulo</span></div>""");
+
+        sb.AppendLine("""
+<table>
+  <thead>
+    <tr><th>Módulo</th><th>Status</th><th>Motivo / Impacto Forense</th></tr>
+  </thead>
+  <tbody>
+""");
+        foreach (var entry in result.ModuleCoverage.OrderBy(e => e.Status).ThenBy(e => e.Name))
+        {
+            var (statusLabel, statusColor) = entry.Status switch
+            {
+                ModuleStatus.Executed => ("EXECUTADO",  "#28a745"),
+                ModuleStatus.Partial  => ("PARCIAL",    "#fd7e14"),
+                ModuleStatus.Skipped  => ("PULADO",     "#6c757d"),
+                ModuleStatus.Failed   => ("FALHOU",     "#dc3545"),
+                _                     => ("AGUARDANDO", "#adb5bd")
+            };
+            var note = !string.IsNullOrEmpty(entry.Reason)
+                ? entry.Reason
+                : !string.IsNullOrEmpty(entry.ForensicImpact) ? entry.ForensicImpact : "—";
+            sb.AppendLine($"""
+    <tr>
+      <td>{Esc(entry.Name)}</td>
+      <td style="color:{statusColor};font-weight:bold">{statusLabel}</td>
+      <td>{Esc(note)}</td>
+    </tr>
+""");
+        }
+        sb.AppendLine("  </tbody>\n</table>");
+
+        if (coverageFindings.Count > 0)
+        {
+            sb.AppendLine($"""<div style="margin-top:20px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Avisos de cobertura ({coverageFindings.Count})</div>""");
+            foreach (var f in coverageFindings.OrderByDescending(f => f.Risk))
+                sb.AppendLine(FindingHtml(f));
+        }
+
+        return sb.ToString();
+    }
+
+    private static string ExecutiveSummaryHtml(ScanResult result)
+    {
+        var confirmed       = result.Findings.Where(f => f.Category == FindingCategory.Cheat && f.Confidence >= Confidence.High).ToList();
+        var strong          = result.Findings.Where(f => f.Risk >= RiskLevel.High && f.Confidence >= Confidence.Medium && f.Category != FindingCategory.Cheat).ToList();
+        var needsValidation = result.Findings.Where(f => f.ValidationHint != null).ToList();
+        var likelyFp        = result.Findings.Where(f => f.Confidence == Confidence.Low).ToList();
+        var correlated      = result.Findings.Where(f => f.RuleId?.StartsWith("CORR_") == true).ToList();
+
+        var sb = new StringBuilder();
+        sb.AppendLine("""<div class="tab-heading">RESUMO EXECUTIVO</div>""");
+        sb.AppendLine("""<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px">""");
+
+        void Card(string label, string color, int count, string hint) => sb.AppendLine($"""
+<div style="background:#1a1a2e;border:1px solid #334155;border-left:4px solid {color};border-radius:8px;padding:12px 16px">
+  <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px">{label}</div>
+  <div style="font-size:28px;font-weight:800;color:{color};margin:4px 0">{count}</div>
+  <div style="font-size:11px;color:#475569">{hint}</div>
+</div>
+""");
+
+        Card("Cheats confirmados",         "#dc2626", confirmed.Count,       "hash, assinatura ou caminho de cheat verificado");
+        Card("Indícios fortes",            "#ea580c", strong.Count,          "High/Critical com média ou alta confiança");
+        Card("Requer validação manual",    "#ca8a04", needsValidation.Count, "sinal fraco — investigar antes de concluir");
+        Card("Possíveis falsos positivos", "#6b7280", likelyFp.Count,        "nome genérico sem contexto adicional");
         if (correlated.Count > 0)
-            Card("Evidências correlacionadas", "#7c3aed", correlated, "padrões detectados entre módulos");
+            Card("Evidências correlacionadas", "#7c3aed", correlated.Count, "padrões detectados entre módulos");
 
         sb.AppendLine("</div>");
 
         if (confirmed.Count > 0)
         {
-            sb.AppendLine("""<div style="margin-top:12px;font-size:13px;font-weight:700;color:#dc2626">Cheats confirmados:</div>""");
+            sb.AppendLine("""<div style="margin-bottom:6px;font-size:13px;font-weight:700;color:#dc2626">Cheats confirmados:</div>""");
             foreach (var f in confirmed.Take(5))
                 sb.AppendLine($"""<div style="color:#e2e8f0;font-size:12px;margin:2px 0">• {Esc(f.Title)} <span style="color:#475569">({Esc(f.ConfidenceLabel)})</span></div>""");
         }
 
+        // Category distribution
+        sb.AppendLine("""<div style="margin-top:20px;border-top:1px solid #1e293b;padding-top:16px">""");
+        sb.AppendLine("""<div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Distribuição por Categoria</div>""");
+        sb.AppendLine("""<div style="display:flex;flex-wrap:wrap;gap:8px;">""");
+        foreach (var cat in result.Findings.GroupBy(f => f.Category).OrderByDescending(g => g.Max(f => (int)f.Risk)))
+        {
+            var maxColor = cat.Max(f => (int)f.Risk) switch
+            {
+                4 => "#dc2626", 3 => "#ea580c", 2 => "#ca8a04", 1 => "#16a34a", _ => "#475569"
+            };
+            sb.AppendLine($"""<div style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px 10px;font-size:12px"><span style="color:{maxColor}">{cat.Count()}×</span> <span style="color:#94a3b8">{Esc(cat.First().CategoryLabel)}</span></div>""");
+        }
         sb.AppendLine("</div></div>");
+
         return sb.ToString();
     }
 
-    private static string FindingHtml(Finding f)
-    {
-        var risk    = f.Risk.ToString().ToLower();
-        var hintHtml = f.ValidationHint != null
-            ? $"""<div class="finding-hint">⚠ {Esc(f.ValidationHint)}</div>"""
-            : "";
-        return $"""
-<div class="finding {risk}" data-risk="{risk}">
-  <div class="finding-header">
-    <span class="badge {risk}">{Esc(f.RiskLabel)}</span>
-    <span class="mod-badge">{Esc(f.Module)}</span>
-    <span class="badge info">{Esc(f.CategoryLabel)}</span>
-    <span class="badge conf">{Esc(f.ConfidenceLabel)}</span>
-    <span class="finding-title">{Esc(f.Title)}</span>
-  </div>
-  <div class="finding-detail">{Esc(f.Detail)}</div>
-  {(f.Evidence != null ? $"""<div class="finding-evidence">{Esc(f.Evidence)}</div>""" : "")}
-  {(f.Timestamp.HasValue ? $"""<div style="color:#475569;font-size:11px;margin-top:4px">🕐 {f.Timestamp:dd/MM/yyyy HH:mm:ss}</div>""" : "")}
-  {hintHtml}
-</div>
-""";
-    }
-
-    private static string ArtifactDossierHtml(ScanResult result)
+    private static string ArtifactDossierTabHtml(ScanResult result)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"""<div class="section" id="sec-dossier">""");
-        sb.AppendLine($"""<div class="section-title" style="color:#7c3aed" onclick="toggleSection(this)">DOSSIÊ POR ARTEFATO ({result.EvidenceBundles.Count})</div>""");
-        sb.AppendLine("""<div class="section-content">""");
+        sb.AppendLine($"""<div class="tab-heading" style="color:#a78bfa">DIAGNÓSTICO POR ARTEFATO<span>{result.EvidenceBundles.Count} artefatos com sinais cruzados entre módulos</span></div>""");
 
         foreach (var bundle in result.EvidenceBundles)
         {
@@ -480,73 +599,43 @@ function expandTimeline() {
                 foreach (var sig in bundle.Signals)
                 {
                     var ts = sig.Timestamp.HasValue ? $" — {sig.Timestamp:dd/MM/yyyy HH:mm:ss}" : "";
-                    sb.AppendLine($"""    <div class="signal-item"><span class="signal-mod">[{Esc(sig.SignalType)}] {Esc(sig.SourceModule)}:</span>{Esc(sig.Description)}{Esc(ts)}</div>""");
+                    sb.AppendLine($"""    <div class="signal-item"><span class="signal-mod">[{Esc(sig.SignalType)}] {Esc(sig.SourceModule)}:</span> {Esc(sig.Description)}{Esc(ts)}</div>""");
                 }
                 sb.AppendLine($"""  </div>""");
             }
 
             if (bundle.BypassIndicators.Count > 0)
                 sb.AppendLine($"""  <div class="bypass-alert">⚡ Bypass próximo: {Esc(string.Join(" | ", bundle.BypassIndicators))}</div>""");
-
             if (bundle.ValidationSteps.Count > 0)
                 sb.AppendLine($"""  <div class="validation-alert">⚠ Validar: {Esc(string.Join(" · ", bundle.ValidationSteps))}</div>""");
 
             sb.AppendLine("</div>");
         }
 
-        sb.AppendLine("</div></div>");
         return sb.ToString();
     }
 
-    private static string ModuleCoverageHtml(ScanResult result)
+    private static string FindingHtml(Finding f)
     {
-        var sb = new StringBuilder();
-        sb.AppendLine("""
-<div class="section" id="sec-coverage">
-<div class="section-title" onclick="toggleSection(this)">COBERTURA DA VARREDURA</div>
-<div class="section-content">
-<table>
-  <thead>
-    <tr>
-      <th>Módulo</th>
-      <th>Status</th>
-      <th>Motivo / Impacto Forense</th>
-    </tr>
-  </thead>
-  <tbody>
-""");
-
-        foreach (var entry in result.ModuleCoverage.OrderBy(e => e.Status).ThenBy(e => e.Name))
-        {
-            var (statusLabel, statusColor) = entry.Status switch
-            {
-                ModuleStatus.Executed => ("EXECUTADO",  "#28a745"),
-                ModuleStatus.Partial  => ("PARCIAL",    "#fd7e14"),
-                ModuleStatus.Skipped  => ("PULADO",     "#6c757d"),
-                ModuleStatus.Failed   => ("FALHOU",     "#dc3545"),
-                _                     => ("AGUARDANDO", "#adb5bd")
-            };
-
-            var note = !string.IsNullOrEmpty(entry.Reason)
-                ? entry.Reason
-                : !string.IsNullOrEmpty(entry.ForensicImpact) ? entry.ForensicImpact : "—";
-
-            sb.AppendLine($"""
-    <tr>
-      <td>{Esc(entry.Name)}</td>
-      <td style="color:{statusColor};font-weight:bold">{statusLabel}</td>
-      <td>{Esc(note)}</td>
-    </tr>
-""");
-        }
-
-        sb.AppendLine("""
-  </tbody>
-</table>
+        var risk    = f.Risk.ToString().ToLower();
+        var hintHtml = f.ValidationHint != null
+            ? $"""<div class="finding-hint">⚠ {Esc(f.ValidationHint)}</div>"""
+            : "";
+        return $"""
+<div class="finding {risk}" data-risk="{risk}">
+  <div class="finding-header">
+    <span class="badge {risk}">{Esc(f.RiskLabel)}</span>
+    <span class="mod-badge">{Esc(f.Module)}</span>
+    <span class="badge info">{Esc(f.CategoryLabel)}</span>
+    <span class="badge conf">{Esc(f.ConfidenceLabel)}</span>
+    <span class="finding-title">{Esc(f.Title)}</span>
+  </div>
+  <div class="finding-detail">{Esc(f.Detail)}</div>
+  {(f.Evidence != null ? $"""<div class="finding-evidence">{Esc(f.Evidence)}</div>""" : "")}
+  {(f.Timestamp.HasValue ? $"""<div style="color:#475569;font-size:11px;margin-top:4px">🕐 {f.Timestamp:dd/MM/yyyy HH:mm:ss}</div>""" : "")}
+  {hintHtml}
 </div>
-</div>
-""");
-        return sb.ToString();
+""";
     }
 
     private static string Esc(string? s) =>

@@ -15,16 +15,16 @@ public static class CheatDatabase
         new(StringComparer.OrdinalIgnoreCase)
         {
             ["launcher.exe"] = new CheatInfo(
-                "GOSTH",
-                "Cheat para FiveM. Gera arquivo de 8-10 chars aleatórios na System32 e arquivo de 8-10 números com 0kb.",
+                "Loader FiveM Suspeito",
+                "Loader de cheat FiveM fora de paths legítimos (padrão GOSTH). Gera arquivo de 8-10 chars aleatórios na System32.",
                 [@"AppData\Local\Programs\Common", @"AppData\Local\Temp\"],
                 AssociatedFiles: ["dxsetup"],
                 IsGenericName: true   // "launcher.exe" é usado por Rockstar, Steam, Epic etc. — só paths muito específicos confirmam
             ),
 
             ["spotify.exe"] = new CheatInfo(
-                "GOSTH",
-                "Cheat GOSTH disfarçado como Spotify para evitar detecção. Loader renomeado — o binário legítimo do Spotify reside em AppData\\Roaming\\Spotify\\.",
+                "Loader FiveM Disfarçado (padrão GOSTH/Spotify)",
+                "Loader de cheat renomeado como spotify.exe para evasão. O binário legítimo do Spotify reside em AppData\\Roaming\\Spotify\\ — fora desse path é suspeito.",
                 [@"AppData\Local\Temp\", @"Downloads\", @"Desktop\", @"AppData\Local\Programs\Common"],
                 IsGenericName: true   // spotify.exe legítimo está em AppData\Roaming\Spotify\ — fora desses paths é suspeito
             ),

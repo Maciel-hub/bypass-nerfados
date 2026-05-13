@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+7382cf9  
-**Build:** 7382cf9 (2026-05-11) — feat: live dashboard, DMA detection, behavioral correlation, QA fixes  
+**Versão:** 1.0.0+6c46761  
+**Build:** 6c46761 (2026-05-13) — feat: tab-based HTML diagnostic report, --lookback flag, generic cheat name neutralization  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `a7f99999571981e151d9009a1a33ce41d683cb80d8cf81c7f6c625d87754327b`  
+**SHA256:** *(recompilar para obter hash atualizado)*  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)  
 **Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
@@ -74,7 +74,7 @@ O executável exige login antes de qualquer varredura.
 | **NvidiaArtifacts** | nvAppTimestamps + nvdrsdb | Timestamps de uso de GPU — confirma sessão FiveM com dados de hardware |
 | **ExternalToolResidue** | Prefetch + paths + registry | 28 ferramentas de análise/tampering: Process Hacker, CheatEngine, x64dbg, Everything, etc. |
 | **RecycleBin** | C:\$RECYCLE.BIN\{SID}\$I* | Caminho original + data de deleção de arquivos suspeitos — evidência pós-deleção |
-| **Timeline** | Prefetch + BAM + LNK + Downloads + Temp | Linha do tempo unificada — sequência de eventos dos últimos 60 dias |
+| **Timeline** | Prefetch + BAM + LNK + Downloads + Temp | Linha do tempo unificada — sequência de eventos dentro da janela de lookback (padrão: 90 dias) |
 | **SRUM** | SRUDB.dat (ESE) | Uso de rede/CPU por processo (~30-60 dias) — fonte mais confiável que o painel Windows |
 
 ### Módulos que exigem Administrador
@@ -137,30 +137,30 @@ Desktop\
     ├── report.html              ← Relatório visual completo
     ├── report.txt               ← Relatório texto (compartilhável)
     ├── evidence.json                  ← Todos os findings + dossiers em JSON
-    ├── bamdam_60d.json                ← BAM/DAM — timestamps de execução (core)
-    ├── prefetch_60d.json              ← Prefetch — evidência de execução (core)
-    ├── knowncheats_60d.json           ← Known Cheats — hits diretos confirmados
-    ├── registryartifacts_60d.json     ← Store, MuiCache, RecentDocs, 7-Zip, WinRAR
-    ├── eventviewer_60d.json           ← Findings do Event Viewer (cobertura real)
-    ├── defender_60d.json              ← Findings do Windows Defender
-    ├── services_60d.json              ← Findings de Serviços
-    ├── amcache_60d.json               ← Findings do Amcache
-    ├── userassist_60d.json            ← Findings do UserAssist
-    ├── shimcache_60d.json             ← Findings do ShimCache
-    ├── lnk_60d.json                   ← Findings de LNK Recent
-    ├── registrypersistence_60d.json   ← Findings de RegistryPersistence
-    ├── ... (25 JSONs por módulo no total)
+    ├── bamdam_90d.json                ← BAM/DAM — timestamps de execução (core)
+    ├── prefetch_90d.json              ← Prefetch — evidência de execução (core)
+    ├── knowncheats_90d.json           ← Known Cheats — hits diretos confirmados
+    ├── registryartifacts_90d.json     ← Store, MuiCache, RecentDocs, 7-Zip, WinRAR
+    ├── eventviewer_90d.json           ← Findings do Event Viewer (cobertura real)
+    ├── defender_90d.json              ← Findings do Windows Defender
+    ├── services_90d.json              ← Findings de Serviços
+    ├── amcache_90d.json               ← Findings do Amcache
+    ├── userassist_90d.json            ← Findings do UserAssist
+    ├── shimcache_90d.json             ← Findings do ShimCache
+    ├── lnk_90d.json                   ← Findings de LNK Recent
+    ├── registrypersistence_90d.json   ← Findings de RegistryPersistence
+    ├── ... (27 JSONs por módulo no total)
     ├── manifest.json                  ← Metadados completos + SHA256 de todos os arquivos
     └── manifest.sha256                ← Hash do manifest.json (verificável com sha256sum)
 ```
 
-**Cobertura de log por arquivo `*_60d.json`:**
+**Cobertura de log por arquivo `*_90d.json`:**
 
 Cada arquivo tem campos:
 ```json
 {
   "module": "Event Viewer",
-  "lookbackDays": 60,
+  "lookbackDays": 90,
   "coverageDays": 45,
   "coverageOk": false,
   "oldestEvent": "2026-03-25T...",
@@ -170,7 +170,7 @@ Cada arquivo tem campos:
 }
 ```
 
-Se `coverageOk = false`, o Windows não tem 60 dias de log — o relatório avisa explicitamente.
+Se `coverageOk = false`, o Windows não tem 90 dias de log — o relatório avisa explicitamente.
 
 ---
 
@@ -193,7 +193,7 @@ O `manifest.json` contém:
   "workingDirectory": "C:\\...",
   "osVersion": "Microsoft Windows NT 10.0.26200.0",
   "timezone": "E. South America Standard Time",
-  "lookbackDays": 60,
+  "lookbackDays": 90,
   "totalScore": 185,
   "overallRisk": "CRÍTICO",
   "files": {
@@ -242,7 +242,7 @@ EchoNerfados.exe [opções]
   --no-report             Não salva arquivos (apenas console)
   --no-memory             Desativa varredura de memória de processo
   --no-usn               Desativa USN Journal
-  --lookback <dias>       Janela de análise em dias (padrão: 60)
+  --lookback <dias>       Janela de análise em dias (padrão: 90)
   --investigator <nome>   Nome do investigador (aparece no relatório)
   --suspect <nome>        Nome do suspeito
   --case <id>             ID do caso
@@ -282,14 +282,14 @@ EchoNerfados.exe [opções]
 - [ ] `report.html` abre no browser corretamente
 - [ ] `report.txt` legível em qualquer editor
 - [ ] `evidence.json` JSON válido
-- [ ] Todos os 25 `*_60d.json` presentes + `evidence.json`, mesmo que vazios
+- [ ] Todos os 27 `*_90d.json` presentes + `evidence.json`, mesmo que vazios
 - [ ] `manifest.json` presente e campos preenchidos
 - [ ] `manifest.sha256` verificável com sha256sum
 
 ### 10.7 Cobertura de Log
-- [ ] Em máquina com logs < 60 dias: `coverageOk: false` nos JSONs relevantes
+- [ ] Em máquina com logs < 90 dias: `coverageOk: false` nos JSONs relevantes
 - [ ] Aviso de cobertura aparece no HTML e TXT
-- [ ] Em máquina com logs >= 60 dias: `coverageOk: true`
+- [ ] Em máquina com logs >= 90 dias: `coverageOk: true`
 
 ### 10.8 Correlação e Dossiers
 - [ ] Findings do mesmo executável agrupados em um único dossier
@@ -317,7 +317,7 @@ EchoNerfados.exe [opções]
 | **ManagedEsent NU1701** | ManagedEsent 1.9.4 é .NET Framework — compatível com net8.0 via shim, mas gera warning NU1701 | Funcional; migrar para parser ESE nativo .NET 8 em futura iteração |
 | **ShimCache: formato Windows 7/8** | Parser fallback por UTF-16 — timestamps ausentes | Aceitável para Win10/11 |
 | **UserAssist: somente HKCU do usuário atual** | Outros perfis lidos via offline hive (admin only) | Funcional |
-| **Log < 60 dias** | `coverageOk: false` reportado mas scan continua | Investigador deve notar o aviso |
+| **Log < 90 dias** | `coverageOk: false` reportado mas scan continua | Investigador deve notar o aviso |
 | **assemblyLocation vazio** | Em single-file app, `Assembly.Location` é sempre empty | `manifest.json` contém nota explicativa |
 | **Assinatura digital** | manifest.sha256 não assinado por PKI | Requer setup de certificado (futuro) |
 | **License key** | Login fixo (nerfados/admin) | Substituir por sistema de keys para comercialização |
@@ -352,7 +352,7 @@ O smoke test requer execução manual com console interativo real. Executar nas 
 - [ ] `report.html` abre no browser — seção "COBERTURA DA VARREDURA" visível
 - [ ] `report.txt` — seção "COBERTURA DA VARREDURA" visível com status PULADO para Amcache/UserAssist
 - [ ] `evidence.json` — JSON válido, parseable
-- [ ] Todos os 25 `*_60d.json` presentes + `evidence.json` (26 arquivos no total)
+- [ ] Todos os 27 `*_90d.json` presentes + `evidence.json` (28 arquivos no total)
 - [ ] `manifest.json` — campo `"isElevated": false`
 - [ ] `manifest.sha256` verifica: `sha256sum -c manifest.sha256` → OK
 
@@ -374,9 +374,9 @@ O smoke test requer execução manual com console interativo real. Executar nas 
 - [ ] Console NÃO exibe aviso de privilégios
 - [ ] Tabela "COBERTURA DA VARREDURA" mostra Amcache = EXECUTADO, UserAssist = EXECUTADO
 - [ ] `manifest.json` — campo `"isElevated": true`
-- [ ] `amcache_60d.json` — `findingCount > 0` (ou `findingCount: 0` + `coverageDays` preenchido)
-- [ ] `userassist_60d.json` — idem
-- [ ] `registrypersistence_60d.json` — presente
+- [ ] `amcache_90d.json` — `findingCount > 0` (ou `findingCount: 0` + `coverageDays` preenchido)
+- [ ] `userassist_90d.json` — idem
+- [ ] `registrypersistence_90d.json` — presente
 - [ ] `evidence.json` — campo `EvidenceBundles` não vazio se houver cheats
 - [ ] `manifest.sha256` verifica
 
@@ -398,11 +398,11 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout ddf0a09
+git checkout 6c46761
 dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 ```
 
-**SHA256 do artefato entregue para QA (build ddf0a09 — 2026-05-10):**
+**SHA256 do artefato entregue para QA (build 6c46761 — 2026-05-13):**
 ```
 293e44f493d135107ec67681593bcbb47074e5abc994e67211106d5f930bd72a
 ```
@@ -413,14 +413,14 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build ddf0a09 — apto para smoke test interativo):**
+**O que está pronto e testável (build 6c46761 — apto para smoke test interativo):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
 - Login gate funcional com bloqueio após 3 tentativas (exit code 2)
 - **22 módulos** cobrindo todos os principais artefatos forenses Windows
 - Correlação cruzada entre módulos + artifact dossiers com bypass ±1h por sinal + correlação FiveM session (-30min/+2h)
-- Exportação: HTML, TXT, **26 JSONs dedicados** (25 módulos + evidence.json)
+- Exportação: HTML, TXT, **28 JSONs dedicados** (27 módulos + evidence.json)
 - Manifesto criptograficamente verificável (`manifest.sha256`)
 - Tabela "COBERTURA DA VARREDURA" no terminal, TXT e HTML com status Executed/Partial/Skipped/Failed
 - Todos os catches críticos logam `LogPartialError` com contexto específico; inaccessible contados, não silenciados
@@ -437,13 +437,16 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 - **BrowserDownloads**: suporte Chrome/Edge/Brave/Opera/Firefox; GitHub apenas via allowlist de orgs; Uri.Host para domain check
 - **BatchGotAdmin**: `SCRIPT_BATCHGOTADMIN_PRESENT`; linguagem calibrada ("autoelevação via UAC")
 - **ShellBags**: Medium sem timestamp (High requer correlação); inaccessible logados
-- **RecycleBin**: usa `config.EventWindowLookback` (não hardcoded 60 dias)
+- **RecycleBin**: usa `config.EventWindowLookback` (não hardcoded)
 - **Timeline** — linha do tempo unificada Prefetch/BAM/LNK/Downloads/Temp
 - **NvidiaArtifacts** — timestamps GPU de sessão FiveM via nvAppTimestamps
-- **EventViewer**: todos os findings usam `"Event Viewer"` (com espaço) — eventviewer_60d.json preenchido corretamente
-- **Defender**: todos os findings usam `Name` = `"Windows Defender"` — defender_60d.json preenchido corretamente
-- **filesystem_60d.json** + **network_60d.json** adicionados ao EvidenceExporter
-- **bamdam_60d.json**, **prefetch_60d.json**, **knowncheats_60d.json**, **registryartifacts_60d.json**, **usnjournal_60d.json**, **processmemory_60d.json** adicionados (26 JSONs no total)
+- **Relatório HTML com abas diagnósticas**: Resumo, Cheats, Diagnóstico, Execuções, Downloads, Deleções/USN, Pastas, Memória, Bypass, Outros, Timeline, Cobertura — filtro por severidade por aba, agrupamento por módulo
+- **`--lookback <dias>`**: flag implementada — substitui padrão de 90 dias por valor customizado
+- **Nomes genéricos neutros**: `launcher.exe` e `spotify.exe` deixam de rotular diretamente "GOSTH" — usam "Loader FiveM Suspeito (padrão GOSTH)"
+- **EventViewer**: todos os findings usam `"Event Viewer"` (com espaço) — eventviewer_90d.json preenchido corretamente
+- **Defender**: todos os findings usam `Name` = `"Windows Defender"` — defender_90d.json preenchido corretamente
+- **filesystem_90d.json** + **network_90d.json** adicionados ao EvidenceExporter
+- **bamdam_90d.json**, **prefetch_90d.json**, **knowncheats_90d.json**, **registryartifacts_90d.json**, **usnjournal_90d.json**, **processmemory_90d.json** adicionados (26 JSONs no total)
 - **4688**: query XPath inclui janela temporal `EventWindowLookback` — sem scan ilimitado
 - **QueryDb**: falhas de sqlite3_open/prepare logadas via LogPartialError
 - **IgnoreInaccessible**: KnownCheats e FileSystem usam EnumerationOptions ao invés de GetFiles+SearchOption
@@ -456,18 +459,18 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 
 - [x] PC com NVIDIA limpo **não** gera Medium/High por nvAppTimestamps
 - [x] `bypassstoragecheck` (correto) dispara no scan de scripts de LabConfig
-- [x] Todos os 25 módulos aparecem em evidence.json + arquivos `*_60d.json` dedicados
+- [x] Todos os 27 módulos aparecem em evidence.json + arquivos `*_90d.json` dedicados
 - [x] Browser aberto durante o scan **não** quebra coleta (CopyLockedFile)
 - [x] Nenhum ruleId com `GOSTH` fora de: `CHEAT_HASH_GOSTH_WHATSAPP`, `CHEAT_PATH_GOSTH_DXSETUP`, `GOSTH_PATTERN_SYSTEM32`
 - [x] `SCRIPT_BATCHGOTADMIN_PRESENT` substitui `_EXECUTED` no ruleId
 - [x] `manifest.sha256` verificável após scan completo
-- [x] `eventviewer_60d.json` não vazio quando há eventos no período
-- [x] `defender_60d.json` não vazio quando há eventos no período
-- [x] `filesystem_60d.json` e `network_60d.json` exportados em todo scan
-- [x] `bamdam_60d.json` e `prefetch_60d.json` exportados (core forense — sempre presentes)
-- [x] `knowncheats_60d.json` e `registryartifacts_60d.json` exportados em todo scan
+- [x] `eventviewer_90d.json` não vazio quando há eventos no período
+- [x] `defender_90d.json` não vazio quando há eventos no período
+- [x] `filesystem_90d.json` e `network_90d.json` exportados em todo scan
+- [x] `bamdam_90d.json` e `prefetch_90d.json` exportados (core forense — sempre presentes)
+- [x] `knowncheats_90d.json` e `registryartifacts_90d.json` exportados em todo scan
 - [x] README reflete EchoNerfados.exe, publish\win-x64\, 22 módulos, multi-família
 
 ---
 
-*Relatório gerado em: 2026-05-10 | Build: ddf0a09 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-13 | Build: 6c46761 | Echo Nerfados Shield XDR v1.0.0*
