@@ -1,8 +1,9 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+6c46761  
-**Build:** 6c46761 (2026-05-13) — feat: tab-based HTML diagnostic report, --lookback flag, generic cheat name neutralization  
+**Versão:** 1.0.0+876ecb4  
+**Build:** 876ecb4 (2026-05-13) — feat: tab-based HTML diagnostic report, --lookback flag, generic cheat name neutralization  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** *(recompilar para obter hash atualizado)*  
+**SHA256:** `41C4CE9CB43AFAEF943F530600FCDBF688C82E45C4F65F8FDF7AD0BC1FDCE6C2`  
+**Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)  
 **Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)  
 **Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
@@ -398,13 +399,13 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout 6c46761
+git checkout 876ecb4
 dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 ```
 
-**SHA256 do artefato entregue para QA (build 6c46761 — 2026-05-13):**
+**SHA256 do artefato entregue para QA (build 876ecb4 — 2026-05-13):**
 ```
-293e44f493d135107ec67681593bcbb47074e5abc994e67211106d5f930bd72a
+41C4CE9CB43AFAEF943F530600FCDBF688C82E45C4F65F8FDF7AD0BC1FDCE6C2
 ```
 
 **Nota:** Este hash identifica o artefato `EchoNerfados.exe` gerado nesta sessão. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` no `.csproj` (fora do escopo desta release).
@@ -473,4 +474,4 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 
 ---
 
-*Relatório gerado em: 2026-05-13 | Build: 6c46761 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-13 | Build: 876ecb4 | Echo Nerfados Shield XDR v1.0.0*
