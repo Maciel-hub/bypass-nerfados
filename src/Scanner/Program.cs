@@ -47,7 +47,7 @@ for (int i = 0; i < args.Length; i++)
         case "--verbose": config.VerboseOutput = true; break;
         case "--no-final-prompt": noFinalPrompt = true; break;
         case "--open-report":    config.OpenReportAfterScan = true;  break;
-        case "--no-open-report": config.OpenReportAfterScan = false; break;
+        case "--no-open-report": config.OpenReportAfterScan = false; noFinalPrompt = true; break;
         case "--ui" when i + 1 < args.Length:
             config.UiMode = args[++i].ToLowerInvariant() == "detailed"
                 ? ConsoleUiMode.Detailed
@@ -275,7 +275,7 @@ static void PrintHelp()
     Console.WriteLine("  --ui minimal            Console limpo: score + top 5 + caminhos (padrao)");
     Console.WriteLine("  --ui detailed           Console detalhado: tabelas + dossies + cobertura");
     Console.WriteLine("  --open-report           Abrir HTML automaticamente ao finalizar");
-    Console.WriteLine("  --no-open-report        Nao abrir HTML (apenas exibir caminho)");
+    Console.WriteLine("  --no-open-report        Nao abrir HTML nem exibir menu (apenas caminho)");
     Console.WriteLine("  --no-usn                Pular analise do USN Journal");
     Console.WriteLine("  --no-memory             Pular analise de memoria de processos");
     Console.WriteLine("  --no-report             Nao gerar relatorio em arquivo");
