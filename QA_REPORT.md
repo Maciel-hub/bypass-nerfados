@@ -1,10 +1,9 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+876ecb4  
-**Build:** 876ecb4 (2026-05-13) — feat: tab-based HTML diagnostic report, --lookback flag, generic cheat name neutralization  
+**Versão:** 1.0.0+f1347a6  
+**Build:** f1347a6 (2026-05-14) — fix: --no-open-report supresses menu; ecfb3c7 — feat: --ui minimal/detailed, --open-report, HTML CSS custom properties  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `41C4CE9CB43AFAEF943F530600FCDBF688C82E45C4F65F8FDF7AD0BC1FDCE6C2`  
-**Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)  
-**Tamanho:** ~34 MB (self-contained, sem dependência de .NET no host)  
+**SHA256:** `3CDCB020C9CB21A666C232808859E03C076B1E8A119DD356CA888163B541A736`  
+**Tamanho:** ~67 MB (self-contained, sem dependência de .NET no host)  
 **Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
 ---
@@ -238,15 +237,22 @@ if ($ref -eq $actual) { "OK" } else { "FALHOU" }
 ### Flags de linha de comando
 ```
 EchoNerfados.exe [opções]
-  -d, --drive <letra>     Drive a varrer (padrão: C:)
-  -v, --verbose           Output detalhado
-  --no-report             Não salva arquivos (apenas console)
-  --no-memory             Desativa varredura de memória de processo
-  --no-usn               Desativa USN Journal
+  --investigator <nome>   Nome do investigador (para o relatório)
+  --suspect <nome>        Nome do suspeito (para o relatório)
+  --case-id <id>          ID do caso/investigação
+  --drive <letra>         Drive a ser analisado (padrão: C:)
+  --output <caminho>      Pasta de saída do relatório
   --lookback <dias>       Janela de análise em dias (padrão: 90)
-  --investigator <nome>   Nome do investigador (aparece no relatório)
-  --suspect <nome>        Nome do suspeito
-  --case <id>             ID do caso
+  --ui minimal            Console limpo: score + top 5 + caminhos (padrão)
+  --ui detailed           Console detalhado: tabelas + dossiês + cobertura
+  --open-report           Abrir HTML automaticamente ao finalizar
+  --no-open-report        Não abrir HTML nem exibir menu (apenas caminho)
+  --no-usn                Pular análise do USN Journal
+  --no-memory             Pular análise de memória de processos
+  --no-report             Não gerar relatório em arquivo
+  --no-final-prompt       Não exibir menu após conclusão (automação)
+  --verbose               Mostrar todos os findings (incluindo INFO)
+  --help                  Exibir esta ajuda
 ```
 
 ---
@@ -403,9 +409,9 @@ git checkout 876ecb4
 dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 ```
 
-**SHA256 do artefato entregue para QA (build 876ecb4 — 2026-05-13):**
+**SHA256 do artefato entregue para QA (build f1347a6 — 2026-05-14):**
 ```
-41C4CE9CB43AFAEF943F530600FCDBF688C82E45C4F65F8FDF7AD0BC1FDCE6C2
+3CDCB020C9CB21A666C232808859E03C076B1E8A119DD356CA888163B541A736
 ```
 
 **Nota:** Este hash identifica o artefato `EchoNerfados.exe` gerado nesta sessão. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` no `.csproj` (fora do escopo desta release).
@@ -414,7 +420,7 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build 6c46761 — apto para smoke test interativo):**
+**O que está pronto e testável (build f1347a6 — apto para smoke test interativo):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
@@ -441,6 +447,11 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 - **RecycleBin**: usa `config.EventWindowLookback` (não hardcoded)
 - **Timeline** — linha do tempo unificada Prefetch/BAM/LNK/Downloads/Temp
 - **NvidiaArtifacts** — timestamps GPU de sessão FiveM via nvAppTimestamps
+- **`--ui minimal`** (padrão): score + contagem por severidade + top 5 High/Critical — saída limpa para operadores
+- **`--ui detailed`**: tabelas completas + top 10 findings + top 10 dossiês + cobertura + bypass no terminal — para analistas
+- **`--open-report`**: abre o HTML no browser padrão automaticamente ao terminar, sem menu
+- **`--no-open-report`**: suprime menu pós-scan inteiramente — apenas exibe o caminho do relatório (modo automação)
+- **HTML CSS custom properties**: `--bg`, `--panel`, `--critical`, `--high`, `--medium`, `--low`, `--accent`, etc. — tema consistente sem valores hexadecimais duplicados
 - **Relatório HTML com abas diagnósticas**: Resumo, Cheats, Diagnóstico, Execuções, Downloads, Deleções/USN, Pastas, Memória, Bypass, Outros, Timeline, Cobertura — filtro por severidade por aba, agrupamento por módulo
 - **`--lookback <dias>`**: flag implementada — substitui padrão de 90 dias por valor customizado
 - **Nomes genéricos neutros**: `launcher.exe` e `spotify.exe` deixam de rotular diretamente "GOSTH" — usam "Loader FiveM Suspeito (padrão GOSTH)"
@@ -471,7 +482,13 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 - [x] `bamdam_90d.json` e `prefetch_90d.json` exportados (core forense — sempre presentes)
 - [x] `knowncheats_90d.json` e `registryartifacts_90d.json` exportados em todo scan
 - [x] README reflete EchoNerfados.exe, publish\win-x64\, 22 módulos, multi-família
+- [x] `--ui minimal` exibe score + contagem por severidade + top 5 (padrão — sem arg)
+- [x] `--ui detailed` exibe tabelas completas, dossiês e cobertura no terminal
+- [x] `--open-report` abre HTML no browser padrão sem exibir menu interativo
+- [x] `--no-open-report` não exibe menu nem abre browser; apenas imprime caminho do relatório
+- [x] `EchoNerfados.exe --help` lista `--ui`, `--open-report`, `--no-open-report` (ProductVersion: 1.0.0+f1347a6)
+- [x] HTML report renderiza com CSS custom properties (sem fallback de cor hardcoded)
 
 ---
 
-*Relatório gerado em: 2026-05-13 | Build: 876ecb4 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-14 | Build: f1347a6 | Echo Nerfados Shield XDR v1.0.0*
