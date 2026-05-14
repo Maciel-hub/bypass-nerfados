@@ -2,6 +2,8 @@ using System.Text.RegularExpressions;
 
 namespace BypassNerfados.Scanner.Core;
 
+public enum ConsoleUiMode { Minimal, Detailed }
+
 public class ScanConfig
 {
     private string _targetDrive = "C:";
@@ -29,6 +31,8 @@ public class ScanConfig
     public bool ScanNetworkUsage { get; set; } = true;
     public bool RunUsnJournal { get; set; } = true;
     public TimeSpan EventWindowLookback { get; set; } = TimeSpan.FromDays(90);
+    public ConsoleUiMode UiMode { get; set; } = ConsoleUiMode.Minimal;
+    public bool OpenReportAfterScan { get; set; } = false;
 
     public string ReportFileName =>
         $"Echo_Nerfados_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}";

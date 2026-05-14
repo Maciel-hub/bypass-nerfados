@@ -46,6 +46,13 @@ for (int i = 0; i < args.Length; i++)
             break;
         case "--verbose": config.VerboseOutput = true; break;
         case "--no-final-prompt": noFinalPrompt = true; break;
+        case "--open-report":    config.OpenReportAfterScan = true;  break;
+        case "--no-open-report": config.OpenReportAfterScan = false; break;
+        case "--ui" when i + 1 < args.Length:
+            config.UiMode = args[++i].ToLowerInvariant() == "detailed"
+                ? ConsoleUiMode.Detailed
+                : ConsoleUiMode.Minimal;
+            break;
         case "--help" or "-h": PrintHelp(); return 0;
     }
 }
@@ -163,7 +170,7 @@ catch (Exception ex)
 AnsiConsole.WriteLine();
 
 if (finalResult != null)
-    ConsoleUI.PrintSummary(finalResult);
+    ConsoleUI.PrintSummary(finalResult, config);
 
 // Report paths
 if (htmlReportPath != null || txtReportPath != null)
@@ -184,49 +191,58 @@ if (htmlReportPath != null || txtReportPath != null)
 AnsiConsole.WriteLine();
 AnsiConsole.Write(new Rule("[bold]VARREDURA CONCLUÍDA[/]"));
 
-// ── Prompt para abrir relatório ───────────────────────────────────────────────
+// ── Pós-scan: abrir relatório ────────────────────────────────────────────────
 if (!noFinalPrompt && htmlReportPath != null && File.Exists(htmlReportPath))
 {
     AnsiConsole.WriteLine();
 
-    var choice = AnsiConsole.Prompt(
-        new SelectionPrompt<string>()
-            .Title("[bold]O que deseja fazer agora?[/]")
-            .HighlightStyle(new Style(foreground: Color.Red))
-            .AddChoices(
-                "Abrir relatório HTML com evidências",
-                "Abrir pasta do relatório",
-                "Sair"
-            ));
-
-    switch (choice)
+    if (config.OpenReportAfterScan)
     {
-        case "Abrir relatório HTML com evidências":
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(htmlReportPath)
-                    { UseShellExecute = true });
-                AnsiConsole.MarkupLine("[green]Relatório aberto no navegador padrão.[/]");
-            }
-            catch (Exception ex)
-            {
-                AnsiConsole.MarkupLine($"[red]Não foi possível abrir o relatório: {Markup.Escape(ex.Message)}[/]");
-                AnsiConsole.MarkupLine($"Caminho: [dim]{Markup.Escape(htmlReportPath)}[/]");
-            }
-            break;
+        // --open-report: abre automaticamente sem menu
+        OpenHtmlReport(htmlReportPath);
+    }
+    else
+    {
+        var choice = AnsiConsole.Prompt(
+            new SelectionPrompt<string>()
+                .Title("[bold]O que deseja fazer agora?[/]")
+                .HighlightStyle(new Style(foreground: Color.Red))
+                .AddChoices(
+                    "Abrir relatório HTML",
+                    "Abrir pasta do relatório",
+                    "Sair"
+                ));
 
-        case "Abrir pasta do relatório":
-            try
-            {
-                var folder = Path.GetDirectoryName(htmlReportPath)!;
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{folder}\"")
-                    { UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                AnsiConsole.MarkupLine($"[red]Não foi possível abrir a pasta: {Markup.Escape(ex.Message)}[/]");
-            }
-            break;
+        switch (choice)
+        {
+            case "Abrir relatório HTML": OpenHtmlReport(htmlReportPath); break;
+            case "Abrir pasta do relatório":
+                try
+                {
+                    var folder = Path.GetDirectoryName(htmlReportPath)!;
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("explorer.exe", $"\"{folder}\"")
+                        { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    AnsiConsole.MarkupLine($"[red]Não foi possível abrir a pasta: {Markup.Escape(ex.Message)}[/]");
+                }
+                break;
+        }
+    }
+}
+
+static void OpenHtmlReport(string path)
+{
+    try
+    {
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+        AnsiConsole.MarkupLine("[green]Relatório aberto no navegador padrão.[/]");
+    }
+    catch (Exception ex)
+    {
+        AnsiConsole.MarkupLine($"[red]Não foi possível abrir o relatório: {Markup.Escape(ex.Message)}[/]");
+        AnsiConsole.MarkupLine($"[dim]{Markup.Escape(path)}[/]");
     }
 }
 
@@ -256,10 +272,14 @@ static void PrintHelp()
     Console.WriteLine("  --drive <letra>         Drive a ser analisado (padrao: C:)");
     Console.WriteLine("  --output <caminho>      Pasta de saida do relatorio");
     Console.WriteLine("  --lookback <dias>       Janela de analise em dias (padrao: 90)");
+    Console.WriteLine("  --ui minimal            Console limpo: score + top 5 + caminhos (padrao)");
+    Console.WriteLine("  --ui detailed           Console detalhado: tabelas + dossies + cobertura");
+    Console.WriteLine("  --open-report           Abrir HTML automaticamente ao finalizar");
+    Console.WriteLine("  --no-open-report        Nao abrir HTML (apenas exibir caminho)");
     Console.WriteLine("  --no-usn                Pular analise do USN Journal");
     Console.WriteLine("  --no-memory             Pular analise de memoria de processos");
     Console.WriteLine("  --no-report             Nao gerar relatorio em arquivo");
-    Console.WriteLine("  --no-final-prompt       Nao exibir menu apos conclusao (modo automatico)");
+    Console.WriteLine("  --no-final-prompt       Nao exibir menu apos conclusao (automacao)");
     Console.WriteLine("  --verbose               Mostrar todos os findings (incluindo INFO)");
     Console.WriteLine("  --help                  Exibir esta ajuda");
     Console.WriteLine();

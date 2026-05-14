@@ -30,13 +30,13 @@ public static class HtmlTemplate
     {
         var sb = new StringBuilder();
 
-        var riskColor = result.OverallRisk switch
+        var riskHex = result.OverallRisk switch
         {
-            RiskLevel.Critical => "#dc2626",
-            RiskLevel.High     => "#ea580c",
-            RiskLevel.Medium   => "#ca8a04",
-            RiskLevel.Low      => "#16a34a",
-            _                  => "#6b7280"
+            RiskLevel.Critical => "#ef4444",
+            RiskLevel.High     => "#f97316",
+            RiskLevel.Medium   => "#eab308",
+            RiskLevel.Low      => "#22c55e",
+            _                  => "#64748b"
         };
 
         var machineName      = Esc(result.MachineName);
@@ -45,22 +45,23 @@ public static class HtmlTemplate
         var totalScore       = result.TotalScore;
         var riskLabel        = result.OverallRiskLabel;
         var findingsCount    = result.Findings.Count;
-        var modulesCount     = result.ModulesRun.Count;
         var suspectHtml      = config.SuspectName != null
-            ? $"""<div><span class="label">Suspeito</span><span class="value">{Esc(config.SuspectName)}</span></div>"""
+            ? $"""<div class="meta-item"><span class="meta-label">Suspeito</span><span class="meta-val">{Esc(config.SuspectName)}</span></div>"""
             : "";
         var investigatorHtml = config.InvestigatorName != null
-            ? $"""<div><span class="label">Investigador</span><span class="value">{Esc(config.InvestigatorName)}</span></div>"""
+            ? $"""<div class="meta-item"><span class="meta-label">Investigador</span><span class="meta-val">{Esc(config.InvestigatorName)}</span></div>"""
+            : "";
+        var caseIdHtml = config.CaseId != null
+            ? $"""<div class="meta-item"><span class="meta-label">Caso</span><span class="meta-val">{Esc(config.CaseId)}</span></div>"""
             : "";
 
         // Pre-compute tabs
-        var byTab      = result.Findings.GroupBy(GetTabId).ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.Risk).ToList());
-        var allTimed   = result.SortedByTime.ToList();
+        var byTab    = result.Findings.GroupBy(GetTabId).ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.Risk).ToList());
+        var allTimed = result.SortedByTime.ToList();
         var hasBundles = result.EvidenceBundles.Count > 0;
 
         List<Finding> TabFindings(string id) => byTab.TryGetValue(id, out var l) ? l : [];
 
-        // Tab definitions in display order
         var tabDefs = new (string Id, string Label, string BadgeClass)[]
         {
             ("resumo",      "Resumo",         ""),
@@ -97,7 +98,7 @@ public static class HtmlTemplate
 
         var visibleTabs = tabDefs.Where(t => HasTab(t.Id)).ToList();
 
-        // ── CSS + JS ─────────────────────────────────────────────────────────────
+        // ── HTML ─────────────────────────────────────────────────────────────────
         sb.Append($$"""
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -106,203 +107,300 @@ public static class HtmlTemplate
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Echo Nerfados Shield XDR — Relatório</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0f0f0f; color: #e2e8f0; font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
-  .header { background: linear-gradient(135deg, #1a1a2e, #16213e); border-bottom: 2px solid #dc2626; padding: 24px 32px; }
-  .header h1 { font-size: 28px; font-weight: 800; color: #dc2626; letter-spacing: 2px; }
-  .header h1 span { color: #fff; }
-  .header .sub { color: #94a3b8; margin-top: 4px; font-size: 13px; }
-  .header .meta { display: flex; gap: 32px; margin-top: 16px; flex-wrap: wrap; }
-  .header .meta div { display: flex; flex-direction: column; }
-  .header .meta .label { color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-  .header .meta .value { color: #e2e8f0; font-weight: 600; margin-top: 2px; }
-  .score-bar { background: #1e293b; border-bottom: 1px solid #334155; padding: 20px 32px; display: flex; align-items: center; gap: 32px; flex-wrap: wrap; }
-  .score-circle { width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-direction: column; border: 4px solid {{riskColor}}; background: #0f172a; flex-shrink: 0; }
-  .score-circle .num { font-size: 24px; font-weight: 800; color: {{riskColor}}; }
-  .score-circle .pts { font-size: 10px; color: #64748b; }
-  .risk-badge { padding: 6px 16px; border-radius: 6px; font-weight: 800; font-size: 16px; background: {{riskColor}}22; color: {{riskColor}}; border: 1px solid {{riskColor}}44; }
-  .stat-row { display: flex; gap: 12px; flex-wrap: wrap; }
-  .stat { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px 20px; text-align: center; min-width: 80px; }
-  .stat .n { font-size: 22px; font-weight: 700; }
-  .stat .l { font-size: 11px; color: #64748b; text-transform: uppercase; margin-top: 2px; }
-  /* Tab bar */
-  .tab-bar { position: sticky; top: 0; z-index: 100; background: #0d1117; border-bottom: 2px solid #1e293b; padding: 0 24px; display: flex; align-items: flex-end; overflow-x: auto; }
-  .tab-btn { padding: 10px 15px; background: transparent; border: none; border-bottom: 3px solid transparent; color: #64748b; font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; margin-bottom: -2px; display: flex; align-items: center; gap: 5px; letter-spacing: 0.3px; }
-  .tab-btn:hover { color: #94a3b8; background: #1e293b22; }
-  .tab-btn.active { color: #e2e8f0; border-bottom-color: #dc2626; }
-  .tab-count { display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; border-radius: 9px; font-size: 10px; font-weight: 700; padding: 0 5px; }
-  .tab-count.danger { background: #dc262222; color: #dc2626; }
-  .tab-count.warn   { background: #ea580c22; color: #ea580c; }
-  .tab-count.purple { background: #7c3aed22; color: #a78bfa; }
-  .tab-count.plain  { background: #1e293b; color: #64748b; }
-  /* Tab panels */
-  .tab-panels { padding: 24px 32px; }
-  .tab-pane { display: none; }
-  .tab-pane.active { display: block; }
-  /* Tab heading */
-  .tab-heading { font-size: 15px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; padding-bottom: 12px; border-bottom: 1px solid #1e293b; margin-bottom: 18px; }
-  .tab-heading span { color: #475569; font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; margin-left: 10px; }
-  /* Filter bar */
-  .filter-bar { display: flex; gap: 6px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; padding: 10px 14px; background: #111827; border: 1px solid #1e293b; border-radius: 6px; }
-  .filter-btn { padding: 3px 12px; border-radius: 4px; font-size: 11px; font-weight: 700; cursor: pointer; border: 1px solid #334155; background: transparent; color: #64748b; }
-  .filter-btn:hover { background: #1e293b; color: #e2e8f0; }
-  .filter-btn.active { background: #1e293b; color: #e2e8f0; border-color: #475569; }
-  /* Module group */
-  .module-group { margin-bottom: 20px; }
-  .module-group-hdr { font-size: 11px; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 1px; padding: 6px 0; border-bottom: 1px solid #1e293b; margin-bottom: 8px; }
-  /* Findings */
-  .finding { background: #1a1a2e; border: 1px solid #334155; border-radius: 8px; padding: 14px 16px; margin-bottom: 8px; border-left: 4px solid; }
-  .finding.critical { border-left-color: #dc2626; }
-  .finding.high { border-left-color: #ea580c; }
-  .finding.medium { border-left-color: #ca8a04; }
-  .finding.low { border-left-color: #16a34a; }
-  .finding.info { border-left-color: #475569; }
-  .finding-header { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
-  .badge { padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; flex-shrink: 0; }
-  .badge.critical { background: #dc262222; color: #dc2626; }
-  .badge.high { background: #ea580c22; color: #ea580c; }
-  .badge.medium { background: #ca8a0422; color: #ca8a04; }
-  .badge.low { background: #16a34a22; color: #16a34a; }
-  .badge.info { background: #47556922; color: #94a3b8; }
-  .badge.conf { background: #0f172a; color: #4b5563; border: 1px solid #1e293b; font-size: 10px; }
-  .mod-badge { background: #0f172a; border: 1px solid #334155; padding: 2px 8px; border-radius: 4px; font-size: 11px; color: #64748b; flex-shrink: 0; }
-  .finding-title { font-weight: 700; color: #e2e8f0; font-size: 14px; flex: 1; min-width: 0; }
-  .finding-detail { color: #94a3b8; font-size: 13px; margin-top: 6px; line-height: 1.5; white-space: pre-wrap; }
-  .finding-evidence { background: #0f172a; border: 1px solid #334155; border-radius: 4px; padding: 6px 10px; font-family: monospace; font-size: 12px; color: #64748b; margin-top: 6px; word-break: break-all; }
-  .finding-hint { background: #ca8a0410; border: 1px solid #ca8a0433; border-radius: 4px; padding: 6px 10px; font-size: 12px; color: #fde68a; margin-top: 6px; }
-  /* Timeline */
-  .timeline-item { display: flex; gap: 12px; padding: 8px 0; border-bottom: 1px solid #1e293b; align-items: flex-start; }
-  .timeline-extra { display: none; }
-  .timeline-ts { color: #475569; font-family: monospace; font-size: 12px; flex-shrink: 0; width: 145px; }
-  .expand-btn { margin-top: 10px; padding: 5px 18px; background: #1e293b; border: 1px solid #334155; border-radius: 4px; color: #64748b; cursor: pointer; font-size: 12px; }
-  .expand-btn:hover { background: #334155; color: #e2e8f0; }
-  /* Table */
-  table { width: 100%; border-collapse: collapse; }
-  th { text-align: left; padding: 8px 12px; background: #1e293b; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; }
-  td { padding: 8px 12px; border-bottom: 1px solid #1e293b; color: #e2e8f0; font-size: 13px; }
-  tr:hover td { background: #1e293b44; }
-  /* Artifact dossier */
-  .artifact-card { background:#1a1a2e;border:1px solid #334155;border-radius:8px;padding:16px 18px;margin-bottom:10px;border-left:4px solid #7c3aed; }
-  .artifact-card.confirmed { border-left-color:#dc2626; }
-  .artifact-card.strong { border-left-color:#ea580c; }
-  .artifact-card.indicative { border-left-color:#ca8a04; }
-  .artifact-card.low-conf { border-left-color:#475569; }
-  .artifact-header { display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px; }
-  .artifact-name { font-weight:800;color:#e2e8f0;font-size:15px; }
-  .verdict-badge { padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700; }
-  .verdict-confirmed { background:#dc262222;color:#dc2626; }
-  .verdict-strong { background:#ea580c22;color:#ea580c; }
-  .verdict-indicative { background:#ca8a0422;color:#ca8a04; }
-  .verdict-low { background:#47556922;color:#94a3b8; }
-  .artifact-path { font-family:monospace;font-size:12px;color:#64748b;margin-bottom:8px;word-break:break-all; }
-  .artifact-meta { display:flex;gap:20px;flex-wrap:wrap;margin-bottom:8px;font-size:12px; }
-  .artifact-meta span { color:#64748b; }
-  .artifact-meta strong { color:#94a3b8; }
-  .signals-grid { margin-top:10px;border-top:1px solid #1e293b;padding-top:8px; }
-  .signal-item { font-size:12px;color:#94a3b8;padding:3px 0;border-bottom:1px solid #1e293b11; }
-  .signal-mod { color:#64748b;font-size:11px;margin-right:6px; }
-  .bypass-alert { background:#dc262210;border:1px solid #dc262233;border-radius:4px;padding:8px 12px;margin-top:8px;font-size:12px;color:#fca5a5; }
-  .validation-alert { background:#ca8a0410;border:1px solid #ca8a0433;border-radius:4px;padding:8px 12px;margin-top:6px;font-size:12px;color:#fde68a; }
-  /* Footer */
-  .footer { background: #0a0a0f; border-top: 1px solid #1e293b; padding: 16px 32px; color: #334155; font-size: 12px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
-  /* Print */
-  @media print {
-    .tab-bar, .filter-bar, .expand-btn { display: none !important; }
-    .tab-pane { display: block !important; }
-    .tab-heading { color: #333 !important; border-bottom: 2px solid #dc2626; margin-top: 32px; page-break-before: always; }
-    .tab-heading:first-child { page-break-before: auto; }
-    body { background: #fff; color: #111; font-size: 12px; }
-    .header { background: #f0f4f8 !important; border-bottom: 2px solid #dc2626; }
-    .header h1 { color: #dc2626; }
-    .header .sub, .header .meta .value { color: #333; }
-    .header .meta .label { color: #666; }
-    .score-bar { background: #f8f8f8; border-bottom: 1px solid #ddd; }
-    .score-circle .pts { color: #666; }
-    .timeline-extra { display: flex !important; }
-    .finding { break-inside: avoid; page-break-inside: avoid; background: #f9f9f9; border-color: #ddd; }
-    .finding-detail { color: #444; }
-    .finding-evidence { background: #f0f0f0; color: #555; }
-    .artifact-card { break-inside: avoid; page-break-inside: avoid; }
-    .footer { color: #666; border-top: 1px solid #ccc; }
-  }
+:root {
+  --bg:       #0b0f14;
+  --panel:    #111827;
+  --panel-2:  #162033;
+  --border:   #1e2d42;
+  --border-2: #263244;
+  --text:     #e5e7eb;
+  --muted:    #8b98aa;
+  --dim:      #4b5a6e;
+  --critical: #ef4444;
+  --high:     #f97316;
+  --medium:   #eab308;
+  --low:      #22c55e;
+  --info:     #64748b;
+  --accent:   #7c3aed;
+  --sidebar-w: 210px;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; font-size:14px; display:flex; flex-direction:column; min-height:100vh; }
+/* Header */
+.page-header { background:linear-gradient(135deg,#131c2e,#0f172a); border-bottom:2px solid var(--critical); padding:18px 24px; flex-shrink:0; }
+.page-header h1 { font-size:22px; font-weight:800; color:var(--critical); letter-spacing:2px; }
+.page-header h1 span { color:#fff; }
+.page-header .sub { color:var(--muted); font-size:12px; margin-top:3px; }
+.meta-row { display:flex; gap:24px; margin-top:12px; flex-wrap:wrap; }
+.meta-item { display:flex; flex-direction:column; }
+.meta-label { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; }
+.meta-val { font-size:13px; font-weight:600; color:var(--text); margin-top:1px; }
+/* Score strip */
+.score-strip { background:var(--panel); border-bottom:1px solid var(--border); padding:12px 24px; display:flex; align-items:center; gap:20px; flex-wrap:wrap; flex-shrink:0; }
+.score-pill { display:flex; align-items:center; gap:10px; }
+.score-num { font-size:26px; font-weight:800; color:{{riskHex}}; line-height:1; }
+.score-label { font-size:12px; color:var(--muted); }
+.risk-chip { padding:4px 12px; border-radius:4px; font-weight:800; font-size:13px; background:{{riskHex}}1a; color:{{riskHex}}; border:1px solid {{riskHex}}44; }
+.sev-row { display:flex; gap:10px; flex-wrap:wrap; }
+.sev-item { font-size:12px; display:flex; align-items:center; gap:4px; }
+.sev-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+/* App shell */
+.app-shell { display:flex; flex:1; overflow:hidden; }
+/* Sidebar */
+.sidebar { width:var(--sidebar-w); flex-shrink:0; background:#0d1117; border-right:1px solid var(--border); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow:hidden; }
+.sidebar-search { padding:12px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.sidebar-search input { width:100%; background:var(--panel-2); border:1px solid var(--border-2); border-radius:5px; padding:6px 10px; color:var(--text); font-size:12px; outline:none; }
+.sidebar-search input::placeholder { color:var(--dim); }
+.sidebar-search input:focus { border-color:var(--dim); }
+.sidebar-nav { flex:1; overflow-y:auto; padding:6px 0; }
+.nav-item { width:100%; display:flex; align-items:center; justify-content:space-between; padding:8px 14px; background:transparent; border:none; color:var(--muted); font-size:12px; font-weight:500; cursor:pointer; text-align:left; border-left:3px solid transparent; transition:background 0.1s,color 0.1s; }
+.nav-item:hover { background:var(--panel-2); color:var(--text); }
+.nav-item.active { color:var(--text); border-left-color:var(--critical); background:var(--panel-2); font-weight:700; }
+.nav-count { font-size:10px; font-weight:700; padding:1px 6px; border-radius:9px; background:var(--panel); color:var(--dim); }
+.nav-count.danger { background:#ef444418; color:var(--critical); }
+.nav-count.warn   { background:#f9731618; color:var(--high); }
+.nav-count.purple { background:#7c3aed18; color:#a78bfa; }
+.sidebar-score { padding:14px; border-bottom:1px solid var(--border); flex-shrink:0; }
+.sidebar-score .big { font-size:32px; font-weight:800; color:{{riskHex}}; line-height:1; }
+.sidebar-score .lbl { font-size:11px; color:var(--muted); margin-top:2px; }
+.sidebar-score .chip { display:inline-block; margin-top:6px; padding:2px 10px; border-radius:4px; font-size:11px; font-weight:700; background:{{riskHex}}1a; color:{{riskHex}}; border:1px solid {{riskHex}}33; }
+/* Content */
+.content { flex:1; overflow-y:auto; overflow-x:hidden; padding:24px 28px; }
+.tab-pane { display:none; }
+.tab-pane.active { display:block; }
+/* Tab heading */
+.tab-heading { font-size:14px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:1px; padding-bottom:10px; border-bottom:1px solid var(--border); margin-bottom:16px; display:flex; align-items:baseline; gap:10px; }
+.tab-heading span { font-size:11px; font-weight:400; color:var(--dim); text-transform:none; letter-spacing:0; }
+/* Filter bar */
+.filter-bar { display:flex; gap:5px; align-items:center; margin-bottom:14px; flex-wrap:wrap; padding:8px 12px; background:var(--panel); border:1px solid var(--border); border-radius:5px; }
+.filter-lbl { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; margin-right:4px; }
+.filter-btn { padding:2px 10px; border-radius:3px; font-size:11px; font-weight:600; cursor:pointer; border:1px solid var(--border-2); background:transparent; color:var(--dim); transition:background 0.1s; }
+.filter-btn:hover,
+.filter-btn.active { background:var(--panel-2); color:var(--text); border-color:var(--dim); }
+/* Module group */
+.module-group { margin-bottom:18px; }
+.module-group-hdr { font-size:10px; font-weight:700; color:var(--dim); text-transform:uppercase; letter-spacing:1px; padding:5px 0; border-bottom:1px solid var(--border); margin-bottom:7px; display:flex; align-items:center; gap:6px; }
+/* Findings */
+.finding { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:12px 14px; margin-bottom:6px; border-left:3px solid; }
+.finding.critical { border-left-color:var(--critical); }
+.finding.high     { border-left-color:var(--high); }
+.finding.medium   { border-left-color:var(--medium); }
+.finding.low      { border-left-color:var(--low); }
+.finding.info     { border-left-color:var(--info); }
+.finding-hdr { display:flex; align-items:flex-start; gap:6px; flex-wrap:wrap; margin-bottom:5px; }
+.badge { padding:1px 7px; border-radius:3px; font-size:10px; font-weight:700; flex-shrink:0; }
+.badge.critical { background:#ef444418; color:var(--critical); }
+.badge.high     { background:#f9731618; color:var(--high); }
+.badge.medium   { background:#eab30818; color:var(--medium); }
+.badge.low      { background:#22c55e18; color:var(--low); }
+.badge.info     { background:#64748b18; color:var(--info); }
+.badge.cat      { background:var(--panel-2); color:var(--dim); border:1px solid var(--border-2); font-size:9px; }
+.badge.conf     { background:var(--panel-2); color:var(--dim); border:1px solid var(--border-2); font-size:9px; }
+.mod-tag { background:var(--panel-2); border:1px solid var(--border-2); padding:1px 7px; border-radius:3px; font-size:10px; color:var(--muted); flex-shrink:0; }
+.finding-title { font-weight:600; color:var(--text); font-size:13px; flex:1; min-width:0; }
+.finding-detail { color:var(--muted); font-size:12px; line-height:1.5; white-space:pre-wrap; }
+.finding-evidence { background:#0a0f18; border:1px solid var(--border); border-radius:3px; padding:5px 9px; font-family:monospace; font-size:11px; color:var(--dim); margin-top:5px; word-break:break-all; }
+.finding-ts { color:var(--dim); font-size:10px; margin-top:3px; font-family:monospace; }
+.finding-hint { background:#eab30808; border:1px solid #eab30833; border-radius:3px; padding:5px 9px; font-size:11px; color:#fde68a; margin-top:5px; }
+/* Summary cards */
+.cards-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(190px,1fr)); gap:10px; margin-bottom:18px; }
+.card { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:12px 14px; border-left:3px solid; }
+.card-label { font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:1px; }
+.card-num { font-size:28px; font-weight:800; margin:4px 0; }
+.card-hint { font-size:10px; color:var(--dim); }
+/* Artifact dossier */
+.dossier-card { background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:14px 16px; margin-bottom:10px; border-left:3px solid var(--accent); }
+.dossier-card.confirmed { border-left-color:var(--critical); }
+.dossier-card.strong    { border-left-color:var(--high); }
+.dossier-card.indicative{ border-left-color:var(--medium); }
+.dossier-card.low-conf  { border-left-color:var(--info); }
+.dossier-hdr { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:8px; }
+.dossier-name { font-weight:700; color:var(--text); font-size:14px; }
+.verdict-chip { padding:2px 9px; border-radius:3px; font-size:10px; font-weight:700; }
+.vc-confirmed { background:#ef444418; color:var(--critical); }
+.vc-strong    { background:#f9731618; color:var(--high); }
+.vc-indicative{ background:#eab30818; color:var(--medium); }
+.vc-low       { background:#64748b18; color:var(--info); }
+.dossier-path { font-family:monospace; font-size:11px; color:var(--dim); margin-bottom:8px; word-break:break-all; }
+.dossier-fields { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:6px; margin-bottom:10px; font-size:11px; }
+.dossier-field { display:flex; flex-direction:column; gap:2px; }
+.dossier-field-label { color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:0.5px; }
+.dossier-field-val { color:var(--muted); word-break:break-all; }
+.signals-list { border-top:1px solid var(--border); padding-top:8px; margin-top:8px; }
+.signal-row { display:flex; align-items:baseline; gap:6px; font-size:11px; color:var(--muted); padding:2px 0; border-bottom:1px solid var(--border)11; }
+.signal-tag { color:var(--dim); font-size:10px; flex-shrink:0; }
+.dossier-alert { background:#ef444408; border:1px solid #ef444428; border-radius:3px; padding:6px 10px; margin-top:6px; font-size:11px; color:#fca5a5; }
+.dossier-warn  { background:#eab30808; border:1px solid #eab30828; border-radius:3px; padding:6px 10px; margin-top:4px; font-size:11px; color:#fde68a; }
+/* Timeline */
+.tl-group { margin-bottom:16px; }
+.tl-group-hdr { font-size:11px; font-weight:700; color:var(--dim); padding:4px 0 6px; border-bottom:1px solid var(--border); margin-bottom:6px; font-family:monospace; }
+.tl-item { display:flex; gap:10px; padding:5px 0; border-bottom:1px solid var(--border)66; align-items:baseline; }
+.tl-time { color:var(--dim); font-family:monospace; font-size:11px; flex-shrink:0; width:50px; }
+.tl-mod  { font-size:10px; color:var(--dim); flex-shrink:0; }
+.tl-extra { display:none; }
+.expand-btn { margin-top:10px; padding:4px 16px; background:var(--panel); border:1px solid var(--border-2); border-radius:4px; color:var(--dim); cursor:pointer; font-size:11px; }
+.expand-btn:hover { background:var(--panel-2); color:var(--text); }
+/* Table */
+table { width:100%; border-collapse:collapse; }
+th { text-align:left; padding:7px 10px; background:var(--panel); color:var(--dim); font-size:10px; text-transform:uppercase; letter-spacing:1px; }
+td { padding:7px 10px; border-bottom:1px solid var(--border); color:var(--text); font-size:12px; }
+tr:hover td { background:var(--panel-2); }
+/* Search highlight */
+.hl { background:#eab30830; border-radius:2px; }
+/* Dist row */
+.dist-row { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+.dist-chip { background:var(--panel); border:1px solid var(--border); border-radius:4px; padding:3px 9px; font-size:11px; }
+/* Footer */
+.page-footer { background:#070b10; border-top:1px solid var(--border); padding:10px 24px; color:var(--dim); font-size:11px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; flex-shrink:0; }
+/* Print */
+@media print {
+  .sidebar { display:none !important; }
+  .app-shell { display:block; }
+  .tab-pane { display:block !important; page-break-before:always; }
+  .tab-pane:first-child { page-break-before:auto; }
+  .filter-bar,.expand-btn,.sidebar-search { display:none !important; }
+  body { background:#fff; color:#111; }
+  .page-header { background:#f0f4f8 !important; }
+  .page-header h1 { color:#dc2626; }
+  .finding { break-inside:avoid; }
+  .dossier-card { break-inside:avoid; }
+  .tl-extra { display:flex !important; }
+}
+/* Responsive */
+@media (max-width:700px) {
+  .sidebar { display:none; }
+  .content { padding:16px; }
+}
 </style>
 <script>
-function switchTab(id, btn) {
+var _activeTab = '{{visibleTabs[0].Id}}';
+
+function showTab(id, btn) {
   document.querySelectorAll('.tab-pane').forEach(function(p) { p.classList.remove('active'); });
-  document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+  document.querySelectorAll('.nav-item').forEach(function(b) { b.classList.remove('active'); });
   document.getElementById('tab-' + id).classList.add('active');
   btn.classList.add('active');
+  _activeTab = id;
+  // Reset search when switching tabs
+  var s = document.getElementById('search-input');
+  if (s && s.value) { s.value = ''; globalSearch(''); }
 }
+
 function filterRisk(risk, btn, scope) {
   var container = scope ? document.getElementById(scope) : document;
   container.querySelectorAll('.finding[data-risk]').forEach(function(f) {
-    f.style.display = (risk === 'all' || f.dataset.risk === risk) ? '' : 'none';
+    var r = f.dataset.risk;
+    var show = risk === 'all' || r === risk ||
+               (risk === 'highplus' && (r === 'critical' || r === 'high'));
+    f.style.display = show ? '' : 'none';
   });
   btn.closest('.filter-bar').querySelectorAll('.filter-btn').forEach(function(b) { b.classList.remove('active'); });
   btn.classList.add('active');
 }
+
+function globalSearch(term) {
+  var q = term.trim().toLowerCase();
+  var pane = document.getElementById('tab-' + _activeTab);
+  if (!pane) return;
+
+  // Clear previous highlights
+  pane.querySelectorAll('.hl').forEach(function(el) {
+    el.outerHTML = el.textContent;
+  });
+
+  if (!q) {
+    pane.querySelectorAll('[data-search]').forEach(function(el) { el.style.display = ''; });
+    return;
+  }
+
+  pane.querySelectorAll('[data-search]').forEach(function(el) {
+    var text = el.dataset.search.toLowerCase();
+    el.style.display = text.includes(q) ? '' : 'none';
+  });
+}
+
 function expandTimeline() {
-  document.querySelectorAll('.timeline-extra').forEach(function(el) { el.style.display = 'flex'; });
+  document.querySelectorAll('.tl-extra').forEach(function(el) { el.style.display = 'flex'; });
   var btn = document.getElementById('tl-expand-btn');
   if (btn) btn.style.display = 'none';
 }
+
+// On load: apply High+ filter to all tabs
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.filter-bar').forEach(function(bar) {
+    var btn = bar.querySelector('[data-filter="highplus"]');
+    if (btn) btn.click();
+  });
+});
 </script>
 </head>
 <body>
-<div class="header">
-  <h1>ECHO NERFADOS <span>SHIELD XDR</span></h1>
-  <div class="sub">Investigação Forense Anti-Cheat — Relatório de Screen-Share</div>
-  <div class="meta">
-    <div><span class="label">Máquina</span><span class="value">{{machineName}}</span></div>
-    <div><span class="label">Usuário</span><span class="value">{{currentUser}}</span></div>
-    <div><span class="label">Data/Hora</span><span class="value">{{scanTime}}</span></div>
-    {{suspectHtml}}
-    {{investigatorHtml}}
-  </div>
-</div>
-<div class="score-bar">
-  <div class="score-circle">
-    <span class="num">{{totalScore}}</span>
-    <span class="pts">/ 100</span>
-  </div>
-  <div>
-    <div class="risk-badge">{{riskLabel}}</div>
-    <div style="color:#64748b;margin-top:6px;font-size:12px">{{findingsCount}} findings • {{modulesCount}} módulos</div>
-  </div>
-  <div class="stat-row">
 """);
 
+        // ── Page header ───────────────────────────────────────────────────────────
+        sb.Append($$"""
+<div class="page-header">
+  <h1>ECHO NERFADOS <span>SHIELD XDR</span></h1>
+  <div class="sub">Investigação Forense Anti-Cheat — Screen-Share</div>
+  <div class="meta-row">
+    <div class="meta-item"><span class="meta-label">Máquina</span><span class="meta-val">{{machineName}}</span></div>
+    <div class="meta-item"><span class="meta-label">Usuário</span><span class="meta-val">{{currentUser}}</span></div>
+    <div class="meta-item"><span class="meta-label">Data/Hora</span><span class="meta-val">{{scanTime}}</span></div>
+    {{suspectHtml}}{{investigatorHtml}}{{caseIdHtml}}
+  </div>
+</div>
+""");
+
+        // ── Score strip ───────────────────────────────────────────────────────────
+        sb.AppendLine($$"""<div class="score-strip">""");
+        sb.AppendLine($$"""  <div class="score-pill"><div class="score-num">{{totalScore}}</div><div class="score-label">/ 100</div></div>""");
+        sb.AppendLine($$"""  <div class="risk-chip">{{riskLabel}}</div>""");
+        sb.AppendLine($$"""  <div style="color:var(--dim);font-size:12px">{{findingsCount}} findings &bull; {{result.ModulesRun.Count}} módulos</div>""");
+        sb.AppendLine("""  <div class="sev-row">""");
         foreach (var group in result.Findings.GroupBy(f => f.Risk).OrderByDescending(g => g.Key))
         {
-            var color = group.Key switch
+            var (col, cls) = group.Key switch
             {
-                RiskLevel.Critical => "#dc2626",
-                RiskLevel.High     => "#ea580c",
-                RiskLevel.Medium   => "#ca8a04",
-                RiskLevel.Low      => "#16a34a",
-                _                  => "#475569"
+                RiskLevel.Critical => ("#ef4444", "critical"),
+                RiskLevel.High     => ("#f97316", "high"),
+                RiskLevel.Medium   => ("#eab308", "medium"),
+                RiskLevel.Low      => ("#22c55e", "low"),
+                _                  => ("#64748b", "info")
             };
-            sb.AppendLine($"""<div class="stat"><div class="n" style="color:{color}">{group.Count()}</div><div class="l">{group.Key}</div></div>""");
+            sb.AppendLine($"""    <div class="sev-item"><div class="sev-dot" style="background:{col}"></div><span style="color:{col};font-weight:700">{group.Count()}</span><span style="color:var(--dim)">{group.Key}</span></div>""");
         }
-
         sb.AppendLine("  </div>\n</div>");
 
-        // ── Tab bar ───────────────────────────────────────────────────────────────
-        sb.AppendLine("""<div class="tab-bar">""");
-        bool firstBtn = true;
+        // ── App shell ─────────────────────────────────────────────────────────────
+        sb.AppendLine("""<div class="app-shell">""");
+
+        // Sidebar
+        sb.AppendLine("""<aside class="sidebar">""");
+        sb.AppendLine($$"""
+<div class="sidebar-score">
+  <div class="big">{{totalScore}}</div>
+  <div class="lbl">Score de risco</div>
+  <div class="chip">{{riskLabel}}</div>
+</div>
+<div class="sidebar-search">
+  <input id="search-input" type="text" placeholder="Buscar achados..." oninput="globalSearch(this.value)">
+</div>
+<nav class="sidebar-nav">
+""");
+        bool firstNavBtn = true;
         foreach (var tab in visibleTabs)
         {
-            var activeClass  = firstBtn ? " active" : "";
-            firstBtn = false;
-            var count        = TabCount(tab.Id);
-            var badgeClass   = string.IsNullOrEmpty(tab.BadgeClass) ? "plain" : tab.BadgeClass;
-            var countBadge   = count > 0 ? $"""<span class="tab-count {badgeClass}">{count}</span>""" : "";
-            sb.AppendLine($"""  <button class="tab-btn{activeClass}" onclick="switchTab('{tab.Id}',this)">{Esc(tab.Label)}{countBadge}</button>""");
+            var count      = TabCount(tab.Id);
+            var activeClass = firstNavBtn ? " active" : "";
+            firstNavBtn = false;
+            var badgeCls   = string.IsNullOrEmpty(tab.BadgeClass) ? "" : tab.BadgeClass;
+            var countHtml  = count > 0 ? $"""<span class="nav-count {badgeCls}">{count}</span>""" : "";
+            sb.AppendLine($"""  <button class="nav-item{activeClass}" onclick="showTab('{tab.Id}',this)">{Esc(tab.Label)}{countHtml}</button>""");
         }
-        sb.AppendLine("</div>");
+        sb.AppendLine("</nav>\n</aside>");
 
-        // ── Tab panels ────────────────────────────────────────────────────────────
-        sb.AppendLine("""<div class="tab-panels">""");
+        // Content
+        sb.AppendLine("""<div class="content">""");
         bool firstPane = true;
         foreach (var tab in visibleTabs)
         {
@@ -312,59 +410,27 @@ function expandTimeline() {
 
             switch (tab.Id)
             {
-                case "resumo":
-                    sb.AppendLine(ExecutiveSummaryHtml(result));
-                    break;
-                case "cheats":
-                    sb.AppendLine(FindingsTabHtml("CHEATS DETECTADOS", TabFindings("cheats"), "cheats", "#dc2626",
-                        "Execuções, arquivos e comportamentos de cheats identificados"));
-                    break;
-                case "diagnostico":
-                    sb.AppendLine(ArtifactDossierTabHtml(result));
-                    break;
-                case "execucoes":
-                    sb.AppendLine(FindingsTabHtml("TRILHA DE EXECUÇÃO", TabFindings("execucoes"), "execucoes", "#ea580c",
-                        "BAM/DAM · Prefetch · Amcache · UserAssist · ShimCache · Registry Artifacts"));
-                    break;
-                case "downloads":
-                    sb.AppendLine(FindingsTabHtml("DOWNLOADS E FERRAMENTAS EXTERNAS", TabFindings("downloads"), "downloads", "#ca8a04",
-                        "Browser Downloads · External Tool Residue"));
-                    break;
-                case "delecoes":
-                    sb.AppendLine(FindingsTabHtml("DELEÇÕES / USN JOURNAL", TabFindings("delecoes"), "delecoes", "#ca8a04",
-                        "USN Journal · Recycle Bin — rastros de arquivos deletados"));
-                    break;
-                case "pastas":
-                    sb.AppendLine(FindingsTabHtml("PASTAS ACESSADAS", TabFindings("pastas"), "pastas", "#64748b",
-                        "ShellBags · Jump Lists · LNK Recent — navegação de pastas"));
-                    break;
-                case "memoria":
-                    sb.AppendLine(FindingsTabHtml("MEMÓRIA / PROCESSOS", TabFindings("memoria"), "memoria", "#ea580c",
-                        "Process Memory — DLLs injetadas, módulos suspeitos em memória"));
-                    break;
-                case "bypass":
-                    sb.AppendLine(FindingsTabHtml("BYPASS / ANTI-FORENSE", TabFindings("bypass"), "bypass", "#dc2626",
-                        "Anti-Forensics · System Tampering · Service Tampering — evasão forense"));
-                    break;
-                case "outros":
-                    sb.AppendLine(FindingsTabHtml("OUTROS INDICADORES", TabFindings("outros"), "outros", "#64748b",
-                        "System Info · Event Viewer · Defender · Rede · SRUM · File System"));
-                    break;
-                case "timeline":
-                    sb.AppendLine(TimelineTabHtml(allTimed));
-                    break;
-                case "cobertura":
-                    sb.AppendLine(ModuleCoverageTabHtml(result, TabFindings("cobertura")));
-                    break;
+                case "resumo":      sb.AppendLine(ResumoHtml(result)); break;
+                case "cheats":      sb.AppendLine(FindingsTabHtml("CHEATS DETECTADOS",             TabFindings("cheats"),    "cheats",    "var(--critical)", "Execuções, arquivos e comportamentos de cheats identificados")); break;
+                case "diagnostico": sb.AppendLine(DossierTabHtml(result)); break;
+                case "execucoes":   sb.AppendLine(FindingsTabHtml("TRILHA DE EXECUÇÃO",            TabFindings("execucoes"), "execucoes", "var(--high)",     "BAM/DAM · Prefetch · Amcache · UserAssist · ShimCache · Registry Artifacts")); break;
+                case "downloads":   sb.AppendLine(FindingsTabHtml("DOWNLOADS E FERRAMENTAS",       TabFindings("downloads"), "downloads", "var(--medium)",   "Browser Downloads · External Tool Residue")); break;
+                case "delecoes":    sb.AppendLine(FindingsTabHtml("DELEÇÕES / USN JOURNAL",        TabFindings("delecoes"),  "delecoes",  "var(--medium)",   "USN Journal · Recycle Bin — rastros de arquivos deletados")); break;
+                case "pastas":      sb.AppendLine(FindingsTabHtml("PASTAS ACESSADAS",              TabFindings("pastas"),    "pastas",    "var(--muted)",    "ShellBags · Jump Lists · LNK Recent")); break;
+                case "memoria":     sb.AppendLine(FindingsTabHtml("MEMÓRIA / PROCESSOS",           TabFindings("memoria"),   "memoria",   "var(--high)",     "Process Memory — DLLs injetadas, módulos suspeitos")); break;
+                case "bypass":      sb.AppendLine(FindingsTabHtml("BYPASS / ANTI-FORENSE",         TabFindings("bypass"),    "bypass",    "var(--critical)", "Anti-Forensics · System Tampering · Service Tampering")); break;
+                case "outros":      sb.AppendLine(FindingsTabHtml("OUTROS INDICADORES",            TabFindings("outros"),    "outros",    "var(--muted)",    "System Info · Event Viewer · Defender · Rede · SRUM · File System")); break;
+                case "timeline":    sb.AppendLine(TimelineTabHtml(allTimed)); break;
+                case "cobertura":   sb.AppendLine(CoberturaTabHtml(result, TabFindings("cobertura"))); break;
             }
 
             sb.AppendLine("</div>");
         }
-
-        sb.AppendLine("</div>"); // tab-panels
+        sb.AppendLine("</div>"); // content
+        sb.AppendLine("</div>"); // app-shell
 
         sb.AppendLine($"""
-<div class="footer">
+<div class="page-footer">
   <span>Echo Nerfados Shield XDR v1.0 — Uso Defensivo Autorizado</span>
   <span>Gerado em {DateTime.Now:dd/MM/yyyy HH:mm:ss} | {result.ModulesRun.Count} módulos | {result.Findings.Count} findings</span>
 </div>
@@ -375,19 +441,18 @@ function expandTimeline() {
         return sb.ToString();
     }
 
-    // ── Tab content builders ──────────────────────────────────────────────────────
+    // ── Tab content ───────────────────────────────────────────────────────────────
 
     private static string FindingsTabHtml(
         string heading, List<Finding> findings, string tabId, string headingColor, string? subtitle = null)
     {
         var sb = new StringBuilder();
-
         var subtitleHtml = subtitle != null ? $"<span>{Esc(subtitle)}</span>" : "";
         sb.AppendLine($"""<div class="tab-heading" style="color:{headingColor}">{Esc(heading)}{subtitleHtml}</div>""");
 
         if (findings.Count == 0)
         {
-            sb.AppendLine("""<div style="color:#475569;font-style:italic;padding:20px 0">Nenhum finding nesta categoria.</div>""");
+            sb.AppendLine("""<div style="color:var(--dim);padding:20px 0;font-size:13px">Nenhum finding nesta categoria.</div>""");
             return sb.ToString();
         }
 
@@ -399,12 +464,13 @@ function expandTimeline() {
 
         sb.AppendLine($"""
 <div class="filter-bar">
-  <span style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px">Filtrar:</span>
-  <button class="filter-btn active" onclick="filterRisk('all',this,'tab-{tabId}')">Todos ({findings.Count})</button>
-  <button class="filter-btn" onclick="filterRisk('critical',this,'tab-{tabId}')" style="color:#dc2626;border-color:#dc262644">Critical ({crit})</button>
-  <button class="filter-btn" onclick="filterRisk('high',this,'tab-{tabId}')" style="color:#ea580c;border-color:#ea580c44">High ({high})</button>
-  <button class="filter-btn" onclick="filterRisk('medium',this,'tab-{tabId}')" style="color:#ca8a04;border-color:#ca8a0444">Medium ({med})</button>
-  <button class="filter-btn" onclick="filterRisk('low',this,'tab-{tabId}')" style="color:#16a34a;border-color:#16a34a44">Low ({low})</button>
+  <span class="filter-lbl">Filtrar</span>
+  <button class="filter-btn" data-filter="highplus" onclick="filterRisk('highplus',this,'tab-{tabId}')">High+ ({crit + high})</button>
+  <button class="filter-btn" onclick="filterRisk('all',this,'tab-{tabId}')">Todos ({findings.Count})</button>
+  <button class="filter-btn" onclick="filterRisk('critical',this,'tab-{tabId}')" style="color:var(--critical)">Critical ({crit})</button>
+  <button class="filter-btn" onclick="filterRisk('high',this,'tab-{tabId}')" style="color:var(--high)">High ({high})</button>
+  <button class="filter-btn" onclick="filterRisk('medium',this,'tab-{tabId}')" style="color:var(--medium)">Medium ({med})</button>
+  <button class="filter-btn" onclick="filterRisk('low',this,'tab-{tabId}')" style="color:var(--low)">Low ({low})</button>
   <button class="filter-btn" onclick="filterRisk('info',this,'tab-{tabId}')">Info ({info})</button>
 </div>
 """);
@@ -412,7 +478,7 @@ function expandTimeline() {
         foreach (var moduleGroup in findings.GroupBy(f => f.Module).OrderByDescending(g => g.Max(f => (int)f.Risk)))
         {
             sb.AppendLine($"""<div class="module-group">""");
-            sb.AppendLine($"""<div class="module-group-hdr">{Esc(moduleGroup.Key)} <span style="color:#334155;font-size:10px;font-weight:400">({moduleGroup.Count()})</span></div>""");
+            sb.AppendLine($"""<div class="module-group-hdr">{Esc(moduleGroup.Key)}<span style="color:var(--border-2);font-size:10px;font-weight:400"> ({moduleGroup.Count()})</span></div>""");
             foreach (var f in moduleGroup.OrderByDescending(f => f.Risk))
                 sb.AppendLine(FindingHtml(f));
             sb.AppendLine("</div>");
@@ -424,63 +490,72 @@ function expandTimeline() {
     private static string TimelineTabHtml(List<Finding> allTimed)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"""<div class="tab-heading">LINHA DO TEMPO<span>{allTimed.Count} eventos com timestamp, ordem decrescente</span></div>""");
+        sb.AppendLine($"""<div class="tab-heading">LINHA DO TEMPO<span>{allTimed.Count} eventos com timestamp, decrescente</span></div>""");
 
         if (allTimed.Count == 0)
         {
-            sb.AppendLine("""<div style="color:#475569;font-style:italic;padding:20px 0">Nenhum evento com timestamp registrado.</div>""");
+            sb.AppendLine("""<div style="color:var(--dim);padding:20px 0">Nenhum evento com timestamp.</div>""");
             return sb.ToString();
         }
 
-        const int PageSize = 50;
-        for (int i = 0; i < allTimed.Count; i++)
+        // Group by day+hour+minute
+        var groups = allTimed
+            .GroupBy(f => f.Timestamp!.Value.ToString("dd/MM/yyyy HH:mm"))
+            .OrderByDescending(g => g.Key)
+            .ToList();
+
+        const int VisibleGroups = 20;
+        for (int gi = 0; gi < groups.Count; gi++)
         {
-            var f = allTimed[i];
-            var rColor = f.Risk switch
+            var g = groups[gi];
+            var extraClass = gi >= VisibleGroups ? " tl-extra" : "";
+            sb.AppendLine($"""<div class="tl-group{extraClass}">""");
+            sb.AppendLine($"""<div class="tl-group-hdr">{Esc(g.Key)}</div>""");
+            foreach (var f in g.OrderByDescending(x => x.Risk))
             {
-                RiskLevel.Critical => "#dc2626",
-                RiskLevel.High     => "#ea580c",
-                RiskLevel.Medium   => "#ca8a04",
-                _                  => "#475569"
-            };
-            var extraClass = i >= PageSize ? " timeline-extra" : "";
-            sb.AppendLine($"""
-<div class="timeline-item{extraClass}">
-  <span class="timeline-ts">{f.Timestamp:dd/MM/yyyy HH:mm:ss}</span>
-  <span class="mod-badge">{Esc(f.Module)}</span>
-  <span class="badge {f.Risk.ToString().ToLower()}">{Esc(f.RiskLabel)}</span>
-  <span style="color:#e2e8f0">{Esc(f.Title)}</span>
+                var rColor = f.Risk switch
+                {
+                    RiskLevel.Critical => "var(--critical)",
+                    RiskLevel.High     => "var(--high)",
+                    RiskLevel.Medium   => "var(--medium)",
+                    _                  => "var(--dim)"
+                };
+                sb.AppendLine($"""
+<div class="tl-item" data-search="{Esc(f.Module + " " + f.Title + " " + f.Detail)}">
+  <span class="tl-time">{f.Timestamp!.Value:HH:mm:ss}</span>
+  <span class="tl-mod">[{Esc(f.Module)}]</span>
+  <span style="color:{rColor};font-size:11px;font-weight:600">{Esc(f.RiskLabel)}</span>
+  <span style="color:var(--text);font-size:12px">{Esc(f.Title)}</span>
 </div>
 """);
+            }
+            sb.AppendLine("</div>");
         }
 
-        if (allTimed.Count > PageSize)
-            sb.AppendLine($"""<button class="expand-btn" id="tl-expand-btn" onclick="expandTimeline()">Mostrar todos ({allTimed.Count - PageSize} ocultos)</button>""");
+        if (groups.Count > VisibleGroups)
+            sb.AppendLine($"""<button class="expand-btn" id="tl-expand-btn" onclick="expandTimeline()">Mostrar todos ({groups.Count - VisibleGroups} grupos ocultos, {allTimed.Count - groups.Take(VisibleGroups).Sum(g => g.Count())} eventos)</button>""");
 
         return sb.ToString();
     }
 
-    private static string ModuleCoverageTabHtml(ScanResult result, List<Finding> coverageFindings)
+    private static string CoberturaTabHtml(ScanResult result, List<Finding> coverageFindings)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("""<div class="tab-heading">COBERTURA E INTEGRIDADE<span>status de execução de cada módulo</span></div>""");
-
+        sb.AppendLine("""<div class="tab-heading">COBERTURA E INTEGRIDADE<span>status de execução por módulo</span></div>""");
         sb.AppendLine("""
 <table>
-  <thead>
-    <tr><th>Módulo</th><th>Status</th><th>Motivo / Impacto Forense</th></tr>
-  </thead>
+  <thead><tr><th>Módulo</th><th>Status</th><th>Motivo / Impacto Forense</th></tr></thead>
   <tbody>
 """);
         foreach (var entry in result.ModuleCoverage.OrderBy(e => e.Status).ThenBy(e => e.Name))
         {
             var (statusLabel, statusColor) = entry.Status switch
             {
-                ModuleStatus.Executed => ("EXECUTADO",  "#28a745"),
-                ModuleStatus.Partial  => ("PARCIAL",    "#fd7e14"),
-                ModuleStatus.Skipped  => ("PULADO",     "#6c757d"),
-                ModuleStatus.Failed   => ("FALHOU",     "#dc3545"),
-                _                     => ("AGUARDANDO", "#adb5bd")
+                ModuleStatus.Executed => ("EXECUTADO", "var(--low)"),
+                ModuleStatus.Partial  => ("PARCIAL",   "var(--high)"),
+                ModuleStatus.Skipped  => ("PULADO",    "var(--info)"),
+                ModuleStatus.Failed   => ("FALHOU",    "var(--critical)"),
+                _                     => ("AGUARDANDO","var(--muted)")
             };
             var note = !string.IsNullOrEmpty(entry.Reason)
                 ? entry.Reason
@@ -488,8 +563,8 @@ function expandTimeline() {
             sb.AppendLine($"""
     <tr>
       <td>{Esc(entry.Name)}</td>
-      <td style="color:{statusColor};font-weight:bold">{statusLabel}</td>
-      <td>{Esc(note)}</td>
+      <td style="color:{statusColor};font-weight:700;font-size:11px">{statusLabel}</td>
+      <td style="color:var(--muted)">{Esc(note)}</td>
     </tr>
 """);
         }
@@ -497,7 +572,7 @@ function expandTimeline() {
 
         if (coverageFindings.Count > 0)
         {
-            sb.AppendLine($"""<div style="margin-top:20px;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Avisos de cobertura ({coverageFindings.Count})</div>""");
+            sb.AppendLine($"""<div style="margin-top:18px;font-size:10px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Avisos de cobertura ({coverageFindings.Count})</div>""");
             foreach (var f in coverageFindings.OrderByDescending(f => f.Risk))
                 sb.AppendLine(FindingHtml(f));
         }
@@ -505,7 +580,7 @@ function expandTimeline() {
         return sb.ToString();
     }
 
-    private static string ExecutiveSummaryHtml(ScanResult result)
+    private static string ResumoHtml(ScanResult result)
     {
         var confirmed       = result.Findings.Where(f => f.Category == FindingCategory.Cheat && f.Confidence >= Confidence.High).ToList();
         var strong          = result.Findings.Where(f => f.Risk >= RiskLevel.High && f.Confidence >= Confidence.Medium && f.Category != FindingCategory.Cheat).ToList();
@@ -515,99 +590,101 @@ function expandTimeline() {
 
         var sb = new StringBuilder();
         sb.AppendLine("""<div class="tab-heading">RESUMO EXECUTIVO</div>""");
-        sb.AppendLine("""<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-bottom:20px">""");
+        sb.AppendLine("""<div class="cards-grid">""");
 
         void Card(string label, string color, int count, string hint) => sb.AppendLine($"""
-<div style="background:#1a1a2e;border:1px solid #334155;border-left:4px solid {color};border-radius:8px;padding:12px 16px">
-  <div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px">{label}</div>
-  <div style="font-size:28px;font-weight:800;color:{color};margin:4px 0">{count}</div>
-  <div style="font-size:11px;color:#475569">{hint}</div>
+<div class="card" style="border-left-color:{color}">
+  <div class="card-label">{label}</div>
+  <div class="card-num" style="color:{color}">{count}</div>
+  <div class="card-hint">{hint}</div>
 </div>
 """);
 
-        Card("Cheats confirmados",         "#dc2626", confirmed.Count,       "hash, assinatura ou caminho de cheat verificado");
-        Card("Indícios fortes",            "#ea580c", strong.Count,          "High/Critical com média ou alta confiança");
-        Card("Requer validação manual",    "#ca8a04", needsValidation.Count, "sinal fraco — investigar antes de concluir");
-        Card("Possíveis falsos positivos", "#6b7280", likelyFp.Count,        "nome genérico sem contexto adicional");
+        Card("Cheats confirmados",         "var(--critical)", confirmed.Count,       "hash, assinatura ou caminho verificado");
+        Card("Indícios fortes",            "var(--high)",     strong.Count,          "High/Critical com confiança média ou alta");
+        Card("Requer validação manual",    "var(--medium)",   needsValidation.Count, "sinal fraco — investigar antes de concluir");
+        Card("Possíveis falsos positivos", "var(--info)",     likelyFp.Count,        "nome genérico sem contexto adicional");
         if (correlated.Count > 0)
-            Card("Evidências correlacionadas", "#7c3aed", correlated.Count, "padrões detectados entre módulos");
+            Card("Evidências correlacionadas", "var(--accent)", correlated.Count, "padrões cruzados entre módulos");
 
         sb.AppendLine("</div>");
 
         if (confirmed.Count > 0)
         {
-            sb.AppendLine("""<div style="margin-bottom:6px;font-size:13px;font-weight:700;color:#dc2626">Cheats confirmados:</div>""");
+            sb.AppendLine("""<div style="margin-bottom:4px;font-size:12px;font-weight:700;color:var(--critical)">Cheats confirmados:</div>""");
             foreach (var f in confirmed.Take(5))
-                sb.AppendLine($"""<div style="color:#e2e8f0;font-size:12px;margin:2px 0">• {Esc(f.Title)} <span style="color:#475569">({Esc(f.ConfidenceLabel)})</span></div>""");
+                sb.AppendLine($"""<div style="color:var(--muted);font-size:12px;margin:2px 0">&bull; {Esc(f.Title)} <span style="color:var(--dim)">({Esc(f.ConfidenceLabel)})</span></div>""");
         }
 
         // Category distribution
-        sb.AppendLine("""<div style="margin-top:20px;border-top:1px solid #1e293b;padding-top:16px">""");
-        sb.AppendLine("""<div style="font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Distribuição por Categoria</div>""");
-        sb.AppendLine("""<div style="display:flex;flex-wrap:wrap;gap:8px;">""");
+        sb.AppendLine("""<div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px">""");
+        sb.AppendLine("""<div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Distribuição por categoria</div>""");
+        sb.AppendLine("""<div class="dist-row">""");
         foreach (var cat in result.Findings.GroupBy(f => f.Category).OrderByDescending(g => g.Max(f => (int)f.Risk)))
         {
             var maxColor = cat.Max(f => (int)f.Risk) switch
             {
-                4 => "#dc2626", 3 => "#ea580c", 2 => "#ca8a04", 1 => "#16a34a", _ => "#475569"
+                4 => "var(--critical)", 3 => "var(--high)", 2 => "var(--medium)", 1 => "var(--low)", _ => "var(--info)"
             };
-            sb.AppendLine($"""<div style="background:#1e293b;border:1px solid #334155;border-radius:4px;padding:4px 10px;font-size:12px"><span style="color:{maxColor}">{cat.Count()}×</span> <span style="color:#94a3b8">{Esc(cat.First().CategoryLabel)}</span></div>""");
+            sb.AppendLine($"""<div class="dist-chip"><span style="color:{maxColor};font-weight:700">{cat.Count()}&times;</span> <span style="color:var(--muted)">{Esc(cat.First().CategoryLabel)}</span></div>""");
         }
         sb.AppendLine("</div></div>");
 
         return sb.ToString();
     }
 
-    private static string ArtifactDossierTabHtml(ScanResult result)
+    private static string DossierTabHtml(ScanResult result)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"""<div class="tab-heading" style="color:#a78bfa">DIAGNÓSTICO POR ARTEFATO<span>{result.EvidenceBundles.Count} artefatos com sinais cruzados entre módulos</span></div>""");
+        sb.AppendLine($"""<div class="tab-heading" style="color:var(--accent)">DIAGNÓSTICO POR ARTEFATO<span>{result.EvidenceBundles.Count} artefatos analisados</span></div>""");
 
         foreach (var bundle in result.EvidenceBundles)
         {
-            var (verdictClass, verdictBadgeClass, verdictLabel) = bundle.Confidence switch
+            var (cardClass, chipClass, verdictLabel) = bundle.Confidence switch
             {
-                Confidence.Confirmed => ("confirmed", "verdict-confirmed", "CONFIRMADO"),
-                Confidence.High      => ("strong",    "verdict-strong",    "FORTE INDÍCIO"),
-                Confidence.Medium    => ("indicative","verdict-indicative", "INDÍCIO"),
-                _                    => ("low-conf",  "verdict-low",       "BAIXA CONFIANÇA")
+                Confidence.Confirmed => ("confirmed", "vc-confirmed", "CONFIRMADO"),
+                Confidence.High      => ("strong",    "vc-strong",    "FORTE INDÍCIO"),
+                Confidence.Medium    => ("indicative","vc-indicative", "INDÍCIO"),
+                _                    => ("low-conf",  "vc-low",       "BAIXA CONFIANÇA")
             };
             var riskCss = bundle.Risk.ToString().ToLower();
 
-            sb.AppendLine($"""<div class="artifact-card {verdictClass}">""");
-            sb.AppendLine($"""  <div class="artifact-header">""");
-            sb.AppendLine($"""    <span class="verdict-badge {verdictBadgeClass}">{verdictLabel}</span>""");
+            var searchTerms = Esc($"{bundle.ArtifactName} {bundle.FullPath} {bundle.Summary} {bundle.Sha256}");
+            sb.AppendLine($"""<div class="dossier-card {cardClass}" data-search="{searchTerms}">""");
+            sb.AppendLine($"""  <div class="dossier-hdr">""");
+            sb.AppendLine($"""    <span class="verdict-chip {chipClass}">{verdictLabel}</span>""");
             sb.AppendLine($"""    <span class="badge {riskCss}">{bundle.Risk.ToString().ToUpper()}</span>""");
-            sb.AppendLine($"""    <span class="artifact-name">{Esc(bundle.ArtifactName)}</span>""");
+            sb.AppendLine($"""    <span class="dossier-name">{Esc(bundle.ArtifactName)}</span>""");
             sb.AppendLine($"""  </div>""");
 
             if (!string.IsNullOrEmpty(bundle.FullPath))
-                sb.AppendLine($"""  <div class="artifact-path">📁 {Esc(bundle.FullPath)}</div>""");
+                sb.AppendLine($"""  <div class="dossier-path">{Esc(bundle.FullPath)}</div>""");
 
-            sb.AppendLine($"""  <div class="artifact-meta">""");
-            sb.AppendLine($"""    <span><strong>Origem:</strong> {Esc(bundle.Summary)}</span>""");
+            // Structured fields
+            sb.AppendLine("""  <div class="dossier-fields">""");
+            sb.AppendLine($"""    <div class="dossier-field"><span class="dossier-field-label">Origem</span><span class="dossier-field-val">{Esc(bundle.Summary)}</span></div>""");
             if (!string.IsNullOrEmpty(bundle.Sha256))
-                sb.AppendLine($"""    <span><strong>SHA256:</strong> <code>{Esc(bundle.Sha256)}</code></span>""");
+                sb.AppendLine($"""    <div class="dossier-field"><span class="dossier-field-label">SHA256</span><span class="dossier-field-val" style="font-family:monospace;font-size:10px">{Esc(bundle.Sha256)}</span></div>""");
             var lastTs = bundle.Timeline.LastOrDefault()?.Timestamp;
             if (lastTs.HasValue)
-                sb.AppendLine($"""    <span><strong>Última evidência:</strong> {lastTs:dd/MM/yyyy HH:mm:ss}</span>""");
-            sb.AppendLine($"""  </div>""");
+                sb.AppendLine($"""    <div class="dossier-field"><span class="dossier-field-label">Última evidência</span><span class="dossier-field-val" style="font-family:monospace">{lastTs:dd/MM/yyyy HH:mm:ss}</span></div>""");
+            sb.AppendLine("""  </div>""");
 
             if (bundle.Signals.Count > 0)
             {
-                sb.AppendLine($"""  <div class="signals-grid">""");
+                sb.AppendLine("""  <div class="signals-list">""");
                 foreach (var sig in bundle.Signals)
                 {
-                    var ts = sig.Timestamp.HasValue ? $" — {sig.Timestamp:dd/MM/yyyy HH:mm:ss}" : "";
-                    sb.AppendLine($"""    <div class="signal-item"><span class="signal-mod">[{Esc(sig.SignalType)}] {Esc(sig.SourceModule)}:</span> {Esc(sig.Description)}{Esc(ts)}</div>""");
+                    var ts = sig.Timestamp.HasValue ? $" — {sig.Timestamp:HH:mm:ss}" : "";
+                    sb.AppendLine($"""    <div class="signal-row"><span class="signal-tag">[{Esc(sig.SignalType)}] {Esc(sig.SourceModule)}</span><span style="color:var(--muted)">{Esc(sig.Description)}{Esc(ts)}</span></div>""");
                 }
-                sb.AppendLine($"""  </div>""");
+                sb.AppendLine("""  </div>""");
             }
 
             if (bundle.BypassIndicators.Count > 0)
-                sb.AppendLine($"""  <div class="bypass-alert">⚡ Bypass próximo: {Esc(string.Join(" | ", bundle.BypassIndicators))}</div>""");
+                sb.AppendLine($"""  <div class="dossier-alert">Bypass detectado: {Esc(string.Join(" | ", bundle.BypassIndicators))}</div>""");
             if (bundle.ValidationSteps.Count > 0)
-                sb.AppendLine($"""  <div class="validation-alert">⚠ Validar: {Esc(string.Join(" · ", bundle.ValidationSteps))}</div>""");
+                sb.AppendLine($"""  <div class="dossier-warn">Validar: {Esc(string.Join(" · ", bundle.ValidationSteps))}</div>""");
 
             sb.AppendLine("</div>");
         }
@@ -619,20 +696,21 @@ function expandTimeline() {
     {
         var risk    = f.Risk.ToString().ToLower();
         var hintHtml = f.ValidationHint != null
-            ? $"""<div class="finding-hint">⚠ {Esc(f.ValidationHint)}</div>"""
+            ? $"""<div class="finding-hint">{Esc(f.ValidationHint)}</div>"""
             : "";
+        var searchVal = Esc($"{f.Module} {f.Title} {f.Detail} {f.Evidence} {f.Entity}");
         return $"""
-<div class="finding {risk}" data-risk="{risk}">
-  <div class="finding-header">
+<div class="finding {risk}" data-risk="{risk}" data-search="{searchVal}">
+  <div class="finding-hdr">
     <span class="badge {risk}">{Esc(f.RiskLabel)}</span>
-    <span class="mod-badge">{Esc(f.Module)}</span>
-    <span class="badge info">{Esc(f.CategoryLabel)}</span>
+    <span class="mod-tag">{Esc(f.Module)}</span>
+    <span class="badge cat">{Esc(f.CategoryLabel)}</span>
     <span class="badge conf">{Esc(f.ConfidenceLabel)}</span>
     <span class="finding-title">{Esc(f.Title)}</span>
   </div>
   <div class="finding-detail">{Esc(f.Detail)}</div>
   {(f.Evidence != null ? $"""<div class="finding-evidence">{Esc(f.Evidence)}</div>""" : "")}
-  {(f.Timestamp.HasValue ? $"""<div style="color:#475569;font-size:11px;margin-top:4px">🕐 {f.Timestamp:dd/MM/yyyy HH:mm:ss}</div>""" : "")}
+  {(f.Timestamp.HasValue ? $"""<div class="finding-ts">{f.Timestamp:dd/MM/yyyy HH:mm:ss}</div>""" : "")}
   {hintHtml}
 </div>
 """;
