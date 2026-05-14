@@ -75,7 +75,7 @@ O executável exige login antes de qualquer varredura.
 | **ExternalToolResidue** | Prefetch + paths + registry | 28 ferramentas de análise/tampering: Process Hacker, CheatEngine, x64dbg, Everything, etc. |
 | **RecycleBin** | C:\$RECYCLE.BIN\{SID}\$I* | Caminho original + data de deleção de arquivos suspeitos — evidência pós-deleção |
 | **Timeline** | Prefetch + BAM + LNK + Downloads + Temp | Linha do tempo unificada — sequência de eventos dentro da janela de lookback (padrão: 90 dias) |
-| **SRUM** | SRUDB.dat (ESE) | Uso de rede/CPU por processo (~30-60 dias) — fonte mais confiável que o painel Windows |
+| **SRUM** | SRUDB.dat (ESE) | Uso de rede por processo (~30-60 dias) — fonte mais confiável que o painel Windows |
 
 ### Módulos que exigem Administrador
 
@@ -405,7 +405,7 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout 876ecb4
+git checkout f1347a6   # código do artefato entregue (b8d9a54 é docs-only, não altera o EXE)
 dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 ```
 
