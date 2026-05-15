@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+f1347a6  
-**Build:** f1347a6 (2026-05-14) — fix: --no-open-report supresses menu; ecfb3c7 — feat: --ui minimal/detailed, --open-report, HTML CSS custom properties  
+**Versão:** 1.0.0+38907aa  
+**Build:** 38907aa (2026-05-15) — feat: Sprint 3 — external rules JSON, executive HTML report; 7d457b9 — feat: Sprint 2 — Florence profile, FiveM session timeline, bypass alert banner; c7e65d2 — feat: Sprint 1 — ScanProfile, score noise reduction, Provas Fortes tab, explainable score  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `3CDCB020C9CB21A666C232808859E03C076B1E8A119DD356CA888163B541A736`  
+**SHA256:** *(republicar após fechar EchoNerfados.exe em execução — build bloqueado por processo ativo)*  
 **Tamanho:** ~67 MB (self-contained, sem dependência de .NET no host)  
 **Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
@@ -24,6 +24,7 @@ Ele coleta evidências de múltiplas fontes de artefatos do sistema (registry, e
 - **Terminal interativo obrigatório** — o app detecta `Console.IsInputRedirected` / `IsOutputRedirected` e encerra com exit code 1 e mensagem de erro se não houver console interativo. Nunca crasha.
 - `--help` / `-h` funciona **sem login**, sem console interativo, exit code 0.
 - **Admin é recomendado, não forçado** — `app.manifest` usa `asInvoker`. O EXE não dispara UAC automaticamente. Execute via "Executar como administrador" para habilitar todos os módulos.
+- **Diretório `rules/`** deve estar ao lado do EXE (copiado automaticamente no publish via `PreserveNewest`). Se ausente, o scanner funciona normalmente com regras embutidas — sem crash.
 
 ## 3. Credenciais de Acesso
 
@@ -47,7 +48,9 @@ O executável exige login antes de qualquer varredura.
 
 ---
 
-## 4. Módulos de Varredura (23 módulos base + 2 requerem Admin + 2 opcionais por flag)
+## 4. Módulos de Varredura
+
+**Default/Deep profile: 27 módulos** | **Fast profile: 16 módulos** (ShimCache, ShellBags, JumpLists, SRUM, NvidiaArtifacts, ExternalToolResidue, RecycleBin, Amcache, UserAssist, USN Journal e ProcessMemory são pulados)
 
 ### Módulos sem requisito de admin (funcionam com asInvoker)
 
@@ -59,22 +62,27 @@ O executável exige login antes de qualquer varredura.
 | **Registry Artifacts** | HKLM run keys + MRU | Execuções recentes, autoruns em registry |
 | **Event Viewer** | Security/System/Application logs | Logons (4624), falhas (4625), serviços instalados (7045), Defender alerts, cobertura de log |
 | **Windows Defender** | Event log + MPLog | Detecções, exclusões, deleções de definição, reconfiguração |
-| **Known Cheats** | File system scan | Varredura de nomes conhecidos de cheat nos drives especificados |
+| **Known Cheats** | File system scan | Varredura de nomes conhecidos de cheat nos drives especificados; lista extensível via `rules/cheat_names.json` |
 | **File System** | Paths suspeitos | Arquivos em AppData\Roaming, Temp, Downloads com nomes/extensões suspeitos |
 | **Network Usage** | iphlpapi P/Invoke + netstat | Conexões TCP ativas por processo; cheat com tráfego ativo = Critical |
 | **Services** | SCM + Event 7045 | Serviços instalados com nomes suspeitos ou por publishers não-Microsoft |
-| **ShimCache** | HKLM AppCompatCache | Histórico de carregamento de executáveis pelo kernel — sobrevive a reboots |
 | **LNK Recent** | %APPDATA%\...\Recent + AutomaticDestinations | Atalhos de arquivos recentemente acessados → evidência de abertura de arquivos |
 | **RegistryPersistence** | IFEO, AppInit_DLLs, AppCertDlls, Winlogon, BootExecute, Run keys | Técnicas de persistência e hijack de processo |
 | **SystemResetRestore** | InstallDate, Windows.old, Panther logs, PendingRename | Reinstalação/reset recente do Windows — perda de cobertura forense |
 | **SystemTampering** | LabConfig/MoSetup keys, getadmin.vbs, scripts bat/ps1 | Bypass de requisitos Windows 11, BatchGotAdmin, scripts de elevação UAC |
-| **BrowserDownloads** | Chrome/Edge/Brave/Opera/Firefox History SQLite | Downloads de executáveis suspeitos + URLs de C2 conhecidos |
+| **BrowserDownloads** | Chrome/Edge/Brave/Opera/Firefox History SQLite | Downloads de executáveis suspeitos + URLs de C2 conhecidos; domínios extensíveis via `rules/suspicious_domains.json` |
+| **Timeline** | Prefetch + BAM + LNK + Downloads + Temp | Linha do tempo unificada — sequência de eventos dentro da janela de lookback (padrão: 90 dias) |
+
+### Módulos pulados no perfil Fast (16 módulos essenciais)
+
+| Módulo | Artefato | O que detecta |
+|--------|----------|---------------|
+| **ShimCache** | HKLM AppCompatCache | Histórico de carregamento de executáveis pelo kernel — sobrevive a reboots |
 | **ShellBags** | HKCU BagMRU | Navegação em pastas suspeitas — persiste após deleção dos arquivos |
 | **JumpLists** | AutomaticDestinations + CustomDestinations | Histórico de arquivos abertos por aplicação — executáveis e caminhos suspeitos |
 | **NvidiaArtifacts** | nvAppTimestamps + nvdrsdb | Timestamps de uso de GPU — confirma sessão FiveM com dados de hardware |
 | **ExternalToolResidue** | Prefetch + paths + registry | 28 ferramentas de análise/tampering: Process Hacker, CheatEngine, x64dbg, Everything, etc. |
 | **RecycleBin** | C:\$RECYCLE.BIN\{SID}\$I* | Caminho original + data de deleção de arquivos suspeitos — evidência pós-deleção |
-| **Timeline** | Prefetch + BAM + LNK + Downloads + Temp | Linha do tempo unificada — sequência de eventos dentro da janela de lookback (padrão: 90 dias) |
 | **SRUM** | SRUDB.dat (ESE) | Uso de rede por processo (~30-60 dias) — fonte mais confiável que o painel Windows |
 
 ### Módulos que exigem Administrador
@@ -88,8 +96,8 @@ O executável exige login antes de qualquer varredura.
 
 | Módulo | Trigger | O que detecta |
 |--------|---------|---------------|
-| **USN Journal** | `RunUsnJournal=true` + admin | Operações de arquivo de baixo nível (criação, deleção, renomeação) |
-| **Process Memory** | `DeepMemoryScan=true` + admin | Strings suspeitas em memória de processos em execução |
+| **USN Journal** | `RunUsnJournal=true` + admin (ou `--profile deep`) | Operações de arquivo de baixo nível (criação, deleção, renomeação) |
+| **Process Memory** | `DeepMemoryScan=true` + admin (ou `--profile deep`) | Strings suspeitas em memória de processos em execução |
 
 ---
 
@@ -103,6 +111,16 @@ Após todos os módulos, o **Correlator** analisa padrões cruzados:
 - **Múltiplos sinais em janela de 1h**: Agrupados em evento de instalação/uso
 
 Saídas do correlator aparecem com prefixo `CORR_` nas `RuleId`.
+
+**Score Noise Reduction (pós-correlação):**  
+Findings `Risk ≤ Medium` e `Confidence ≤ Low` sem correlação (`RuleId` sem prefixo `CORR_`) têm `ScoreEligible = false` — não contribuem para o score numérico, mas permanecem visíveis no relatório. O threshold é configurável via `rules/score_weights.json` (`noiseMinRisk`, `noiseMaxConfidence`).
+
+**External Rules (pós-correlação):**  
+- Hash match (`rules/cheat_hashes.json`) → eleva para Critical, `ScoreEligible = true`
+- Nome match (`rules/cheat_names.json`) → garante mínimo High, `ScoreEligible = true`
+
+**Perfil Florence (pós-correlação):**  
+Findings High/Critical com apenas um módulo referenciando a mesma entidade são rebaixados para Medium + `ValidationHint` orientando correlação adicional. Requer ≥2 módulos para manter High/Critical.
 
 ---
 
@@ -134,7 +152,8 @@ Todo scan gera uma pasta timestamped na área de trabalho:
 ```
 Desktop\
 └── Echo_Nerfados_HOSTNAME_20260509_180900\
-    ├── report.html              ← Relatório visual completo
+    ├── report.html              ← Relatório visual completo (abas diagnósticas)
+    ├── report_executive.html    ← Relatório executivo compacto (1 página, imprimível)
     ├── report.txt               ← Relatório texto (compartilhável)
     ├── evidence.json                  ← Todos os findings + dossiers em JSON
     ├── bamdam_90d.json                ← BAM/DAM — timestamps de execução (core)
@@ -149,10 +168,12 @@ Desktop\
     ├── shimcache_90d.json             ← Findings do ShimCache
     ├── lnk_90d.json                   ← Findings de LNK Recent
     ├── registrypersistence_90d.json   ← Findings de RegistryPersistence
-    ├── ... (27 JSONs por módulo no total)
+    ├── ... (27 JSONs por módulo no total — Default/Deep; 16 no Fast profile)
     ├── manifest.json                  ← Metadados completos + SHA256 de todos os arquivos
     └── manifest.sha256                ← Hash do manifest.json (verificável com sha256sum)
 ```
+
+**Nota (Fast profile):** 11 módulos são pulados; os JSONs correspondentes não são gerados. Apenas os 16 módulos executados produzem `*_90d.json`.
 
 **Cobertura de log por arquivo `*_90d.json`:**
 
@@ -197,9 +218,10 @@ O `manifest.json` contém:
   "totalScore": 185,
   "overallRisk": "CRÍTICO",
   "files": {
-    "report.html":    { "sha256": "...", "size": 123456 },
-    "report.txt":     { "sha256": "...", "size": 45678 },
-    "evidence.json":  { "sha256": "...", "size": 234567 },
+    "report.html":            { "sha256": "...", "size": 123456 },
+    "report_executive.html":  { "sha256": "...", "size": 45678 },
+    "report.txt":             { "sha256": "...", "size": 34567 },
+    "evidence.json":          { "sha256": "...", "size": 234567 },
     ...
   },
   "scannerExecutable": {
@@ -227,11 +249,11 @@ if ($ref -eq $actual) { "OK" } else { "FALHOU" }
 ## 9. Como Executar
 
 ### Execução padrão
-1. Copiar `EchoNerfados.exe` para a máquina alvo
+1. Copiar `EchoNerfados.exe` **e o diretório `rules/`** para a máquina alvo
 2. Para acesso completo (todos os módulos): clicar com botão direito → "Executar como administrador"
 3. Sem elevação: módulos ShimCache, LNK Recent, RegistryPersistence, BAM/DAM, Prefetch etc. funcionam; Amcache e UserAssist são pulados (exigem acesso a hives offline)
 4. Fazer login: `nerfados` / `admin`
-5. Aguardar conclusão (2–10 min dependendo do hardware)
+5. Aguardar conclusão (2–10 min dependendo do hardware; ~30s no perfil Fast)
 6. Pasta de resultados criada na área de trabalho
 
 ### Flags de linha de comando
@@ -243,6 +265,11 @@ EchoNerfados.exe [opções]
   --drive <letra>         Drive a ser analisado (padrão: C:)
   --output <caminho>      Pasta de saída do relatório
   --lookback <dias>       Janela de análise em dias (padrão: 90)
+  --profile default       Todos os módulos (padrão)
+  --profile fast          16 módulos essenciais — scan rápido (~30s)
+  --profile deep          Todos os módulos + USN + Memory (ignora --no-usn/--no-memory)
+  --profile fivem         Foco FiveM — todos os módulos + timeline por sessão
+  --profile florence      Todos os módulos + downgrade single-source High/Critical
   --ui minimal            Console limpo: score + top 5 + caminhos (padrão)
   --ui detailed           Console detalhado: tabelas + dossiês + cobertura
   --open-report           Abrir HTML automaticamente ao finalizar
@@ -267,6 +294,7 @@ EchoNerfados.exe [opções]
 ### 10.2 --help
 - [ ] `EchoNerfados.exe --help` → exibe ajuda sem pedir login, exit code 0
 - [ ] `EchoNerfados.exe -h` → idem
+- [ ] Ajuda lista `--profile`, `--ui`, `--open-report`, `--no-open-report`
 
 ### 10.3 Login
 - [ ] Login correto → scan inicia
@@ -280,18 +308,20 @@ EchoNerfados.exe [opções]
 - [ ] Aviso "Executando sem privilégios" exibido
 
 ### 10.5 Execução Com Admin ("Executar como administrador")
-- [ ] Todos os 15+ módulos executam
+- [ ] Todos os módulos do perfil executam
 - [ ] Amcache.hve carregado sem erro
 - [ ] NTUSER.DAT de todos os perfis lidos
 
 ### 10.6 Saída de Arquivos
 - [ ] Pasta timestamped criada na área de trabalho
 - [ ] `report.html` abre no browser corretamente
+- [ ] `report_executive.html` presente — abre no browser, exibe score, top-5 provas, timeline, bypass e cobertura
 - [ ] `report.txt` legível em qualquer editor
 - [ ] `evidence.json` JSON válido
-- [ ] Todos os 27 `*_90d.json` presentes + `evidence.json`, mesmo que vazios
-- [ ] `manifest.json` presente e campos preenchidos
+- [ ] `*_90d.json` presentes para os módulos executados (27 no Default/Deep; 16 no Fast) + `evidence.json`
+- [ ] `manifest.json` presente e campos preenchidos (inclui `report_executive.html` na seção `files`)
 - [ ] `manifest.sha256` verificável com sha256sum
+- [ ] Diretório `rules/` presente ao lado do EXE com 5 arquivos JSON
 
 ### 10.7 Cobertura de Log
 - [ ] Em máquina com logs < 90 dias: `coverageOk: false` nos JSONs relevantes
@@ -314,6 +344,29 @@ EchoNerfados.exe [opções]
 - [ ] **LNK Recent**: Detecta .lnk com alvo Unicode (caminhos com caracteres não-ASCII)
 - [ ] **RegistryPersistence**: AppInit_DLLs com LoadAppInit_DLLs=0 → Medium/Low (não High); AppInit_DLLs com LoadAppInit_DLLs=1 → High
 
+### 10.11 Perfis de Varredura
+- [ ] `--profile fast` executa exatamente 16 módulos; SRUM, ShimCache, ShellBags, JumpLists, NvidiaArtifacts, ExternalToolResidue, RecycleBin, Amcache, UserAssist, USN Journal, ProcessMemory aparecem como PULADO na tabela de cobertura
+- [ ] `--profile deep` força USN Journal e ProcessMemory mesmo sem `--no-usn`/`--no-memory`
+- [ ] `--profile fivem` produz timeline agrupada por sessão FiveM (janela -30min/+2h ao redor de evento âncora)
+- [ ] `--profile florence` rebaixa High/Critical single-source para Medium; Finding inclui `ValidationHint` com orientação de correlação
+- [ ] `--profile default` (sem flag) executa todos os 27 módulos sem USN/Memory por padrão
+
+### 10.12 Score e Ruído
+- [ ] Score (0-100) não inflaciona por findings Medium+LowConfidence sem correlação (`ScoreEligible = false`)
+- [ ] Resumo HTML exibe seção "Por que X/100?" com breakdown por categoria e count de findings filtrados
+- [ ] Aba "Provas Fortes" no HTML lista findings Confirmed ou High+HighConf ou CORR_
+- [ ] `FilteredCount` no score card indica quantos findings foram excluídos do cálculo
+
+### 10.13 Regras Externas
+- [ ] Adicionar hash em `rules/cheat_hashes.json` → finding elevado para Critical no próximo scan sem recompilar
+- [ ] Adicionar nome em `rules/cheat_names.json` → finding elevado para High no próximo scan
+- [ ] Remover `rules/` → scanner funciona normalmente com comportamento padrão (sem crash, sem aviso fatal)
+
+### 10.14 Relatório Executivo
+- [ ] `report_executive.html` abre sem JS; imprimível via Ctrl+P (CSS `@media print`)
+- [ ] Exibe: score numérico, label de risco, top-5 provas fortes, timeline de eventos High+, tentativas de ocultação, contadores de cobertura
+- [ ] Hash do manifesto exibido no rodapé do executivo quando `manifest.sha256` existe
+
 ---
 
 ## 11. Limitações Conhecidas
@@ -331,6 +384,10 @@ EchoNerfados.exe [opções]
 | **ProcessMemoryModule** | Pode causar lentidão em máquinas com muitos processos | Desativar com `--no-memory` se necessário |
 | **UserAssist PARCIAL para perfis de sistema** | NTUSER.DAT de "Usuário Padrão", "WsiAccount" e perfis similares é inacessível mesmo com admin | Comportamento esperado — perfis de sistema não têm NTUSER.DAT padrão. O finding PARCIAL é correto; confirmar que o perfil do usuário real foi lido. |
 | **BAM/DAM PARCIAL sem admin** | ACL restrita em HKLM\SYSTEM\...\BAM em algumas configurações | SecurityException capturada → PARCIAL com motivo. Para cobertura completa, usar com admin. |
+| **Fast profile reduz cobertura forense** | 11 módulos pulados — ShimCache, ShellBags, SRUM, etc. não geram artefatos | Usar Default ou Deep para investigação completa; Fast apenas para triagem rápida |
+| **Florence pode mascarar provas reais** | Single-source High/Critical rebaixado para Medium pode ser legítimo em máquinas com poucos artefatos | Confirmar com perfil Default antes de usar Florence como definitivo |
+| **rules/ ausente no publish** | Se o diretório `rules/` não for copiado junto ao EXE, as regras externas não são carregadas | Scanner funciona sem crash — usa defaults embutidos. Garantir que `rules/` acompanha o artefato. |
+| **report_executive.html sem JS** | Sem busca, filtro ou zoom interativo | Impresso via Ctrl+P supre o caso de uso principal |
 
 ---
 
@@ -341,7 +398,7 @@ O smoke test requer execução manual com console interativo real. Executar nas 
 ### CONDIÇÃO A — Sem elevação (duplo clique / terminal normal)
 
 ```
-1. Copiar EchoNerfados.exe para a máquina alvo
+1. Copiar EchoNerfados.exe e o diretório rules/ para a máquina alvo
 2. Abrir terminal normal (sem "Executar como administrador")
 3. Executar: .\EchoNerfados.exe
 4. Login: nerfados / admin
@@ -356,12 +413,14 @@ O smoke test requer execução manual com console interativo real. Executar nas 
 - [ ] EventViewer e Defender podem aparecer como PARCIAL (Security log pode ser inacessível sem admin); qualquer limitação aparece como PARCIAL — não FALHOU — na tabela de cobertura
 - [ ] Tabela "COBERTURA DA VARREDURA" no console mostra Amcache = PULADO, UserAssist = PULADO (com motivo)
 - [ ] Pasta timestamped criada na área de trabalho
-- [ ] `report.html` abre no browser — seção "COBERTURA DA VARREDURA" visível
+- [ ] `report.html` abre no browser — seção "COBERTURA DA VARREDURA" visível; aba "Provas Fortes" presente
+- [ ] `report_executive.html` presente na pasta — abre no browser; exibe score, top-5, timeline
 - [ ] `report.txt` — seção "COBERTURA DA VARREDURA" visível com status PULADO para Amcache/UserAssist
 - [ ] `evidence.json` — JSON válido, parseable
-- [ ] Todos os 27 `*_90d.json` presentes + `evidence.json` (28 arquivos no total)
-- [ ] `manifest.json` — campo `"isElevated": false`
+- [ ] `*_90d.json` presentes para os módulos executados + `evidence.json`
+- [ ] `manifest.json` — campo `"isElevated": false`; `report_executive.html` listado na seção `files`
 - [ ] `manifest.sha256` verifica: `sha256sum -c manifest.sha256` → OK
+- [ ] Diretório `rules/` presente ao lado do EXE com `cheat_names.json`, `cheat_hashes.json`, `suspicious_domains.json`, `known_legit_publishers.json`, `score_weights.json`
 
 **Se algum módulo tiver erro parcial:**
 - [ ] Status aparece como PARCIAL (não FALHOU nem EXECUTADO) na tabela
@@ -397,6 +456,10 @@ $actual = (Get-FileHash manifest.json -Algorithm SHA256).Hash.ToLower()
 if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 ```
 
+**Verificar `report_executive.html` imprimível:**
+- [ ] Abrir `report_executive.html` no browser → Ctrl+P → "Salvar como PDF" → verificar que score, top-5 e timeline aparecem na impressão
+- [ ] Seção de hash do manifesto exibida no rodapé do executivo
+
 ---
 
 ## 13. Build Reproducível
@@ -405,33 +468,39 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout f1347a6   # código do artefato entregue (b8d9a54 é docs-only, não altera o EXE)
-dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
+git checkout 38907aa   # código do artefato entregue (b715f6d, b8d9a54 são docs-only, não alteram o EXE)
+dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish/win-x64
 ```
 
-**SHA256 do artefato entregue para QA (build f1347a6 — 2026-05-14):**
-```
-3CDCB020C9CB21A666C232808859E03C076B1E8A119DD356CA888163B541A736
-```
+**Nota:** Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` no `.csproj` (fora do escopo desta release).
 
-**Nota:** Este hash identifica o artefato `EchoNerfados.exe` gerado nesta sessão. Uma nova compilação a partir do mesmo commit **não produz o mesmo hash**: metadados de timestamp e GUID do PE variam por compilação. Para build realmente reproduzível é necessário configurar `<Deterministic>true</Deterministic>` no `.csproj` (fora do escopo desta release).
+**Nota publicação:** Antes de republicar, verificar que nenhuma instância de `EchoNerfados.exe` está em execução — o bundler não consegue sobrescrever o executável em uso. Encerrar o processo antes de rodar `dotnet publish`.
 
 ---
 
 ## 14. Sumário para QA
 
-**O que está pronto e testável (build f1347a6 — apto para smoke test interativo):**
+**O que está pronto e testável (build 38907aa — apto para smoke test interativo):**
 - `--help` funciona sem login e sem console interativo (exit 0, seguro para pipe)
 - Execução sem console retorna exit 1 com mensagem clara, nunca crasha
 - `app.manifest asInvoker` — sem UAC forçado; admin por escolha do operador
 - Login gate funcional com bloqueio após 3 tentativas (exit code 2)
-- **22 módulos** cobrindo todos os principais artefatos forenses Windows
-- Correlação cruzada entre módulos + artifact dossiers com bypass ±1h por sinal + correlação FiveM session (-30min/+2h)
-- Exportação: HTML, TXT, **28 JSONs dedicados** (27 módulos + evidence.json)
+- **27 módulos** cobrindo todos os principais artefatos forenses Windows (Default/Deep profile)
+- **Fast profile** (16 módulos essenciais) para triagem em ~30s
+- **FiveM profile** — timeline agrupada por sessão detectada via eventos âncora (fivem/gta5/citizenfx), janela -30min/+2h, clustering de 3h
+- **Florence profile** — downgrade de single-source High/Critical para Medium; ValidationHint orienta correlação adicional
+- **Score noise reduction** — `ScoreEligible = false` para Medium+LowConf sem correlação; score 0-100 reflete apenas sinais confiantes
+- **Score breakdown explicável** — aba Resumo HTML exibe "Por que X/100?" com 5 categorias e count de filtrados
+- **Aba "Provas Fortes"** — agrupa Confirmed/HighConf/CORR_ com cross-ref de dossiês bypass
+- **Regras externas JSON** — 5 arquivos em `rules/`: cheat_names, cheat_hashes, suspicious_domains, known_legit_publishers, score_weights; extensíveis sem recompilar
+- **`report_executive.html`** — relatório compacto 1-página, imprimível via Ctrl+P (sem JS, sem deps externas); inclui score, top-5 provas, timeline, bypass, cobertura e hash do manifesto
+- **Bypass alert banner** no HTML com detecção de IDs 1102, 104, 3079, 5007, 1116, 1117, 7045
+- Correlação cruzada entre módulos + artifact dossiers com bypass ±1h por sinal + correlação FiveM session
+- Exportação: HTML, HTML executivo, TXT, **28 JSONs dedicados** (27 módulos + evidence.json — Default profile)
 - Manifesto criptograficamente verificável (`manifest.sha256`)
 - Tabela "COBERTURA DA VARREDURA" no terminal, TXT e HTML com status Executed/Partial/Skipped/Failed
 - Todos os catches críticos logam `LogPartialError` com contexto específico; inaccessible contados, não silenciados
-- Executável self-contained (~34 MB), sem .NET no host
+- Executável self-contained (~67 MB), sem .NET no host
 - AppInit_DLLs distingue ativo vs. inativo via `LoadAppInit_DLLs`
 - LNK parser suporta `LocalBasePathUnicode` (caminhos Unicode)
 - Amcache/ShimCache com linguagem forense calibrada ("presença/indício", não "execução confirmada")
@@ -445,25 +514,22 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 - **BatchGotAdmin**: `SCRIPT_BATCHGOTADMIN_PRESENT`; linguagem calibrada ("autoelevação via UAC")
 - **ShellBags**: Medium sem timestamp (High requer correlação); inaccessible logados
 - **RecycleBin**: usa `config.EventWindowLookback` (não hardcoded)
-- **Timeline** — linha do tempo unificada Prefetch/BAM/LNK/Downloads/Temp
-- **NvidiaArtifacts** — timestamps GPU de sessão FiveM via nvAppTimestamps
 - **`--ui minimal`** (padrão): score + contagem por severidade + top 5 High/Critical — saída limpa para operadores
 - **`--ui detailed`**: tabelas completas + top 10 findings + top 10 dossiês + cobertura + bypass no terminal — para analistas
 - **`--open-report`**: abre o HTML no browser padrão automaticamente ao terminar, sem menu
 - **`--no-open-report`**: suprime menu pós-scan inteiramente — apenas exibe o caminho do relatório (modo automação)
 - **HTML CSS custom properties**: `--bg`, `--panel`, `--critical`, `--high`, `--medium`, `--low`, `--accent`, etc. — tema consistente sem valores hexadecimais duplicados
-- **Relatório HTML com abas diagnósticas**: Resumo, Cheats, Diagnóstico, Execuções, Downloads, Deleções/USN, Pastas, Memória, Bypass, Outros, Timeline, Cobertura — filtro por severidade por aba, agrupamento por módulo
+- **Relatório HTML com abas diagnósticas**: Resumo, Cheats, Provas Fortes, Diagnóstico, Execuções, Downloads, Deleções/USN, Pastas, Memória, Bypass, Outros, Timeline, Cobertura — filtro por severidade por aba, agrupamento por módulo
 - **`--lookback <dias>`**: flag implementada — substitui padrão de 90 dias por valor customizado
 - **Nomes genéricos neutros**: `launcher.exe` e `spotify.exe` deixam de rotular diretamente "GOSTH" — usam "Loader FiveM Suspeito (padrão GOSTH)"
 - **EventViewer**: todos os findings usam `"Event Viewer"` (com espaço) — eventviewer_90d.json preenchido corretamente
 - **Defender**: todos os findings usam `Name` = `"Windows Defender"` — defender_90d.json preenchido corretamente
 - **filesystem_90d.json** + **network_90d.json** adicionados ao EvidenceExporter
-- **bamdam_90d.json**, **prefetch_90d.json**, **knowncheats_90d.json**, **registryartifacts_90d.json**, **usnjournal_90d.json**, **processmemory_90d.json** adicionados (26 JSONs no total)
 - **4688**: query XPath inclui janela temporal `EventWindowLookback` — sem scan ilimitado
 - **QueryDb**: falhas de sqlite3_open/prepare logadas via LogPartialError
 - **IgnoreInaccessible**: KnownCheats e FileSystem usam EnumerationOptions ao invés de GetFiles+SearchOption
 
-**Prioridade de teste:** Focar nos cenários 10.1, 10.2, 10.3, 10.4 — são os mais críticos para validar o produto. Os outros podem ser smoke test.
+**Prioridade de teste:** Focar nos cenários 10.1, 10.2, 10.3, 10.4, 10.11, 10.12 — são os mais críticos para validar o produto. Os outros podem ser smoke test.
 
 ---
 
@@ -471,7 +537,7 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 
 - [x] PC com NVIDIA limpo **não** gera Medium/High por nvAppTimestamps
 - [x] `bypassstoragecheck` (correto) dispara no scan de scripts de LabConfig
-- [x] Todos os 27 módulos aparecem em evidence.json + arquivos `*_90d.json` dedicados
+- [x] Todos os 27 módulos aparecem em evidence.json + arquivos `*_90d.json` dedicados (Default profile)
 - [x] Browser aberto durante o scan **não** quebra coleta (CopyLockedFile)
 - [x] Nenhum ruleId com `GOSTH` fora de: `CHEAT_HASH_GOSTH_WHATSAPP`, `CHEAT_PATH_GOSTH_DXSETUP`, `GOSTH_PATTERN_SYSTEM32`
 - [x] `SCRIPT_BATCHGOTADMIN_PRESENT` substitui `_EXECUTED` no ruleId
@@ -481,14 +547,27 @@ dotnet publish src/Scanner/Scanner.csproj -p:PublishProfile=win-x64
 - [x] `filesystem_90d.json` e `network_90d.json` exportados em todo scan
 - [x] `bamdam_90d.json` e `prefetch_90d.json` exportados (core forense — sempre presentes)
 - [x] `knowncheats_90d.json` e `registryartifacts_90d.json` exportados em todo scan
-- [x] README reflete EchoNerfados.exe, publish\win-x64\, 22 módulos, multi-família
 - [x] `--ui minimal` exibe score + contagem por severidade + top 5 (padrão — sem arg)
 - [x] `--ui detailed` exibe tabelas completas, dossiês e cobertura no terminal
 - [x] `--open-report` abre HTML no browser padrão sem exibir menu interativo
 - [x] `--no-open-report` não exibe menu nem abre browser; apenas imprime caminho do relatório
-- [x] `EchoNerfados.exe --help` lista `--ui`, `--open-report`, `--no-open-report` (ProductVersion: 1.0.0+f1347a6)
+- [x] `EchoNerfados.exe --help` lista `--profile`, `--ui`, `--open-report`, `--no-open-report`
 - [x] HTML report renderiza com CSS custom properties (sem fallback de cor hardcoded)
+- [ ] `--profile fast` executa 16 módulos; 11 aparecem como PULADO na cobertura
+- [ ] `--profile deep` força USN Journal + ProcessMemory
+- [ ] `--profile fivem` agrupa timeline por sessão FiveM detectada
+- [ ] `--profile florence` rebaixa single-source High/Critical para Medium com ValidationHint
+- [ ] Score (0-100) não inflaciona por Medium+LowConf sem correlação; `FilteredCount` > 0 em scan típico
+- [ ] Aba "Provas Fortes" presente no HTML e lista findings Confirmed/HighConf/CORR_
+- [ ] Seção "Por que X/100?" no Resumo HTML descreve breakdown por categoria
+- [ ] `report_executive.html` gerado em todo scan; listado em `manifest.json` seção `files`
+- [ ] `report_executive.html` imprimível via Ctrl+P sem JS
+- [ ] Bypass alert banner aparece no HTML quando eventos 1102/104/3079/5007/1116/1117/7045 detectados
+- [ ] `rules/cheat_names.json` carregado — nomes do arquivo elevam findings para mínimo High
+- [ ] `rules/cheat_hashes.json` carregado — hash match eleva finding para Critical
+- [ ] Scanner não crasha quando `rules/` ausente (graceful fallback)
+- [ ] `rules/score_weights.json` controla threshold de noise reduction (noiseMinRisk / noiseMaxConfidence)
 
 ---
 
-*Relatório gerado em: 2026-05-14 | Build: f1347a6 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-15 | Build: 38907aa | Echo Nerfados Shield XDR v1.0.0*
