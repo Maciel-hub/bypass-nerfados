@@ -34,7 +34,7 @@ public enum FindingCategory
 
 public class Finding
 {
-    public RiskLevel Risk { get; init; }
+    public RiskLevel Risk { get; set; }
     public FindingCategory Category { get; init; }
     public string Module { get; init; }
     public string Title { get; init; }
@@ -44,7 +44,7 @@ public class Finding
     public Confidence Confidence { get; init; }
     public string? RuleId { get; init; }
     public string? Entity { get; init; }
-    public string? ValidationHint { get; init; }
+    public string? ValidationHint { get; set; }
     public bool ScoreEligible { get; set; } = true;
 
     public Finding(

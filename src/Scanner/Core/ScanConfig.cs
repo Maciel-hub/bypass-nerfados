@@ -4,7 +4,7 @@ namespace BypassNerfados.Scanner.Core;
 
 public enum ConsoleUiMode { Minimal, Detailed }
 
-public enum ScanProfile { Default, Fast, Deep, FiveM }
+public enum ScanProfile { Default, Fast, Deep, FiveM, Florence }
 
 public class ScanConfig
 {

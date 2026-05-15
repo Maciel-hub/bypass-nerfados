@@ -48,10 +48,11 @@ for (int i = 0; i < args.Length; i++)
         case "--profile" when i + 1 < args.Length:
             config.Profile = args[++i].ToLowerInvariant() switch
             {
-                "fast"  => ScanProfile.Fast,
-                "deep"  => ScanProfile.Deep,
-                "fivem" => ScanProfile.FiveM,
-                _       => ScanProfile.Default
+                "fast"    => ScanProfile.Fast,
+                "deep"    => ScanProfile.Deep,
+                "fivem"   => ScanProfile.FiveM,
+                "florence" => ScanProfile.Florence,
+                _          => ScanProfile.Default
             };
             break;
         case "--no-final-prompt": noFinalPrompt = true; break;
@@ -284,7 +285,8 @@ static void PrintHelp()
     Console.WriteLine("  --profile default       Todos os modulos (padrao)");
     Console.WriteLine("  --profile fast          16 modulos essenciais — scan rapido (~30s)");
     Console.WriteLine("  --profile deep          Todos os modulos + USN + Memory (ignora --no-usn/--no-memory)");
-    Console.WriteLine("  --profile fivem         Foco FiveM — equivalente a deep (timeline por sessao: futuro)");
+    Console.WriteLine("  --profile fivem         Foco FiveM — todos os modulos + timeline por sessao");
+    Console.WriteLine("  --profile florence      Todos os modulos + downgrade single-source High/Critical");
     Console.WriteLine("  --ui minimal            Console limpo: score + top 5 + caminhos (padrao)");
     Console.WriteLine("  --ui detailed           Console detalhado: tabelas + dossies + cobertura");
     Console.WriteLine("  --open-report           Abrir HTML automaticamente ao finalizar");

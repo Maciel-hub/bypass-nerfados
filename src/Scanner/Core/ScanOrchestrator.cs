@@ -19,10 +19,11 @@ public class ScanOrchestrator
             IsAdministrator = IsAdmin(),
             ScanMode = config.Profile switch
             {
-                ScanProfile.Fast  => "Rápido",
-                ScanProfile.Deep  => "Profundo",
-                ScanProfile.FiveM => "FiveM",
-                _                 => "Completo"
+                ScanProfile.Fast    => "Rápido",
+                ScanProfile.Deep    => "Profundo",
+                ScanProfile.FiveM   => "FiveM",
+                ScanProfile.Florence => "Florence",
+                _                   => "Completo"
             }
         };
     }
@@ -136,6 +137,10 @@ public class ScanOrchestrator
             }
         }
 
+        // Florence: downgrade single-source High/Critical to Medium (requires ≥2 modules per entity)
+        if (_config.Profile == ScanProfile.Florence)
+            ApplyFlorenceElevation(_result);
+
         Report(new ScanProgressUpdate(
             ScanProgressKind.CorrelationCompleted,
             "Correlação concluída."));
@@ -210,7 +215,9 @@ public class ScanOrchestrator
     {
         var list = new List<BaseModule>();
         var isFast = _config.Profile == ScanProfile.Fast;
-        var isDeep = _config.Profile == ScanProfile.Deep || _config.Profile == ScanProfile.FiveM;
+        var isDeep = _config.Profile == ScanProfile.Deep
+                  || _config.Profile == ScanProfile.FiveM
+                  || _config.Profile == ScanProfile.Florence;
 
         void Queue(BaseModule module, string forensicImpact = "")
         {
@@ -323,6 +330,37 @@ public class ScanOrchestrator
         }
 
         return list;
+    }
+
+    private static void ApplyFlorenceElevation(ScanResult result)
+    {
+        // Build entity → contributing-modules map, excluding already-strong evidence
+        var entityModules = new Dictionary<string, HashSet<string>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var f in result.Findings)
+        {
+            if (f.Confidence == Confidence.Confirmed) continue;
+            if (f.RuleId?.StartsWith("CORR_") == true) continue;
+            var key = (f.Entity ?? f.Title).ToLowerInvariant().Trim();
+            if (!entityModules.TryGetValue(key, out var mods))
+                entityModules[key] = mods = [];
+            mods.Add(f.Module);
+        }
+
+        // Downgrade High/Critical with only one source module
+        foreach (var f in result.Findings)
+        {
+            if (f.Risk < RiskLevel.High) continue;
+            if (f.Confidence == Confidence.Confirmed) continue;
+            if (f.RuleId?.StartsWith("CORR_") == true) continue;
+            var key = (f.Entity ?? f.Title).ToLowerInvariant().Trim();
+            if (entityModules.TryGetValue(key, out var mods) && mods.Count < 2)
+            {
+                f.Risk = RiskLevel.Medium;
+                f.ValidationHint = (f.ValidationHint != null ? f.ValidationHint + " | " : "")
+                    + "Florence: fonte única — corroborar com segundo módulo antes de concluir";
+                f.ScoreEligible = false;
+            }
+        }
     }
 
     private static bool IsAdmin()

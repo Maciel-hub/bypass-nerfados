@@ -430,9 +430,9 @@ document.addEventListener('DOMContentLoaded', function() {
                 case "delecoes":    sb.AppendLine(FindingsTabHtml("DELEÇÕES / USN JOURNAL",        TabFindings("delecoes"),  "delecoes",  "var(--medium)",   "USN Journal · Recycle Bin — rastros de arquivos deletados")); break;
                 case "pastas":      sb.AppendLine(FindingsTabHtml("PASTAS ACESSADAS",              TabFindings("pastas"),    "pastas",    "var(--muted)",    "ShellBags · Jump Lists · LNK Recent")); break;
                 case "memoria":     sb.AppendLine(FindingsTabHtml("MEMÓRIA / PROCESSOS",           TabFindings("memoria"),   "memoria",   "var(--high)",     "Process Memory — DLLs injetadas, módulos suspeitos")); break;
-                case "bypass":      sb.AppendLine(FindingsTabHtml("BYPASS / ANTI-FORENSE",         TabFindings("bypass"),    "bypass",    "var(--critical)", "Anti-Forensics · System Tampering · Service Tampering")); break;
+                case "bypass":        sb.AppendLine(BypassTabHtml(TabFindings("bypass"))); break;
                 case "outros":      sb.AppendLine(FindingsTabHtml("OUTROS INDICADORES",            TabFindings("outros"),    "outros",    "var(--muted)",    "System Info · Event Viewer · Defender · Rede · SRUM · File System")); break;
-                case "timeline":    sb.AppendLine(TimelineTabHtml(allTimed)); break;
+                case "timeline":    sb.AppendLine(TimelineTabHtml(allTimed, config)); break;
                 case "cobertura":   sb.AppendLine(CoberturaTabHtml(result, TabFindings("cobertura"))); break;
             }
 
@@ -499,53 +499,197 @@ document.addEventListener('DOMContentLoaded', function() {
         return sb.ToString();
     }
 
-    private static string TimelineTabHtml(List<Finding> allTimed)
+    private static readonly string[] s_fivemKeywords = ["fivem", "gta5", "fivem_gt", "citizenfx", "gtaprocess", "b2372"];
+
+    private static bool IsFiveMRef(Finding f) =>
+        s_fivemKeywords.Any(k =>
+            (f.Entity ?? f.Title).Contains(k, StringComparison.OrdinalIgnoreCase));
+
+    private static string TimelineTabHtml(List<Finding> allTimed, ScanConfig config)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"""<div class="tab-heading">LINHA DO TEMPO<span>{allTimed.Count} eventos com timestamp, decrescente</span></div>""");
 
         if (allTimed.Count == 0)
         {
+            sb.AppendLine($"""<div class="tab-heading">LINHA DO TEMPO<span>0 eventos</span></div>""");
             sb.AppendLine("""<div style="color:var(--dim);padding:20px 0">Nenhum evento com timestamp.</div>""");
             return sb.ToString();
         }
 
-        // Group by day+hour+minute
-        var groups = allTimed
-            .GroupBy(f => f.Timestamp!.Value.ToString("dd/MM/yyyy HH:mm"))
-            .OrderByDescending(g => g.Key)
+        // Detect FiveM sessions from anchor events
+        var anchorTs = allTimed
+            .Where(IsFiveMRef)
+            .Select(f => f.Timestamp!.Value)
+            .OrderBy(t => t)
             .ToList();
 
-        const int VisibleGroups = 20;
-        for (int gi = 0; gi < groups.Count; gi++)
+        var sessions = new List<(DateTime WinStart, DateTime WinEnd, DateTime AnchorStart, DateTime AnchorEnd)>();
+        if (anchorTs.Count > 0)
         {
-            var g = groups[gi];
-            var extraClass = gi >= VisibleGroups ? " tl-extra" : "";
-            sb.AppendLine($"""<div class="tl-group{extraClass}">""");
-            sb.AppendLine($"""<div class="tl-group-hdr">{Esc(g.Key)}</div>""");
-            foreach (var f in g.OrderByDescending(x => x.Risk))
+            var sStart = anchorTs[0];
+            var sEnd   = anchorTs[0];
+            for (int i = 1; i < anchorTs.Count; i++)
             {
-                var rColor = f.Risk switch
+                if ((anchorTs[i] - sEnd).TotalHours <= 3)
+                    sEnd = anchorTs[i];
+                else
                 {
-                    RiskLevel.Critical => "var(--critical)",
-                    RiskLevel.High     => "var(--high)",
-                    RiskLevel.Medium   => "var(--medium)",
-                    _                  => "var(--dim)"
-                };
-                sb.AppendLine($"""
+                    sessions.Add((sStart.AddMinutes(-30), sEnd.AddHours(2), sStart, sEnd));
+                    sStart = anchorTs[i];
+                    sEnd   = anchorTs[i];
+                }
+            }
+            sessions.Add((sStart.AddMinutes(-30), sEnd.AddHours(2), sStart, sEnd));
+        }
+
+        bool useSessions = sessions.Count > 0 &&
+            (config.Profile == ScanProfile.FiveM || config.Profile == ScanProfile.Florence || config.Profile == ScanProfile.Default);
+
+        if (!useSessions)
+        {
+            // Flat chronological view (fast/deep profiles or no FiveM signal)
+            sb.AppendLine($"""<div class="tab-heading">LINHA DO TEMPO<span>{allTimed.Count} eventos com timestamp, decrescente</span></div>""");
+            RenderFlatTimeline(sb, allTimed);
+            return sb.ToString();
+        }
+
+        sb.AppendLine($"""<div class="tab-heading">LINHA DO TEMPO — SESSÕES FiveM<span>{sessions.Count} sess{(sessions.Count == 1 ? "ão" : "ões")} detectada{(sessions.Count == 1 ? "" : "s")} · {allTimed.Count} eventos</span></div>""");
+
+        // Assign each event to a session (first matching session wins)
+        int SessionIndex(DateTime ts)
+        {
+            for (int i = 0; i < sessions.Count; i++)
+                if (ts >= sessions[i].WinStart && ts <= sessions[i].WinEnd)
+                    return i;
+            return -1; // outside all sessions
+        }
+
+        var buckets = allTimed
+            .GroupBy(f => SessionIndex(f.Timestamp!.Value))
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.Timestamp).ToList());
+
+        for (int si = sessions.Count - 1; si >= 0; si--) // oldest session first
+        {
+            var (winStart, winEnd, ancStart, ancEnd) = sessions[si];
+            var label = ancStart.Date == ancEnd.Date
+                ? $"Sessão FiveM #{si + 1} — {ancStart:dd/MM HH:mm} até {ancEnd:HH:mm}"
+                : $"Sessão FiveM #{si + 1} — {ancStart:dd/MM HH:mm} até {ancEnd:dd/MM HH:mm}";
+
+            sb.AppendLine($"""
+<div style="margin:20px 0 8px;padding:10px 14px;background:linear-gradient(90deg,#1e0a0a,var(--panel));border-left:3px solid var(--critical);border-radius:4px;display:flex;align-items:center;gap:10px">
+  <span style="color:var(--critical);font-size:13px;font-weight:800">&#9632; {Esc(label)}</span>
+  <span style="color:var(--dim);font-size:11px">janela {winStart:HH:mm} → {winEnd:HH:mm}</span>
+</div>
+""");
+
+            if (!buckets.TryGetValue(si, out var sessionEvents) || sessionEvents.Count == 0)
+            {
+                sb.AppendLine("""<div style="color:var(--dim);font-size:12px;padding:4px 8px">Nenhum evento nesta janela.</div>""");
+                continue;
+            }
+
+            // Sub-group: before anchor, during, after anchor
+            var before  = sessionEvents.Where(f => f.Timestamp! < ancStart).ToList();
+            var during  = sessionEvents.Where(f => f.Timestamp! >= ancStart && f.Timestamp! <= ancEnd).ToList();
+            var after   = sessionEvents.Where(f => f.Timestamp! > ancEnd).ToList();
+
+            void SubSection(string title, List<Finding> events, string color)
+            {
+                if (events.Count == 0) return;
+                sb.AppendLine($"""<div style="margin:8px 0 4px;font-size:10px;font-weight:700;color:{color};text-transform:uppercase;letter-spacing:1px">{title} ({events.Count})</div>""");
+                foreach (var f in events.OrderByDescending(x => x.Timestamp))
+                    sb.AppendLine(TlItem(f));
+            }
+
+            SubSection("Antes da sessão",    before, "var(--dim)");
+            SubSection("Durante a sessão",   during, "var(--critical)");
+            SubSection("Após a sessão",      after,  "var(--high)");
+        }
+
+        // Events outside all sessions
+        if (buckets.TryGetValue(-1, out var outside) && outside.Count > 0)
+        {
+            sb.AppendLine($"""
+<div style="margin:24px 0 8px;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:1px;border-top:1px solid var(--border);padding-top:16px">
+  Fora das sessões ({outside.Count} eventos)
+</div>
+""");
+            RenderFlatTimeline(sb, outside, maxGroups: 10);
+        }
+
+        return sb.ToString();
+    }
+
+    private static string TlItem(Finding f)
+    {
+        var rColor = f.Risk switch
+        {
+            RiskLevel.Critical => "var(--critical)",
+            RiskLevel.High     => "var(--high)",
+            RiskLevel.Medium   => "var(--medium)",
+            _                  => "var(--dim)"
+        };
+        return $"""
 <div class="tl-item" data-search="{Esc(f.Module + " " + f.Title + " " + f.Detail)}">
   <span class="tl-time">{f.Timestamp!.Value:HH:mm:ss}</span>
   <span class="tl-mod">[{Esc(f.Module)}]</span>
   <span style="color:{rColor};font-size:11px;font-weight:600">{Esc(f.RiskLabel)}</span>
   <span style="color:var(--text);font-size:12px">{Esc(f.Title)}</span>
 </div>
-""");
-            }
+""";
+    }
+
+    private static void RenderFlatTimeline(StringBuilder sb, List<Finding> events, int maxGroups = 20)
+    {
+        var groups = events
+            .GroupBy(f => f.Timestamp!.Value.ToString("dd/MM/yyyy HH:mm"))
+            .OrderByDescending(g => g.Key)
+            .ToList();
+
+        for (int gi = 0; gi < groups.Count; gi++)
+        {
+            var g          = groups[gi];
+            var extraClass = gi >= maxGroups ? " tl-extra" : "";
+            sb.AppendLine($"""<div class="tl-group{extraClass}">""");
+            sb.AppendLine($"""<div class="tl-group-hdr">{Esc(g.Key)}</div>""");
+            foreach (var f in g.OrderByDescending(x => x.Risk))
+                sb.AppendLine(TlItem(f));
             sb.AppendLine("</div>");
         }
 
-        if (groups.Count > VisibleGroups)
-            sb.AppendLine($"""<button class="expand-btn" id="tl-expand-btn" onclick="expandTimeline()">Mostrar todos ({groups.Count - VisibleGroups} grupos ocultos, {allTimed.Count - groups.Take(VisibleGroups).Sum(g => g.Count())} eventos)</button>""");
+        if (groups.Count > maxGroups)
+            sb.AppendLine($"""<button class="expand-btn" id="tl-expand-btn" onclick="expandTimeline()">Mostrar todos ({groups.Count - maxGroups} grupos ocultos, {events.Count - groups.Take(maxGroups).Sum(g => g.Count())} eventos)</button>""");
+    }
+
+    private static readonly string[] s_ocultacaoEventIds = ["1102", "104", "3079", "5007", "1116", "1117", "7045"];
+
+    private static string BypassTabHtml(List<Finding> findings)
+    {
+        var sb = new StringBuilder();
+
+        // Detect critical concealment signals for alert banner
+        var alertFindings = findings
+            .Where(f => f.Risk >= RiskLevel.High ||
+                        s_ocultacaoEventIds.Any(id => f.Detail.Contains(id) || (f.RuleId ?? "").Contains(id) || f.Title.Contains(id)))
+            .OrderByDescending(f => f.Risk)
+            .ToList();
+
+        if (alertFindings.Count > 0)
+        {
+            sb.AppendLine($"""
+<div style="background:#1a0505;border:1px solid var(--critical);border-radius:6px;padding:14px 18px;margin-bottom:18px">
+  <div style="font-size:13px;font-weight:800;color:var(--critical);margin-bottom:8px">&#9888; ALERTA DE OCULTAÇÃO — {alertFindings.Count} sinal{(alertFindings.Count == 1 ? "" : "is")} crítico{(alertFindings.Count == 1 ? "" : "s")} detectado{(alertFindings.Count == 1 ? "" : "s")}</div>
+  <div style="display:flex;flex-direction:column;gap:4px">
+""");
+            foreach (var f in alertFindings.Take(6))
+            {
+                sb.AppendLine($"""    <div style="font-size:12px;color:var(--muted)">&#8226; [{Esc(f.Module)}] {Esc(f.Title)}</div>""");
+            }
+            sb.AppendLine("  </div>\n</div>");
+        }
+
+        sb.AppendLine(FindingsTabHtml("BYPASS / ANTI-FORENSE", findings, "bypass", "var(--critical)",
+            "Anti-Forensics · System Tampering · Service Tampering · Limpeza de Logs · Reconfiguração do Defender"));
 
         return sb.ToString();
     }
