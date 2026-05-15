@@ -23,6 +23,10 @@
     <PackageReference Include="ManagedEsent" Version="1.9.4" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="rules\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- Embed git commit hash in InformationalVersion at build time -->
   <Target Name="SetGitVersion" BeforeTargets="CoreCompile;GetAssemblyVersion">
     <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true">

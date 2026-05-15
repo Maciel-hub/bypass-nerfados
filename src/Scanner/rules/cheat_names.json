@@ -1,0 +1,21 @@
+{
+  "_comment": "Nomes adicionais de processos/arquivos de cheat. Não recompila — edite e redistribua.",
+  "items": [
+    "fiveguard.dll",
+    "bypassuac.exe",
+    "injector.exe",
+    "loader.dll",
+    "cheat.dll",
+    "hack.exe",
+    "aimbot.dll",
+    "esp.dll",
+    "godmode.dll",
+    "speedhack.dll",
+    "wallhack.dll",
+    "triggerbot.dll",
+    "norecoil.dll",
+    "bhop.dll",
+    "silent aim.dll",
+    "skinchanger.dll"
+  ]
+}

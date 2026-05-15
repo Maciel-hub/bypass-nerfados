@@ -124,18 +124,22 @@ public class ScanOrchestrator
 
         Correlator.Correlate(_result);
 
-        // Noise reduction: Medium+Low without correlation are kept in the report
-        // but marked non-score-eligible so they don't inflate the final score
+        // Noise reduction: threshold driven by score_weights.json (default: Medium+Low)
+        var noiseRisk = ParseRisk(_config.Rules.Score.NoiseMinRisk, RiskLevel.Medium);
+        var noiseConf = ParseConf(_config.Rules.Score.NoiseMaxConfidence, Confidence.Low);
         foreach (var f in _result.Findings)
         {
-            if (f.Risk == RiskLevel.Medium
-                && f.Confidence == Confidence.Low
+            if (f.Risk == noiseRisk
+                && f.Confidence <= noiseConf
                 && f.RuleId?.StartsWith("CORR_") != true
                 && f.Category != FindingCategory.AntiForensics)
             {
                 f.ScoreEligible = false;
             }
         }
+
+        // External rules elevation: cheat hashes → Critical+Confirmed; cheat names → High (if lower)
+        ApplyExternalRules(_result, _config.Rules);
 
         // Florence: downgrade single-source High/Critical to Medium (requires ≥2 modules per entity)
         if (_config.Profile == ScanProfile.Florence)
@@ -177,6 +181,13 @@ public class ScanOrchestrator
                 ReportGenerator.GenerateTxt(_result, _config, txtPath);
                 EvidenceExporter.Export(_result, _config, runFolder);
                 ManifestWriter.Write(_result, _config, runFolder); // must run last (hashes all other files)
+
+                // Executive report generated after manifest so we can reference manifest hash
+                string? manifestHash = null;
+                var sha256Path = Path.Combine(runFolder, "manifest.sha256");
+                if (File.Exists(sha256Path))
+                    manifestHash = File.ReadAllText(sha256Path).Split(' ', 2)[0].Trim().ToUpperInvariant();
+                ReportGenerator.GenerateExecutiveHtml(_result, _config, runFolder, manifestHash);
 
                 Report(new ScanProgressUpdate(
                     ScanProgressKind.ReportGenerated,
@@ -331,6 +342,45 @@ public class ScanOrchestrator
 
         return list;
     }
+
+    private static void ApplyExternalRules(ScanResult result, ExternalRules rules)
+    {
+        if (rules.CheatHashes.Count == 0 && rules.CheatNames.Count == 0) return;
+
+        var hashSet = new HashSet<string>(rules.CheatHashes, StringComparer.OrdinalIgnoreCase);
+        var nameSet = rules.CheatNames
+            .Select(n => n.ToLowerInvariant())
+            .ToHashSet();
+
+        foreach (var f in result.Findings)
+        {
+            var entity = (f.Entity ?? f.Title ?? "").ToLowerInvariant();
+
+            // Hash match → Critical + Confirmed (strongest possible signal)
+            if (hashSet.Count > 0 && f.Evidence != null && hashSet.Contains(f.Evidence.Trim()))
+            {
+                f.Risk = RiskLevel.Critical;
+                f.ValidationHint = "Hash externo confirmado via rules/cheat_hashes.json";
+                f.ScoreEligible  = true;
+                continue;
+            }
+
+            // Name match → at least High + re-enable score
+            if (nameSet.Count > 0 && nameSet.Any(n => entity.Contains(n)))
+            {
+                if (f.Risk < RiskLevel.High) f.Risk = RiskLevel.High;
+                f.ScoreEligible = true;
+                f.ValidationHint = (f.ValidationHint != null ? f.ValidationHint + " | " : "")
+                    + "Nome externo confirmado via rules/cheat_names.json";
+            }
+        }
+    }
+
+    private static RiskLevel ParseRisk(string s, RiskLevel fallback) =>
+        Enum.TryParse<RiskLevel>(s, ignoreCase: true, out var v) ? v : fallback;
+
+    private static Confidence ParseConf(string s, Confidence fallback) =>
+        Enum.TryParse<Confidence>(s, ignoreCase: true, out var v) ? v : fallback;
 
     private static void ApplyFlorenceElevation(ScanResult result)
     {

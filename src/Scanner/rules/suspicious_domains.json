@@ -1,0 +1,14 @@
+{
+  "_comment": "Domínios suspeitos adicionais. Inclui o domínio raiz — subdomínios são cobertos.",
+  "items": [
+    "cheathappens.com",
+    "unknowncheats.me",
+    "mpgh.net",
+    "hackforums.net",
+    "elitepvpers.com",
+    "cheatersoul.com",
+    "flingtrainer.com",
+    "nexusmods.com",
+    "wemod.com"
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "_comment": "Controla o filtro de ruído. Findings em noiseMinRisk com confiança <= noiseMaxConfidence são não-elegíveis para score.",
+  "noiseMinRisk": "Medium",
+  "noiseMaxConfidence": "Low",
+  "_validRisks": ["Info", "Low", "Medium", "High", "Critical"],
+  "_validConfidences": ["Low", "Medium", "High", "Confirmed"]
+}

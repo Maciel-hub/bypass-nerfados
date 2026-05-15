@@ -36,6 +36,7 @@ public class ScanConfig
     public ConsoleUiMode UiMode { get; set; } = ConsoleUiMode.Minimal;
     public bool OpenReportAfterScan { get; set; } = false;
     public ScanProfile Profile { get; set; } = ScanProfile.Default;
+    public ExternalRules Rules { get; set; } = ExternalRules.Empty;
 
     public string ReportFileName =>
         $"Echo_Nerfados_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}";

@@ -1,0 +1,15 @@
+{
+  "_comment": "Publishers legítimos. Findings de serviços assinados por esses publishers podem ser rebaixados.",
+  "items": [
+    "Microsoft Corporation",
+    "Microsoft Windows",
+    "Rockstar Games, Inc.",
+    "Valve Corp.",
+    "Discord Inc.",
+    "NVIDIA Corporation",
+    "Intel Corporation",
+    "Advanced Micro Devices, Inc.",
+    "Google LLC",
+    "Mozilla Corporation"
+  ]
+}

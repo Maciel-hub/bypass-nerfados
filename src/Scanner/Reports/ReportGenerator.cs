@@ -11,6 +11,14 @@ public static class ReportGenerator
         File.WriteAllText(outputPath, html, System.Text.Encoding.UTF8);
     }
 
+    public static string GenerateExecutiveHtml(ScanResult result, ScanConfig config, string runFolder, string? manifestHash = null)
+    {
+        var path = Path.Combine(runFolder, "report_executive.html");
+        var html = ExecutiveTemplate.Build(result, config, manifestHash);
+        File.WriteAllText(path, html, System.Text.Encoding.UTF8);
+        return path;
+    }
+
     public static void GenerateTxt(ScanResult result, ScanConfig config, string outputPath)
     {
         var sb = new System.Text.StringBuilder();

@@ -24,7 +24,7 @@ if (Console.IsInputRedirected || Console.IsOutputRedirected || Console.IsErrorRe
 if (!ConsoleUI.PromptLogin())
     return 2;
 
-var config        = new ScanConfig();
+var config        = new ScanConfig { Rules = RulesLoader.Load() };
 var noFinalPrompt = false;
 
 // Parse arguments
@@ -191,6 +191,12 @@ if (htmlReportPath != null || txtReportPath != null)
         AnsiConsole.MarkupLine($"[green]✓ HTML:[/] {Markup.Escape(htmlReportPath)}");
     if (txtReportPath != null)
         AnsiConsole.MarkupLine($"[green]✓ TXT: [/] {Markup.Escape(txtReportPath)}");
+    if (htmlReportPath != null)
+    {
+        var execPath = Path.Combine(Path.GetDirectoryName(htmlReportPath)!, "report_executive.html");
+        if (File.Exists(execPath))
+            AnsiConsole.MarkupLine($"[green]✓ EXEC:[/] {Markup.Escape(execPath)}");
+    }
     if (htmlReportPath != null)
     {
         var evidencePath = Path.Combine(Path.GetDirectoryName(htmlReportPath)!, "evidence.json");
