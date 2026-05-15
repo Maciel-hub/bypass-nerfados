@@ -393,7 +393,46 @@ EchoNerfados.exe [opções]
 
 ## 12. Smoke Test Interativo — Procedimento Obrigatório
 
-O smoke test requer execução manual com console interativo real. Executar nas duas condições abaixo.
+O smoke test requer execução manual com console interativo real (admin). Executar as condições A/B e depois o bloco de perfis.
+
+### Script de verificação operacional (executar após cada perfil)
+
+Copiar para um terminal PowerShell na mesma pasta do EXE. Substituir `--profile fast` pelo perfil sendo testado.
+
+```powershell
+# 1. Executar (aguarda conclusão)
+.\EchoNerfados.exe --profile fast --no-open-report
+$LASTEXITCODE   # esperado: 0 (Clean) a 4 (Critical) — nunca 98/99
+
+# 2. Localizar pasta gerada
+$folder = Get-ChildItem "$([Environment]::GetFolderPath('Desktop'))\Echo_Nerfados_*" |
+  Sort-Object LastWriteTime | Select-Object -Last 1
+
+# 3. Artefatos obrigatórios (todos devem ser True)
+Test-Path "$($folder.FullName)\report.html"
+Test-Path "$($folder.FullName)\report_executive.html"
+Test-Path "$($folder.FullName)\evidence.json"
+Test-Path "$($folder.FullName)\manifest.json"
+Test-Path "$($folder.FullName)\manifest.sha256"
+
+# 4. Verificar integridade do manifesto
+Set-Location $folder.FullName
+$ref    = (Get-Content manifest.sha256 -Raw).Split("  ")[0].Trim()
+$actual = (Get-FileHash manifest.json -Algorithm SHA256).Hash.ToLower()
+if ($ref -eq $actual) { "MANIFESTO OK" } else { "MANIFESTO FALHOU: $ref vs $actual" }
+```
+
+**Critério por perfil:**
+
+| Perfil | Exit code | JSONs esperados | Verificação adicional |
+|--------|-----------|-----------------|----------------------|
+| `default` | 0–4 | 27 `*_90d.json` + evidence.json | Todos os 27 módulos = EXECUTADO ou PARCIAL na cobertura |
+| `fast` | 0–4 | 16 `*_90d.json` + evidence.json | 11 módulos (ShimCache, SRUM, ShellBags, JumpLists, Nvidia, ExternalTool, RecycleBin, Amcache, UserAssist, USN, ProcessMemory) = PULADO |
+| `deep` | 0–4 | 27+ `*_90d.json` + evidence.json | USN Journal e ProcessMemory = EXECUTADO mesmo sem flags |
+| `fivem` | 0–4 | 27 `*_90d.json` + evidence.json | Timeline HTML exibe blocos "Antes / Durante / Após sessão FiveM" |
+| `florence` | 0–4 | 27 `*_90d.json` + evidence.json | Findings High single-source → Medium com ValidationHint no HTML |
+
+---
 
 ### CONDIÇÃO A — Sem elevação (duplo clique / terminal normal)
 
