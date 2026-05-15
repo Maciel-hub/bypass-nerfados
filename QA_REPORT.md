@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+38907aa  
-**Build:** 38907aa (2026-05-15) — feat: Sprint 3 — external rules JSON, executive HTML report; 7d457b9 — feat: Sprint 2 — Florence profile, FiveM session timeline, bypass alert banner; c7e65d2 — feat: Sprint 1 — ScanProfile, score noise reduction, Provas Fortes tab, explainable score  
+**Versão:** 1.0.0+a0b3446  
+**Build:** a0b3446 (2026-05-15) — docs: update QA_REPORT to build 38907aa (Sprint 1/2/3); 38907aa — feat: Sprint 3 — external rules JSON, executive HTML report; 7d457b9 — feat: Sprint 2 — Florence profile, FiveM session timeline, bypass alert banner; c7e65d2 — feat: Sprint 1 — ScanProfile, score noise reduction, Provas Fortes tab, explainable score  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** *(republicar após fechar EchoNerfados.exe em execução — build bloqueado por processo ativo)*  
+**SHA256:** `554C025D623AC6C3A47545B3C67AAF3334EA72EF45381E954943C6FC939A1589`  
 **Tamanho:** ~67 MB (self-contained, sem dependência de .NET no host)  
 **Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
@@ -468,7 +468,7 @@ if ($ref -eq $actual) { "MANIFESTO OK" } else { "FALHOU: $ref vs $actual" }
 # Clonar e publicar
 git clone <repo>
 cd BypassNerfados
-git checkout 38907aa   # código do artefato entregue (b715f6d, b8d9a54 são docs-only, não alteram o EXE)
+git checkout a0b3446   # HEAD do artefato entregue (inclui Sprint 1/2/3 + QA_REPORT atualizado)
 dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish/win-x64
 ```
 
@@ -570,4 +570,4 @@ dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained
 
 ---
 
-*Relatório gerado em: 2026-05-15 | Build: 38907aa | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-15 | Build: a0b3446 | Echo Nerfados Shield XDR v1.0.0*
