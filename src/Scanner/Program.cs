@@ -45,6 +45,15 @@ for (int i = 0; i < args.Length; i++)
                 config.EventWindowLookback = TimeSpan.FromDays(days);
             break;
         case "--verbose": config.VerboseOutput = true; break;
+        case "--profile" when i + 1 < args.Length:
+            config.Profile = args[++i].ToLowerInvariant() switch
+            {
+                "fast"  => ScanProfile.Fast,
+                "deep"  => ScanProfile.Deep,
+                "fivem" => ScanProfile.FiveM,
+                _       => ScanProfile.Default
+            };
+            break;
         case "--no-final-prompt": noFinalPrompt = true; break;
         case "--open-report":    config.OpenReportAfterScan = true;  break;
         case "--no-open-report": config.OpenReportAfterScan = false; noFinalPrompt = true; break;
@@ -272,6 +281,10 @@ static void PrintHelp()
     Console.WriteLine("  --drive <letra>         Drive a ser analisado (padrao: C:)");
     Console.WriteLine("  --output <caminho>      Pasta de saida do relatorio");
     Console.WriteLine("  --lookback <dias>       Janela de analise em dias (padrao: 90)");
+    Console.WriteLine("  --profile default       Todos os modulos (padrao)");
+    Console.WriteLine("  --profile fast          16 modulos essenciais — scan rapido (~30s)");
+    Console.WriteLine("  --profile deep          Todos os modulos + USN + Memory (ignora --no-usn/--no-memory)");
+    Console.WriteLine("  --profile fivem         Foco FiveM — equivalente a deep (timeline por sessao: futuro)");
     Console.WriteLine("  --ui minimal            Console limpo: score + top 5 + caminhos (padrao)");
     Console.WriteLine("  --ui detailed           Console detalhado: tabelas + dossies + cobertura");
     Console.WriteLine("  --open-report           Abrir HTML automaticamente ao finalizar");

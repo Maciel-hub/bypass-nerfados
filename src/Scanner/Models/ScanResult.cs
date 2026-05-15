@@ -4,7 +4,7 @@ public class ScanResult
 {
     public string MachineName { get; init; } = Environment.MachineName;
     public string CurrentUser { get; init; } = Environment.UserName;
-    public string ScanMode { get; init; } = "Completo";
+    public string ScanMode { get; set; } = "Completo";
     public DateTime ScanTime { get; init; } = DateTime.Now;
     public DateTime? ScanCompleted { get; set; }
     public string WindowsVersion { get; set; } = string.Empty;
@@ -19,8 +19,10 @@ public class ScanResult
     public List<string> ModuleErrors { get; } = new();
     public Dictionary<string, TimeSpan> ModuleDurations { get; } = new();
 
-    // Weighted by confidence; deduplication happens in ScanOrchestrator before score is read
-    public int TotalScore => (int)Math.Min(Findings.Sum(f => f.WeightedScore), 100);
+    // Only eligible findings count toward score (Medium+Low without correlation are filtered out)
+    public int TotalScore    => (int)Math.Min(Findings.Where(f => f.ScoreEligible).Sum(f => f.WeightedScore), 100);
+    public int RawScore      => (int)Math.Min(Findings.Sum(f => f.WeightedScore), 100);
+    public int FilteredCount => Findings.Count(f => !f.ScoreEligible);
 
     public RiskLevel OverallRisk => TotalScore switch
     {

@@ -62,38 +62,49 @@ public static class HtmlTemplate
 
         List<Finding> TabFindings(string id) => byTab.TryGetValue(id, out var l) ? l : [];
 
+        // Strong-evidence set: confirmed hash, high+confidence>=high, or correlated
+        var provasFortes = result.Findings
+            .Where(f => f.Confidence == Confidence.Confirmed
+                     || (f.Risk >= RiskLevel.High && f.Confidence >= Confidence.High)
+                     || f.RuleId?.StartsWith("CORR_") == true)
+            .OrderByDescending(f => f.Risk).ThenByDescending(f => f.Confidence)
+            .ToList();
+
         var tabDefs = new (string Id, string Label, string BadgeClass)[]
         {
-            ("resumo",      "Resumo",         ""),
-            ("cheats",      "Cheats",         "danger"),
-            ("diagnostico", "Diagnóstico",    "purple"),
-            ("execucoes",   "Execuções",      "warn"),
-            ("downloads",   "Downloads",      ""),
-            ("delecoes",    "Deleções/USN",   ""),
-            ("pastas",      "Pastas",         ""),
-            ("memoria",     "Memória",        "warn"),
-            ("bypass",      "Bypass",         "danger"),
-            ("outros",      "Outros",         ""),
-            ("timeline",    "Timeline",       ""),
-            ("cobertura",   "Cobertura",      ""),
+            ("resumo",        "Resumo",         ""),
+            ("cheats",        "Cheats",         "danger"),
+            ("provas-fortes", "Provas Fortes",  "danger"),
+            ("diagnostico",   "Diagnóstico",    "purple"),
+            ("execucoes",     "Execuções",      "warn"),
+            ("downloads",     "Downloads",      ""),
+            ("delecoes",      "Deleções/USN",   ""),
+            ("pastas",        "Pastas",         ""),
+            ("memoria",       "Memória",        "warn"),
+            ("bypass",        "Bypass",         "danger"),
+            ("outros",        "Outros",         ""),
+            ("timeline",      "Timeline",       ""),
+            ("cobertura",     "Cobertura",      ""),
         };
 
         bool HasTab(string id) => id switch
         {
-            "resumo"      => true,
-            "diagnostico" => hasBundles,
-            "timeline"    => allTimed.Count > 0,
-            "cobertura"   => result.ModuleCoverage.Count > 0 || TabFindings("cobertura").Count > 0,
-            _             => TabFindings(id).Count > 0
+            "resumo"        => true,
+            "diagnostico"   => hasBundles,
+            "provas-fortes" => provasFortes.Count > 0,
+            "timeline"      => allTimed.Count > 0,
+            "cobertura"     => result.ModuleCoverage.Count > 0 || TabFindings("cobertura").Count > 0,
+            _               => TabFindings(id).Count > 0
         };
 
         int TabCount(string id) => id switch
         {
-            "resumo"      => result.Findings.Count,
-            "diagnostico" => result.EvidenceBundles.Count,
-            "timeline"    => allTimed.Count,
-            "cobertura"   => result.ModuleCoverage.Count,
-            _             => TabFindings(id).Count
+            "resumo"        => result.Findings.Count,
+            "diagnostico"   => result.EvidenceBundles.Count,
+            "provas-fortes" => provasFortes.Count,
+            "timeline"      => allTimed.Count,
+            "cobertura"     => result.ModuleCoverage.Count,
+            _               => TabFindings(id).Count
         };
 
         var visibleTabs = tabDefs.Where(t => HasTab(t.Id)).ToList();
@@ -410,9 +421,10 @@ document.addEventListener('DOMContentLoaded', function() {
 
             switch (tab.Id)
             {
-                case "resumo":      sb.AppendLine(ResumoHtml(result)); break;
-                case "cheats":      sb.AppendLine(FindingsTabHtml("CHEATS DETECTADOS",             TabFindings("cheats"),    "cheats",    "var(--critical)", "Execuções, arquivos e comportamentos de cheats identificados")); break;
-                case "diagnostico": sb.AppendLine(DossierTabHtml(result)); break;
+                case "resumo":        sb.AppendLine(ResumoHtml(result)); break;
+                case "cheats":        sb.AppendLine(FindingsTabHtml("CHEATS DETECTADOS",             TabFindings("cheats"),    "cheats",    "var(--critical)", "Execuções, arquivos e comportamentos de cheats identificados")); break;
+                case "provas-fortes": sb.AppendLine(ProvasFortesTabHtml(provasFortes, result)); break;
+                case "diagnostico":   sb.AppendLine(DossierTabHtml(result)); break;
                 case "execucoes":   sb.AppendLine(FindingsTabHtml("TRILHA DE EXECUÇÃO",            TabFindings("execucoes"), "execucoes", "var(--high)",     "BAM/DAM · Prefetch · Amcache · UserAssist · ShimCache · Registry Artifacts")); break;
                 case "downloads":   sb.AppendLine(FindingsTabHtml("DOWNLOADS E FERRAMENTAS",       TabFindings("downloads"), "downloads", "var(--medium)",   "Browser Downloads · External Tool Residue")); break;
                 case "delecoes":    sb.AppendLine(FindingsTabHtml("DELEÇÕES / USN JOURNAL",        TabFindings("delecoes"),  "delecoes",  "var(--medium)",   "USN Journal · Recycle Bin — rastros de arquivos deletados")); break;
@@ -616,7 +628,56 @@ document.addEventListener('DOMContentLoaded', function() {
                 sb.AppendLine($"""<div style="color:var(--muted);font-size:12px;margin:2px 0">&bull; {Esc(f.Title)} <span style="color:var(--dim)">({Esc(f.ConfidenceLabel)})</span></div>""");
         }
 
-        // Category distribution
+        // ── Score breakdown ───────────────────────────────────────────────────
+        var elig = result.Findings.Where(f => f.ScoreEligible).ToList();
+        static string Fmt(double v) => v > 0 ? $"+{(int)Math.Min(v, 99.9)}" : "—";
+
+        var bkConfirmed = elig.Where(f => f.Confidence == Confidence.Confirmed).Sum(f => f.WeightedScore);
+        var bkCorr      = elig.Where(f => f.RuleId?.StartsWith("CORR_") == true && f.Confidence != Confidence.Confirmed).Sum(f => f.WeightedScore);
+        var bkBypass    = elig.Where(f => f.Category == FindingCategory.AntiForensics
+                                       && f.Confidence != Confidence.Confirmed
+                                       && f.RuleId?.StartsWith("CORR_") != true).Sum(f => f.WeightedScore);
+        var bkHigh      = elig.Where(f => f.Risk >= RiskLevel.High
+                                       && f.Confidence != Confidence.Confirmed
+                                       && f.RuleId?.StartsWith("CORR_") != true
+                                       && f.Category != FindingCategory.AntiForensics).Sum(f => f.WeightedScore);
+        var bkOther     = elig.Where(f => f.Risk < RiskLevel.High
+                                       && f.Confidence != Confidence.Confirmed
+                                       && f.RuleId?.StartsWith("CORR_") != true
+                                       && f.Category != FindingCategory.AntiForensics).Sum(f => f.WeightedScore);
+        var rawTotal    = result.Findings.Sum(f => f.WeightedScore);
+        var filtered    = result.FilteredCount;
+
+        sb.AppendLine("""<div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">""");
+        sb.AppendLine($"""<div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Por que {result.TotalScore}/100?</div>""");
+        sb.AppendLine("""<div style="display:flex;flex-direction:column;gap:4px;max-width:500px">""");
+
+        void BkRow(string label, double val, string color) => sb.AppendLine($"""
+<div style="display:flex;justify-content:space-between;font-size:12px;padding:4px 8px;border-radius:4px;background:var(--panel)">
+  <span style="color:var(--muted)">{label}</span>
+  <span style="color:{color};font-weight:700;font-family:monospace">{Fmt(val)}</span>
+</div>
+""");
+
+        BkRow("Confirmados por hash / assinatura",    bkConfirmed, "var(--critical)");
+        BkRow("Correlações cruzadas entre módulos",   bkCorr,      "var(--accent)");
+        BkRow("Anti-forense / bypass",                bkBypass,    "var(--high)");
+        BkRow("High/Critical (outros)",               bkHigh,      "var(--high)");
+        BkRow("Sinais elegíveis restantes",           bkOther,     "var(--medium)");
+
+        sb.AppendLine($"""
+<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 8px;border-top:1px solid var(--border);margin-top:4px;color:var(--dim)">
+  <span>Ruído filtrado (Medium + Baixa confiança sem correlação)</span>
+  <span>{filtered} achados — não computados</span>
+</div>
+<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 8px;color:var(--dim)">
+  <span>Score bruto (sem cap)</span>
+  <span style="font-family:monospace">{(int)rawTotal} → limitado a 100</span>
+</div>
+""");
+        sb.AppendLine("</div></div>");
+
+        // ── Category distribution ─────────────────────────────────────────────
         sb.AppendLine("""<div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px">""");
         sb.AppendLine("""<div style="font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px">Distribuição por categoria</div>""");
         sb.AppendLine("""<div class="dist-row">""");
@@ -629,6 +690,56 @@ document.addEventListener('DOMContentLoaded', function() {
             sb.AppendLine($"""<div class="dist-chip"><span style="color:{maxColor};font-weight:700">{cat.Count()}&times;</span> <span style="color:var(--muted)">{Esc(cat.First().CategoryLabel)}</span></div>""");
         }
         sb.AppendLine("</div></div>");
+
+        return sb.ToString();
+    }
+
+    private static string ProvasFortesTabHtml(List<Finding> findings, ScanResult result)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine($"""<div class="tab-heading" style="color:var(--critical)">PROVAS FORTES<span>{findings.Count} achados acionáveis — hash confirmado, alta confiança ou correlação cruzada</span></div>""");
+
+        if (findings.Count == 0)
+        {
+            sb.AppendLine("""<div style="color:var(--dim);padding:20px 0">Nenhuma prova forte encontrada neste scan.</div>""");
+            return sb.ToString();
+        }
+
+        // Group by evidence type
+        var byHash   = findings.Where(f => f.Confidence == Confidence.Confirmed).ToList();
+        var byCorr   = findings.Where(f => f.RuleId?.StartsWith("CORR_") == true && f.Confidence != Confidence.Confirmed).ToList();
+        var byHigh   = findings.Where(f => f.Confidence != Confidence.Confirmed && f.RuleId?.StartsWith("CORR_") != true).ToList();
+
+        void Section(string title, string color, List<Finding> items)
+        {
+            if (items.Count == 0) return;
+            sb.AppendLine($"""<div style="margin-bottom:6px;font-size:11px;font-weight:700;color:{color};text-transform:uppercase;letter-spacing:1px;padding:8px 0 4px;border-bottom:1px solid var(--border)">{title} ({items.Count})</div>""");
+            foreach (var f in items)
+                sb.AppendLine(FindingHtml(f));
+            sb.AppendLine("""<div style="margin-bottom:16px"></div>""");
+        }
+
+        Section("Confirmados por hash / assinatura",  "var(--critical)", byHash);
+        Section("Correlações cruzadas entre módulos", "var(--accent)",   byCorr);
+        Section("High/Critical — alta confiança",     "var(--high)",     byHigh);
+
+        // Cross-reference with dossiers that have bypass indicators
+        var withBypass = result.EvidenceBundles
+            .Where(b => b.BypassIndicators.Count > 0)
+            .Take(5).ToList();
+        if (withBypass.Count > 0)
+        {
+            sb.AppendLine($"""<div style="margin-top:18px;font-size:11px;font-weight:700;color:var(--critical);text-transform:uppercase;letter-spacing:1px;padding-bottom:4px;border-bottom:1px solid var(--border)">Dossiês com tentativa de ocultação ({withBypass.Count})</div>""");
+            foreach (var b in withBypass)
+            {
+                sb.AppendLine($"""<div style="margin:8px 0;padding:8px 10px;background:var(--panel);border-left:3px solid var(--critical);border-radius:4px">""");
+                sb.AppendLine($"""  <div style="font-weight:700;color:var(--text)">{Esc(b.ArtifactName)}</div>""");
+                sb.AppendLine($"""  <div style="font-size:11px;color:var(--critical);margin-top:3px">{Esc(b.BypassIndicators[0])}</div>""");
+                if (!string.IsNullOrEmpty(b.FullPath))
+                    sb.AppendLine($"""  <div style="font-family:monospace;font-size:11px;color:var(--dim);margin-top:2px">{Esc(b.FullPath)}</div>""");
+                sb.AppendLine("</div>");
+            }
+        }
 
         return sb.ToString();
     }

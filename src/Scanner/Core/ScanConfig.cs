@@ -4,6 +4,8 @@ namespace BypassNerfados.Scanner.Core;
 
 public enum ConsoleUiMode { Minimal, Detailed }
 
+public enum ScanProfile { Default, Fast, Deep, FiveM }
+
 public class ScanConfig
 {
     private string _targetDrive = "C:";
@@ -33,6 +35,7 @@ public class ScanConfig
     public TimeSpan EventWindowLookback { get; set; } = TimeSpan.FromDays(90);
     public ConsoleUiMode UiMode { get; set; } = ConsoleUiMode.Minimal;
     public bool OpenReportAfterScan { get; set; } = false;
+    public ScanProfile Profile { get; set; } = ScanProfile.Default;
 
     public string ReportFileName =>
         $"Echo_Nerfados_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}";

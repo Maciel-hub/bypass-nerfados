@@ -45,6 +45,7 @@ public class Finding
     public string? RuleId { get; init; }
     public string? Entity { get; init; }
     public string? ValidationHint { get; init; }
+    public bool ScoreEligible { get; set; } = true;
 
     public Finding(
         RiskLevel risk,

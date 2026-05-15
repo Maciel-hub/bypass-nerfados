@@ -16,7 +16,14 @@ public class ScanOrchestrator
         _progress = progress;
         _result = new ScanResult
         {
-            IsAdministrator = IsAdmin()
+            IsAdministrator = IsAdmin(),
+            ScanMode = config.Profile switch
+            {
+                ScanProfile.Fast  => "Rápido",
+                ScanProfile.Deep  => "Profundo",
+                ScanProfile.FiveM => "FiveM",
+                _                 => "Completo"
+            }
         };
     }
 
@@ -116,6 +123,19 @@ public class ScanOrchestrator
 
         Correlator.Correlate(_result);
 
+        // Noise reduction: Medium+Low without correlation are kept in the report
+        // but marked non-score-eligible so they don't inflate the final score
+        foreach (var f in _result.Findings)
+        {
+            if (f.Risk == RiskLevel.Medium
+                && f.Confidence == Confidence.Low
+                && f.RuleId?.StartsWith("CORR_") != true
+                && f.Category != FindingCategory.AntiForensics)
+            {
+                f.ScoreEligible = false;
+            }
+        }
+
         Report(new ScanProgressUpdate(
             ScanProgressKind.CorrelationCompleted,
             "Correlação concluída."));
@@ -189,6 +209,8 @@ public class ScanOrchestrator
     private List<BaseModule> BuildModuleList()
     {
         var list = new List<BaseModule>();
+        var isFast = _config.Profile == ScanProfile.Fast;
+        var isDeep = _config.Profile == ScanProfile.Deep || _config.Profile == ScanProfile.FiveM;
 
         void Queue(BaseModule module, string forensicImpact = "")
         {
@@ -210,6 +232,7 @@ public class ScanOrchestrator
                 ForensicImpact = forensicImpact
             });
 
+        // ── Core modules — always run in every profile ────────────────────────
         Queue(new SystemInfoModule());
         Queue(new BamDamModule(),             "Histórico de atividade recente (Background Activity Monitor)");
         Queue(new PrefetchModule(),            "Evidência de execução de processos");
@@ -220,24 +243,44 @@ public class ScanOrchestrator
         Queue(new FileSystemModule(),          "Arquivos suspeitos em paths de risco");
         Queue(new NetworkModule(),             "Histórico de redes conectadas");
         Queue(new ServiceCheckModule(),        "Serviços instalados com nomes suspeitos");
-        Queue(new ShimCacheModule(),           "Indício de carregamento de executáveis (AppCompatCache)");
         Queue(new LnkRecentModule(),           "Atalhos recentes — evidência de acesso a arquivos");
         Queue(new RegistryPersistenceModule(), "Persistência via IFEO, AppInit, Winlogon, BootExecute");
         Queue(new SystemResetRestoreModule(),  "Reinstalação, reset e restauração do Windows — perda de cobertura forense");
         Queue(new SystemTamperingModule(),     "LabConfig/MoSetup bypass, BatchGotAdmin, scripts de elevação UAC");
         Queue(new BrowserDownloadsModule(),    "Downloads do Chrome/Edge/Brave/Opera/Firefox — executáveis e URLs suspeitos");
-        Queue(new ShellBagsModule(),           "Histórico de navegação de pastas — acesso a diretórios suspeitos mesmo após deleção");
-        Queue(new JumpListsModule(),           "Histórico de acesso recente por aplicação — executáveis e caminhos suspeitos");
-        Queue(new NvidiaArtifactsModule(),     "Timestamps de uso de GPU — confirma execução de app na sessão FiveM");
-        Queue(new ExternalToolResidueModule(), "Ferramentas de análise/tampering — Process Hacker, CheatEngine, Everything, x64dbg");
-        Queue(new RecycleBinModule(),          "Lixeira — caminho original e data de deleção de arquivos suspeitos");
         Queue(new TimelineInvestigationModule(), "Linha do tempo unificada — Prefetch, BAM, LNK, Downloads, Temp");
 
-        Queue(new SrumModule(), "Uso de rede por processo via SRUDB.dat (~30-60 dias)");
-
-        if (_result.IsAdministrator)
+        // ── Deep-only modules — skipped in fast profile ───────────────────────
+        if (isFast)
         {
-            Queue(new AmcacheModule(),   "SHA1 e detecção de executáveis pós-deleção");
+            Skip("ShimCache",          "Perfil rápido (--profile fast)", "Indício de execução histórico via AppCompatCache");
+            Skip("ShellBags",          "Perfil rápido (--profile fast)", "Navegação de pastas suspeitas");
+            Skip("Jump Lists",         "Perfil rápido (--profile fast)", "Histórico de acesso recente por aplicação");
+            Skip("NVIDIA Artifacts",   "Perfil rápido (--profile fast)", "Timestamps de uso de GPU/sessão FiveM");
+            Skip("External Tool Residue", "Perfil rápido (--profile fast)", "Ferramentas de análise/tampering");
+            Skip("Recycle Bin",        "Perfil rápido (--profile fast)", "Caminhos originais de arquivos deletados");
+            Skip("SRUM",               "Perfil rápido (--profile fast)", "Uso de rede por processo via SRUDB.dat");
+        }
+        else
+        {
+            Queue(new ShimCacheModule(),           "Indício de carregamento de executáveis (AppCompatCache)");
+            Queue(new ShellBagsModule(),           "Histórico de navegação de pastas — acesso a diretórios suspeitos mesmo após deleção");
+            Queue(new JumpListsModule(),           "Histórico de acesso recente por aplicação — executáveis e caminhos suspeitos");
+            Queue(new NvidiaArtifactsModule(),     "Timestamps de uso de GPU — confirma execução de app na sessão FiveM");
+            Queue(new ExternalToolResidueModule(), "Ferramentas de análise/tampering — Process Hacker, CheatEngine, Everything, x64dbg");
+            Queue(new RecycleBinModule(),          "Lixeira — caminho original e data de deleção de arquivos suspeitos");
+            Queue(new SrumModule(),                "Uso de rede por processo via SRUDB.dat (~30-60 dias)");
+        }
+
+        // ── Admin-gated modules ───────────────────────────────────────────────
+        if (isFast)
+        {
+            Skip("Amcache",    "Perfil rápido (--profile fast)", "SHA1 de executáveis e detecção pós-deleção não coletados");
+            Skip("UserAssist", "Perfil rápido (--profile fast)", "Histórico de execuções via Explorer não coletado");
+        }
+        else if (_result.IsAdministrator)
+        {
+            Queue(new AmcacheModule(),    "SHA1 e detecção de executáveis pós-deleção");
             Queue(new UserAssistModule(), "Histórico de execuções via Explorer (NTUSER.DAT)");
         }
         else
@@ -246,19 +289,38 @@ public class ScanOrchestrator
             Skip("UserAssist", "Requer Administrador — NTUSER.DAT inacessível", "Histórico de execuções via Explorer não coletado");
         }
 
-        if (_config.RunUsnJournal && _result.IsAdministrator)
-            Queue(new UsnJournalModule(), "Operações de arquivo de baixo nível (criação/deleção/renomeação)");
-        else if (_config.RunUsnJournal)
-            Skip("USN Journal", "Requer Administrador", "Operações de arquivo de baixo nível não coletadas");
-        else
-            Skip("USN Journal", "Desativado (--no-usn)", "Operações de arquivo de baixo nível não coletadas");
-
-        if (_config.DeepMemoryScan && _result.IsAdministrator)
+        // ── Flag-gated modules (Deep profile ignores flags and runs both) ─────
+        if (isFast)
+        {
+            Skip("USN Journal",    "Perfil rápido (--profile fast)", "Operações de arquivo de baixo nível não coletadas");
+            Skip("Process Memory", "Perfil rápido (--profile fast)", "Varredura de memória de processos não realizada");
+        }
+        else if (isDeep && _result.IsAdministrator)
+        {
+            Queue(new UsnJournalModule(),    "Operações de arquivo de baixo nível (criação/deleção/renomeação)");
             Queue(new ProcessMemoryModule(), "Strings suspeitas em memória de processos");
-        else if (_config.DeepMemoryScan)
-            Skip("Process Memory", "Requer Administrador", "Strings suspeitas em memória não varridas");
+        }
+        else if (isDeep)
+        {
+            Skip("USN Journal",    "Requer Administrador (perfil deep)", "Operações de arquivo de baixo nível não coletadas");
+            Skip("Process Memory", "Requer Administrador (perfil deep)", "Strings suspeitas em memória não varridas");
+        }
         else
-            Skip("Process Memory", "Desativado (--no-memory)", "Varredura de memória de processos não realizada");
+        {
+            if (_config.RunUsnJournal && _result.IsAdministrator)
+                Queue(new UsnJournalModule(), "Operações de arquivo de baixo nível (criação/deleção/renomeação)");
+            else if (_config.RunUsnJournal)
+                Skip("USN Journal", "Requer Administrador", "Operações de arquivo de baixo nível não coletadas");
+            else
+                Skip("USN Journal", "Desativado (--no-usn)", "Operações de arquivo de baixo nível não coletadas");
+
+            if (_config.DeepMemoryScan && _result.IsAdministrator)
+                Queue(new ProcessMemoryModule(), "Strings suspeitas em memória de processos");
+            else if (_config.DeepMemoryScan)
+                Skip("Process Memory", "Requer Administrador", "Strings suspeitas em memória não varridas");
+            else
+                Skip("Process Memory", "Desativado (--no-memory)", "Varredura de memória de processos não realizada");
+        }
 
         return list;
     }
