@@ -1,14 +1,22 @@
-// EchoHarness — positive-control QA tool for MemoryDllTraceModule.
+// EchoHarness — positive-control QA tool for MemoryDllTraceModule and MemoryStringScanModule.
 //
 // USAGE:
-//   Rename this exe to fivem_b_harness.exe (matches MemoryDllTraceModule FiveMPrefixes),
+//   Rename this exe to fivem_b_harness.exe (matches scanner FiveMPrefixes),
 //   then run it before launching EchoNerfados.exe with admin rights.
 //
-// Scenarios:
-//   --pe      Private RX region with MZ/PE stub   → MEMDLL_PRIVATE_EXEC_PE (Critical)
-//   --thread  RWX region + native thread inside   → MEMDLL_THREAD_START_PRIVATE_EXEC (Critical)
-//   --deleted Load DLL copy, POSIX-unlink it      → MEMDLL_DELETED_IMAGE_MAPPING (High)
-//   --all     All three (default when no flag given)
+// MEMDLL scenarios (MemoryDllTraceModule):
+//   --pe             Private RX region with MZ/PE stub  → MEMDLL_PRIVATE_EXEC_PE (Critical)
+//   --thread         RWX region + native thread inside  → MEMDLL_THREAD_START_PRIVATE_EXEC (Critical)
+//   --deleted        Load DLL copy, unlink it on disk   → MEMDLL_DELETED_IMAGE_MAPPING (High)
+//   --all            All three MEMDLL scenarios (default when no flag given)
+//
+// MEMSTR scenarios (MemoryStringScanModule) — write strings into exec region, keep alive:
+//   --memstr-family  Family token only (RedENGINE)              → MEMSTR_CHEAT_FAMILY_TOKEN (Medium)
+//   --memstr-behavior Family + behavior (redengine_lua)         → MEMSTR_EXECUTOR_BEHAVIOR (High)
+//   --memstr-evasion  Family + evasion (re_eac_bypass)          → MEMSTR_ANTICHEAT_EVASION (Critical)
+//   --memstr-generic  Generic-only (executor lua, no family)    → NO family finding (constraint check)
+//
+// Common:
 //   --wait N  Stay alive N seconds (default 60, max 600)
 //   --setup   Print Defender exclusion command and exit
 //
@@ -41,10 +49,17 @@ if (args.Contains("--setup"))
 }
 
 // ── Parse args ────────────────────────────────────────────────────────────────
-bool runPe      = args.Contains("--pe");
-bool runThread  = args.Contains("--thread");
-bool runDeleted = args.Contains("--deleted");
-bool runAll     = args.Contains("--all") || (!runPe && !runThread && !runDeleted);
+bool runPe            = args.Contains("--pe");
+bool runThread        = args.Contains("--thread");
+bool runDeleted       = args.Contains("--deleted");
+bool runMemstrFamily  = args.Contains("--memstr-family");
+bool runMemstrBehavior= args.Contains("--memstr-behavior");
+bool runMemstrEvasion = args.Contains("--memstr-evasion");
+bool runMemstrGeneric = args.Contains("--memstr-generic");
+
+bool anyMemstr  = runMemstrFamily || runMemstrBehavior || runMemstrEvasion || runMemstrGeneric;
+bool anyMemdll  = runPe || runThread || runDeleted;
+bool runAll     = args.Contains("--all") || (!anyMemdll && !anyMemstr);
 if (runAll) { runPe = true; runThread = true; runDeleted = true; }
 
 int waitSeconds = 60;
@@ -80,11 +95,17 @@ var LoadLibraryW   = Marshal.GetDelegateForFunctionPointer<LoadLibraryWFn>(pLL);
 // ── Banner ────────────────────────────────────────────────────────────────────
 var procName = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "EchoHarness");
 Console.WriteLine("╔══════════════════════════════════════════════════════════╗");
-Console.WriteLine("║   EchoHarness — MemoryDllTraceModule positive-QA        ║");
+Console.WriteLine("║   EchoHarness — MemoryDllTrace + MemoryStringScan QA    ║");
 Console.WriteLine("╚══════════════════════════════════════════════════════════╝");
 Console.WriteLine($"  PID      : {Environment.ProcessId}");
 Console.WriteLine($"  Process  : {procName}");
-Console.WriteLine($"  Scenarios: {(runPe ? "PE " : "")}{(runThread ? "THREAD " : "")}{(runDeleted ? "DELETED" : "")}");
+var memdllScens  = string.Concat(runPe ? "PE " : "", runThread ? "THREAD " : "", runDeleted ? "DELETED" : "");
+var memstrScens  = string.Concat(runMemstrFamily ? "MEMSTR-FAMILY " : "",
+                                  runMemstrBehavior ? "MEMSTR-BEHAVIOR " : "",
+                                  runMemstrEvasion ? "MEMSTR-EVASION " : "",
+                                  runMemstrGeneric ? "MEMSTR-GENERIC" : "");
+if (!string.IsNullOrWhiteSpace(memdllScens)) Console.WriteLine($"  MEMDLL   : {memdllScens.Trim()}");
+if (!string.IsNullOrWhiteSpace(memstrScens)) Console.WriteLine($"  MEMSTR   : {memstrScens.Trim()}");
 Console.WriteLine($"  Wait     : {waitSeconds}s");
 
 bool nameOk = procName.StartsWith("fivem_b", StringComparison.OrdinalIgnoreCase)
@@ -310,6 +331,94 @@ void RunDeletedScenario()
     {
         try { File.Delete(path); return true; } catch { return false; }
     }
+}
+
+// ── MemoryStringScan scenarios ────────────────────────────────────────────────
+// Each scenario allocates a MEM_PRIVATE region, writes cheat strings as ASCII
+// bytes, then VirtualProtects to EXECUTE_READ so MemoryStringScanModule picks it
+// up as a private-exec region and finds the strings.
+//
+// String construction uses string.Concat splits so no complete branded string
+// appears as a single literal in the binary (mild AV mitigation).
+//
+// Expected outcomes:
+//   --memstr-family   → MEMSTR_CHEAT_FAMILY_TOKEN (Medium)   — family token only
+//   --memstr-behavior → MEMSTR_EXECUTOR_BEHAVIOR (High)      — family + shared behavior token
+//   --memstr-evasion  → MEMSTR_ANTICHEAT_EVASION (Critical)  — family + shared evasion token
+//   --memstr-generic  → NO family finding / NO High or Critical — constraint validation
+
+if (runMemstrFamily)
+{
+    Console.WriteLine("[MEMSTR-FAMILY] Writing family-only strings into exec region...");
+    // Token: "RedENGINE" — present in memory_strings.json familyTokens
+    var tok = string.Concat("Red", "ENGINE");
+    RunMemstrScenario(tok, "[MEMSTR-FAMILY]",
+        "Expected → MEMSTR_CHEAT_FAMILY_TOKEN (Medium) — NO behavior/evasion escalation");
+    Console.WriteLine();
+}
+
+if (runMemstrBehavior)
+{
+    Console.WriteLine("[MEMSTR-BEHAVIOR] Writing family + behavior strings into exec region...");
+    // Family: "RedENGINE"  |  Shared behavior: "TriggerServerEvent" (in sharedBehaviorTokens)
+    var tok = string.Concat("Red", "ENGINE") + "\n" +
+              string.Concat("Trigger", "ServerEvent");
+    RunMemstrScenario(tok, "[MEMSTR-BEHAVIOR]",
+        "Expected → MEMSTR_CHEAT_FAMILY_TOKEN (Medium) + MEMSTR_EXECUTOR_BEHAVIOR (High)");
+    Console.WriteLine();
+}
+
+if (runMemstrEvasion)
+{
+    Console.WriteLine("[MEMSTR-EVASION] Writing family + evasion strings into exec region...");
+    // Family: "RedENGINE"  |  Shared evasion: "fiveguard" (in sharedEvasionTokens)
+    var tok = string.Concat("Red", "ENGINE") + "\n" +
+              string.Concat("five", "guard");
+    RunMemstrScenario(tok, "[MEMSTR-EVASION]",
+        "Expected → MEMSTR_CHEAT_FAMILY_TOKEN (Medium) + MEMSTR_ANTICHEAT_EVASION (Critical)");
+    Console.WriteLine();
+}
+
+if (runMemstrGeneric)
+{
+    Console.WriteLine("[MEMSTR-GENERIC] Writing generic-only strings (no family token) into exec region...");
+    // Only shared behavioral tokens — no family identifier.
+    // Constraint: MemoryStringScanModule must NOT emit MEMSTR_EXECUTOR_BEHAVIOR (High) here.
+    var tok = string.Concat("Trigger", "ServerEvent") + "\n" +
+              string.Concat("executor", " lua") + "\n" +
+              string.Concat("event", " logger");
+    RunMemstrScenario(tok, "[MEMSTR-GENERIC]",
+        "Expected → NO High/Critical finding. Generic tokens without family must not escalate.");
+    Console.WriteLine();
+}
+
+void RunMemstrScenario(string content, string tag, string expected)
+{
+    const uint MEM_COMMIT_RESERVE = 0x3000;
+    const uint PROT_RW = 0x04;
+    const uint PROT_RX = 0x20;
+    const int  SIZE    = 0x4000; // 16 KB — well above 0x1000 scanner threshold
+
+    var mem = VirtualAlloc(IntPtr.Zero, SIZE, MEM_COMMIT_RESERVE, PROT_RW);
+    if (mem == IntPtr.Zero)
+    {
+        Console.WriteLine($"{tag} VirtualAlloc failed ({Marshal.GetLastWin32Error()})");
+        return;
+    }
+
+    // Write content as ASCII bytes followed by null terminator
+    var bytes = System.Text.Encoding.ASCII.GetBytes(content);
+    for (int i = 0; i < bytes.Length && i < SIZE - 1; i++)
+        Marshal.WriteByte(mem, i, bytes[i]);
+    Marshal.WriteByte(mem, bytes.Length < SIZE ? bytes.Length : SIZE - 1, 0);
+
+    // Flip to RX so VirtualQueryEx reports IsExecutable = true
+    VirtualProtect(mem, SIZE, PROT_RX, out _);
+    handles.Add(mem);
+
+    Console.WriteLine($"{tag} Region: 0x{mem.ToInt64():X16}  16KB  PAGE_EXECUTE_READ");
+    Console.WriteLine($"{tag} Content: {content.Replace("\n", " | ")}");
+    Console.WriteLine($"{tag} {expected}");
 }
 
 // ── Wait ─────────────────────────────────────────────────────────────────────

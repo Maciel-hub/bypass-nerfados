@@ -10,8 +10,9 @@ namespace BypassNerfados.Scanner.Modules;
 
 // Scans FiveM/GTA process memory for branded cheat family strings.
 // Complements MemoryDllTraceModule (structural anomalies) by detecting cheat identity at the string level.
-// Critical constraint: generic tokens (lua, executor, imgui, license) NEVER trigger high-risk findings alone.
-// They only escalate when a branded family token is co-located in the same memory region.
+// Critical constraint: generic tokens (lua, executor, imgui, license, auth) NEVER trigger high-risk
+// findings alone — evasion/behavior only escalates when a branded family token is co-located in the same
+// memory region. Enforced by the EmitPack logic: familyTerm == null → skip all escalation.
 public class MemoryStringScanModule : BaseModule
 {
     public override string Name        => "Memory String Scan";
@@ -20,15 +21,27 @@ public class MemoryStringScanModule : BaseModule
     private static readonly string[] CoreTargetNames = ["fivem", "gta5", "redengine"];
     private static readonly string[] FiveMPrefixes   = ["fivem_b", "fivem_gt", "fivem_rgl"];
 
-    private const int MinStringLen  = 8;
-    private const int MaxReadBytes  = 4 * 1024 * 1024; // 4 MB per region
+    private const int MinStringLen = 8;
+    private const int ChunkSize    = 64 * 1024;        //  64 KB per read attempt
+    private const int MaxPerRegion = 4 * 1024 * 1024;  //   4 MB total per region
 
     protected override Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken ct)
     {
-        var (globalFamilies, brFamilies) = LoadRulePacks();
         var findings = new List<Finding>();
-        var targets  = CollectTargetProcesses();
 
+        // Load rule packs — emit diagnostics for any load failure, never fail silently
+        var (globalPack, brPack) = LoadRulePacks();
+        if (globalPack.Error != null) findings.Add(MakePackDiagnostic(globalPack.Error));
+        if (brPack.Error    != null) findings.Add(MakePackDiagnostic(brPack.Error));
+
+        bool allPacksFailed = globalPack.Families.Length == 0 && brPack.Families.Length == 0;
+        if (allPacksFailed)
+        {
+            LogPartialError("Ambos os packs de regras de strings falharam — varredura de famílias de cheat comprometida");
+            return Task.FromResult(findings);
+        }
+
+        var targets = CollectTargetProcesses();
         if (targets.Count == 0)
         {
             var f = new Finding(
@@ -45,7 +58,7 @@ public class MemoryStringScanModule : BaseModule
         foreach (var proc in targets)
         {
             ct.ThrowIfCancellationRequested();
-            try { AnalyzeProcess(proc, globalFamilies, brFamilies, findings, ct); }
+            try { AnalyzeProcess(proc, globalPack, brPack, findings, ct); }
             catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
@@ -79,7 +92,7 @@ public class MemoryStringScanModule : BaseModule
 
     // ── Per-process analysis ───────────────────────────────────────────────────
 
-    private void AnalyzeProcess(Process proc, CheatFamily[] globalFamilies, CheatFamily[] brFamilies,
+    private void AnalyzeProcess(Process proc, CheatFamilyPack globalPack, CheatFamilyPack brPack,
         List<Finding> findings, CancellationToken ct)
     {
         var handle = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, (uint)proc.Id);
@@ -89,7 +102,7 @@ public class MemoryStringScanModule : BaseModule
             return;
         }
 
-        // Per-process dedup: one finding per (familyName, ruleId) regardless of which region matched
+        // Per-process dedup: one finding per "familyName|ruleId" pair regardless of region
         var emitted = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         try
@@ -103,7 +116,7 @@ public class MemoryStringScanModule : BaseModule
                 var corpus = ReadAndBuildCorpus(handle, mod.Base, mod.Size);
                 if (corpus == null) continue;
 
-                MatchAndEmit(proc, globalFamilies, brFamilies, corpus, "module",
+                MatchAndEmit(proc, globalPack, brPack, corpus, "module",
                     mod.Base, mod.Size, mod.Path, emitted, findings);
             }
 
@@ -122,7 +135,7 @@ public class MemoryStringScanModule : BaseModule
                 {
                     var corpus = ReadAndBuildCorpus(handle, regionBase, regionSize);
                     if (corpus != null)
-                        MatchAndEmit(proc, globalFamilies, brFamilies, corpus, "private_exec",
+                        MatchAndEmit(proc, globalPack, brPack, corpus, "private_exec",
                             regionBase, regionSize, null, emitted, findings);
                 }
 
@@ -132,7 +145,7 @@ public class MemoryStringScanModule : BaseModule
         finally { CloseHandle(handle); }
     }
 
-    // ── Module filter — mirror of MemoryDllTraceModule trust policy ───────────
+    // ── Module filter ──────────────────────────────────────────────────────────
 
     private static bool ShouldScanModule(string path)
     {
@@ -146,26 +159,48 @@ public class MemoryStringScanModule : BaseModule
         return true;
     }
 
-    // ── Memory read + string extraction ───────────────────────────────────────
+    // ── Chunked memory read + string extraction ────────────────────────────────
 
+    // Reads up to MaxPerRegion bytes in ChunkSize chunks, continuing on partial failures.
+    // Partial reads (some pages unreadable) yield whatever bytes were accessible.
     private static string? ReadAndBuildCorpus(IntPtr hProcess, long baseAddr, long regionSize)
     {
-        int toRead = (int)Math.Min(regionSize, MaxReadBytes);
-        if (toRead < MinStringLen) return null;
+        long   remaining = Math.Min(regionSize, MaxPerRegion);
+        long   offset    = 0;
+        var    buf       = new byte[ChunkSize];
+        var    sb        = new System.Text.StringBuilder();
+        bool   anyRead   = false;
 
-        var buf = new byte[toRead];
-        if (!ReadProcessMemory(hProcess, new IntPtr(baseAddr), buf, toRead, out int read) || read < MinStringLen)
-            return null;
+        while (remaining > 0)
+        {
+            int toRead = (int)Math.Min(remaining, ChunkSize);
+            ReadProcessMemory(hProcess, new IntPtr(baseAddr + offset), buf, toRead, out int read);
 
-        var strings = ExtractStrings(buf, read);
-        return strings.Count == 0 ? null : string.Join("\0", strings);
+            if (read > 0)
+            {
+                var strings = ExtractStrings(buf, read);
+                if (strings.Count > 0)
+                {
+                    if (sb.Length > 0) sb.Append('\0');
+                    sb.AppendJoin('\0', strings);
+                    anyRead = true;
+                }
+            }
+
+            // Always advance by at least toRead to avoid infinite loop on unreadable pages
+            long advance = read > 0 ? read : toRead;
+            offset    += advance;
+            remaining -= advance;
+        }
+
+        return anyRead ? sb.ToString() : null;
     }
 
     private static List<string> ExtractStrings(byte[] buf, int len)
     {
         var result = new List<string>();
 
-        // ASCII printable strings
+        // ASCII printable strings ≥ MinStringLen
         int start = -1;
         for (int i = 0; i < len; i++)
         {
@@ -181,10 +216,11 @@ public class MemoryStringScanModule : BaseModule
                 start = -1;
             }
         }
+        // Flush ASCII tail at end of buffer
         if (start >= 0 && len - start >= MinStringLen)
             result.Add(Encoding.ASCII.GetString(buf, start, len - start));
 
-        // UTF-16LE printable strings
+        // UTF-16LE printable strings ≥ MinStringLen chars
         start = -1;
         for (int i = 0; i + 1 < len; i += 2)
         {
@@ -201,30 +237,32 @@ public class MemoryStringScanModule : BaseModule
                 start = -1;
             }
         }
+        // Flush UTF-16LE tail at end of buffer
+        if (start >= 0 && (len - start) / 2 >= MinStringLen)
+            result.Add(Encoding.Unicode.GetString(buf, start, len - start));
 
         return result;
     }
 
     // ── Family matching and finding emission ───────────────────────────────────
 
-    private static void MatchAndEmit(Process proc, CheatFamily[] globalFamilies, CheatFamily[] brFamilies,
+    private static void MatchAndEmit(Process proc, CheatFamilyPack globalPack, CheatFamilyPack brPack,
         string corpus, string scope, long baseAddr, long regionSize, string? modulePath,
         HashSet<string> emitted, List<Finding> findings)
     {
-        EmitPack(proc, globalFamilies, corpus, scope, baseAddr, regionSize, modulePath, emitted, findings, isBr: false);
-        EmitPack(proc, brFamilies,     corpus, scope, baseAddr, regionSize, modulePath, emitted, findings, isBr: true);
+        EmitPack(proc, globalPack, corpus, scope, baseAddr, regionSize, modulePath, emitted, findings, isBr: false);
+        EmitPack(proc, brPack,     corpus, scope, baseAddr, regionSize, modulePath, emitted, findings, isBr: true);
     }
 
-    private static void EmitPack(Process proc, CheatFamily[] families, string corpus, string scope,
+    private static void EmitPack(Process proc, CheatFamilyPack pack, string corpus, string scope,
         long baseAddr, long regionSize, string? modulePath,
         HashSet<string> emitted, List<Finding> findings, bool isBr)
     {
-        foreach (var fam in families)
+        foreach (var fam in pack.Families)
         {
             var familyTerm = FirstMatch(corpus, fam.FamilyTokens);
-            if (familyTerm == null) continue;
+            if (familyTerm == null) continue; // no family identity → no escalation, no finding
 
-            // Evidence block shared by all findings from this family+region
             var evidenceBase =
                 $"family: {fam.Name} | matchedTerm: {familyTerm} | scope: {scope}\n" +
                 $"process: {proc.ProcessName} (PID {proc.Id}) | " +
@@ -235,7 +273,7 @@ public class MemoryStringScanModule : BaseModule
                 ? $"módulo suspeito: {Path.GetFileName(modulePath ?? "")}"
                 : "região de memória privada executável";
 
-            // MEMSTR_CHEAT_FAMILY_TOKEN / MEMSTR_BR_CHEAT_FAMILY
+            // ─ MEMSTR_CHEAT_FAMILY_TOKEN / MEMSTR_BR_CHEAT_FAMILY
             string famRule = isBr ? "MEMSTR_BR_CHEAT_FAMILY" : "MEMSTR_CHEAT_FAMILY_TOKEN";
             if (emitted.Add($"{fam.Name}|{famRule}"))
             {
@@ -248,12 +286,13 @@ public class MemoryStringScanModule : BaseModule
                     confidence: Confidence.Medium,
                     ruleId: famRule,
                     entity: $"{proc.ProcessName}:{fam.Name}",
-                    validationHint: "Correlacionar com artefatos de disco (KnownCheats, Prefetch, Amcache) antes de concluir"
+                    validationHint: "Correlacionar com artefatos de disco antes de concluir"
                 ));
             }
 
-            // MEMSTR_EXECUTOR_BEHAVIOR / MEMSTR_BR_EXECUTOR_BEHAVIOR
-            var behavTerm = FirstMatch(corpus, fam.BehaviorTokens);
+            // ─ MEMSTR_EXECUTOR_BEHAVIOR / MEMSTR_BR_EXECUTOR_BEHAVIOR
+            // Shared behavior tokens complement per-family ones; still requires familyHit (above).
+            var behavTerm = FirstMatch(corpus, Merge(fam.BehaviorTokens, pack.SharedBehaviorTokens));
             if (behavTerm != null)
             {
                 string behavRule = isBr ? "MEMSTR_BR_EXECUTOR_BEHAVIOR" : "MEMSTR_EXECUTOR_BEHAVIOR";
@@ -273,8 +312,8 @@ public class MemoryStringScanModule : BaseModule
                 }
             }
 
-            // MEMSTR_ANTICHEAT_EVASION / MEMSTR_BR_ANTICHEAT_BYPASS
-            var evasionTerm = FirstMatch(corpus, fam.EvasionTokens);
+            // ─ MEMSTR_ANTICHEAT_EVASION / MEMSTR_BR_ANTICHEAT_BYPASS
+            var evasionTerm = FirstMatch(corpus, Merge(fam.EvasionTokens, pack.SharedEvasionTokens));
             if (evasionTerm != null)
             {
                 string evasionRule = isBr ? "MEMSTR_BR_ANTICHEAT_BYPASS" : "MEMSTR_ANTICHEAT_EVASION";
@@ -289,12 +328,12 @@ public class MemoryStringScanModule : BaseModule
                         confidence: Confidence.High,
                         ruleId: evasionRule,
                         entity: $"{proc.ProcessName}:{fam.Name}",
-                        validationHint: "Família + evasão co-localizadas é evidência forense de alta confiança — documentar e correlacionar"
+                        validationHint: "Família + evasão co-localizadas é evidência forense de alta confiança"
                     ));
                 }
             }
 
-            // MEMSTR_SPOOFER_PRIVACY (global only)
+            // ─ MEMSTR_SPOOFER_PRIVACY (global only)
             if (!isBr)
             {
                 var spooferTerm = FirstMatch(corpus, fam.SpooferTokens);
@@ -309,33 +348,33 @@ public class MemoryStringScanModule : BaseModule
                         confidence: Confidence.Medium,
                         ruleId: "MEMSTR_SPOOFER_PRIVACY",
                         entity: $"{proc.ProcessName}:{fam.Name}",
-                        validationHint: "Correlacionar com histórico de bans e device IDs presentes no relatório"
+                        validationHint: "Correlacionar com histórico de bans e device IDs no relatório"
                     ));
                 }
             }
 
-            // MEMSTR_BR_SERVER_ABUSE (BR only)
+            // ─ MEMSTR_BR_SERVER_ABUSE (BR only)
             if (isBr)
             {
-                var abuseTerm = FirstMatch(corpus, fam.AbuseTokens);
+                var abuseTerm = FirstMatch(corpus, Merge(fam.AbuseTokens, pack.SharedAbuseTokens));
                 if (abuseTerm != null && emitted.Add($"{fam.Name}|MEMSTR_BR_SERVER_ABUSE"))
                 {
                     findings.Add(new Finding(
                         RiskLevel.High, FindingCategory.MemoryAnomaly, "Memory String Scan",
-                        $"MEMSTR_BR_SERVER_ABUSE — {fam.Name} [{fam.Priority.ToUpper()}] strings de abuso de servidor em {proc.ProcessName} (PID {proc.Id})",
+                        $"MEMSTR_BR_SERVER_ABUSE — {fam.Name} [{fam.Priority.ToUpper()}] abuso de servidor em {proc.ProcessName} (PID {proc.Id})",
                         $"Strings de crash/kick de servidor co-localizadas com família de cheat BR {fam.Name}.\n" +
                         $"Indica ferramentas ativas de disruption contra o servidor FiveM.",
                         evidenceBase + $"\nabuseMatch: {abuseTerm}",
                         confidence: Confidence.High,
                         ruleId: "MEMSTR_BR_SERVER_ABUSE",
                         entity: $"{proc.ProcessName}:{fam.Name}",
-                        validationHint: "Strings de abuso de servidor são evidência de intenção de disruption ativo"
+                        validationHint: "Strings de abuso de servidor evidenciam intenção de disruption ativo"
                     ));
                 }
             }
 
-            // MEMSTR_LICENSE_BEACON (both packs)
-            var licenseTerm = FirstMatch(corpus, fam.LicenseTokens);
+            // ─ MEMSTR_LICENSE_BEACON (both packs)
+            var licenseTerm = FirstMatch(corpus, Merge(fam.LicenseTokens, pack.SharedLicenseTokens));
             if (licenseTerm != null && emitted.Add($"{fam.Name}|MEMSTR_LICENSE_BEACON"))
             {
                 var licRisk = fam.Priority == "p0" ? RiskLevel.High : RiskLevel.Medium;
@@ -351,8 +390,8 @@ public class MemoryStringScanModule : BaseModule
                 ));
             }
 
-            // MEMSTR_MENU_UI (both packs)
-            var menuTerm = FirstMatch(corpus, fam.MenuTokens);
+            // ─ MEMSTR_MENU_UI (both packs)
+            var menuTerm = FirstMatch(corpus, Merge(fam.MenuTokens, pack.SharedMenuTokens));
             if (menuTerm != null && emitted.Add($"{fam.Name}|MEMSTR_MENU_UI"))
             {
                 findings.Add(new Finding(
@@ -371,16 +410,19 @@ public class MemoryStringScanModule : BaseModule
 
     // ── Rule pack loading ──────────────────────────────────────────────────────
 
-    private static (CheatFamily[] global, CheatFamily[] br) LoadRulePacks()
+    private static (CheatFamilyPack global, CheatFamilyPack br) LoadRulePacks()
     {
         var dir = Path.Combine(AppContext.BaseDirectory, "rules");
         return (LoadPack(dir, "memory_strings.json"), LoadPack(dir, "memory_strings_br.json"));
     }
 
-    private static CheatFamily[] LoadPack(string dir, string file)
+    private static CheatFamilyPack LoadPack(string dir, string file)
     {
         var path = Path.Combine(dir, file);
-        if (!File.Exists(path)) return [];
+
+        if (!File.Exists(path))
+            return new CheatFamilyPack { Error = $"MEMSTR_RULE_PACK_MISSING: {file} não encontrado em {dir}" };
+
         try
         {
             var opts = new JsonSerializerOptions
@@ -389,9 +431,30 @@ public class MemoryStringScanModule : BaseModule
                 ReadCommentHandling = JsonCommentHandling.Skip
             };
             var pack = JsonSerializer.Deserialize<CheatFamilyPack>(File.ReadAllText(path), opts);
-            return pack?.Families ?? [];
+
+            if (pack == null || pack.Families.Length == 0)
+                return new CheatFamilyPack { Error = $"MEMSTR_RULE_PACK_INVALID: {file} — pack vazio ou inválido" };
+
+            return pack;
         }
-        catch { return []; }
+        catch (Exception ex)
+        {
+            return new CheatFamilyPack { Error = $"MEMSTR_RULE_PACK_INVALID: {file} — {ex.Message}" };
+        }
+    }
+
+    private static Finding MakePackDiagnostic(string error)
+    {
+        bool missing = error.StartsWith("MEMSTR_RULE_PACK_MISSING");
+        var f = new Finding(
+            RiskLevel.Info, FindingCategory.LogCoverage, "Memory String Scan",
+            missing ? "MEMSTR_RULE_PACK_MISSING — pack de regras de strings ausente"
+                    : "MEMSTR_RULE_PACK_INVALID — pack de regras de strings inválido",
+            $"O pack de regras de strings de cheat não pôde ser carregado.\n{error}",
+            confidence: Confidence.Confirmed,
+            ruleId: missing ? "MEMSTR_RULE_PACK_MISSING" : "MEMSTR_RULE_PACK_INVALID");
+        f.ScoreEligible = false;
+        return f;
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -404,8 +467,12 @@ public class MemoryStringScanModule : BaseModule
         return null;
     }
 
+    // Merges two token arrays without allocation when one is empty
+    private static string[] Merge(string[] a, string[] b) =>
+        a.Length == 0 ? b : b.Length == 0 ? a : [..a, ..b];
+
     private static bool IsExecutable(uint p) =>
-        (p & 0xFF) is 0x10 or 0x20 or 0x40 or 0x80; // EXECUTE variants
+        (p & 0xFF) is 0x10 or 0x20 or 0x40 or 0x80;
 
     // Authenticode check — same approach as MemoryDllTraceModule
     private static bool IsAuthenticodeSigned(string path)
@@ -413,9 +480,9 @@ public class MemoryStringScanModule : BaseModule
         if (!File.Exists(path)) return false;
         try
         {
-            var pathPtr     = Marshal.StringToHGlobalUni(path);
-            var fiSize      = Marshal.SizeOf<WINTRUST_FILE_INFO>();
-            var fiPtr       = Marshal.AllocHGlobal(fiSize);
+            var pathPtr = Marshal.StringToHGlobalUni(path);
+            var fiSize  = Marshal.SizeOf<WINTRUST_FILE_INFO>();
+            var fiPtr   = Marshal.AllocHGlobal(fiSize);
             try
             {
                 Marshal.StructureToPtr(new WINTRUST_FILE_INFO
@@ -431,28 +498,24 @@ public class MemoryStringScanModule : BaseModule
                     cbStruct            = (uint)Marshal.SizeOf<WINTRUST_DATA>(),
                     pPolicyCallbackData = IntPtr.Zero,
                     pSIPClientData      = IntPtr.Zero,
-                    dwUIChoice          = 2,  // WTD_UI_NONE
-                    fdwRevocationChecks = 0,  // WTD_REVOKE_NONE
-                    dwUnionChoice       = 1,  // WTD_CHOICE_FILE
+                    dwUIChoice          = 2,
+                    fdwRevocationChecks = 0,
+                    dwUnionChoice       = 1,
                     pFile               = fiPtr,
-                    dwStateAction       = 1,  // WTD_STATEACTION_VERIFY
+                    dwStateAction       = 1,
                     hWVTStateData       = IntPtr.Zero,
                     pwszURLReference    = IntPtr.Zero,
-                    dwProvFlags         = 0x00001000, // WTD_CACHE_ONLY_URL_RETRIEVAL
+                    dwProvFlags         = 0x00001000,
                     dwUIContext         = 0,
                     pSignatureSettings  = IntPtr.Zero
                 };
                 var action = new Guid("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
                 uint res   = WinVerifyTrust(IntPtr.Zero, ref action, ref td);
-                td.dwStateAction = 2; // WTD_STATEACTION_CLOSE
+                td.dwStateAction = 2;
                 WinVerifyTrust(IntPtr.Zero, ref action, ref td);
                 return res == 0;
             }
-            finally
-            {
-                Marshal.FreeHGlobal(fiPtr);
-                Marshal.FreeHGlobal(pathPtr);
-            }
+            finally { Marshal.FreeHGlobal(fiPtr); Marshal.FreeHGlobal(pathPtr); }
         }
         catch { return false; }
     }
@@ -567,11 +630,17 @@ public class MemoryStringScanModule : BaseModule
     [DllImport("wintrust.dll", SetLastError = false, CharSet = CharSet.Unicode)]
     private static extern uint WinVerifyTrust(IntPtr hwnd, ref Guid pgActionID, ref WINTRUST_DATA pWVTData);
 
-    // ── JSON model ────────────────────────────────────────────────────────────
+    // ── JSON model (nested — avoids CS9051 file-local type restrictions) ───────
 
     private sealed class CheatFamilyPack
     {
-        [JsonPropertyName("families")] public CheatFamily[] Families { get; set; } = [];
+        [JsonPropertyName("families")]              public CheatFamily[] Families             { get; set; } = [];
+        [JsonPropertyName("sharedBehaviorTokens")] public string[]      SharedBehaviorTokens { get; set; } = [];
+        [JsonPropertyName("sharedEvasionTokens")]  public string[]      SharedEvasionTokens  { get; set; } = [];
+        [JsonPropertyName("sharedAbuseTokens")]    public string[]      SharedAbuseTokens    { get; set; } = [];
+        [JsonPropertyName("sharedMenuTokens")]     public string[]      SharedMenuTokens     { get; set; } = [];
+        [JsonPropertyName("sharedLicenseTokens")]  public string[]      SharedLicenseTokens  { get; set; } = [];
+        public string? Error { get; set; }
     }
 
     private sealed class CheatFamily

@@ -1,6 +1,26 @@
 {
   "_comment": "Global cheat family string patterns for MemoryStringScanModule. Não recompila — edite e redistribua.",
-  "version": "1.0",
+  "version": "1.1",
+
+  "_commentShared": "Tokens comportamentais/evasão comuns a QUALQUER família. Só disparam quando token de família confirmado na mesma região.",
+  "sharedBehaviorTokens": [
+    "executor lua", "lua executor", "TriggerServerEvent", "Resource Injection",
+    "event logger", "event blocker", "NativeInvoker", "invoke_native",
+    "lua_execute", "runscript", "dofile", "loadstring"
+  ],
+  "sharedEvasionTokens": [
+    "fiveguard", "mqcu", "likizao", "thn_ac",
+    "fusiongroup", "lotusgroup", "spacegroup", "santagroup",
+    "bypass anticheat", "disable anticheat", "patch anticheat",
+    "hook anticheat", "anticheatkick", "ban_bypass", "hwid_bypass"
+  ],
+  "sharedMenuTokens": [
+    "dumper", "stopper", "imgui"
+  ],
+  "sharedLicenseTokens": [
+    "hwid"
+  ],
+
   "families": [
     {
       "name": "RedENGINE",
@@ -9,7 +29,7 @@
       "behaviorTokens": ["redengine_lua", "re_lua_exec", "re_inject", "re_hook", "rip_relative_call", "re_manual_map"],
       "evasionTokens": ["re_eac_bypass", "re_be_bypass", "redengine_bypass", "re_anticheat_evade", "re_nprotect_bypass"],
       "spooferTokens": ["re_hwid_spoof", "redengine_spoof", "re_disk_serial_spoof", "re_mac_spoof"],
-      "licenseTokens": ["redengine.gg/auth", "re_license_key", "re_auth_server", "redengine_activation", "re_license_check"],
+      "licenseTokens": ["redengine.gg/auth", "re_license_key", "re_auth_server", "redengine_activation"],
       "menuTokens": ["RedENGINE Menu", "RE_MENU_INIT", "re_menu_draw", "RedENGINE v"]
     },
     {
