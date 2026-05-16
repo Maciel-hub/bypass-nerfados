@@ -426,6 +426,7 @@ public class SrumModule : BaseModule
                         $"SRUM: schema incompatível — {string.Join(" e ", missing)} não encontradas",
                         $"As colunas de bytes não foram encontradas nesta build do Windows.\n" +
                         $"AppId e TimeStamp disponíveis — cheats conhecidos ainda são detectáveis por nome.\n" +
+                        $"Totais de bytes indisponíveis; detecção por app path e timeline permanecem ativas.\n" +
                         $"Colunas não encontradas: {string.Join(", ", missing)}",
                         $"Colunas disponíveis: {schemaStr}",
                         confidence: Confidence.Confirmed,
@@ -433,10 +434,8 @@ public class SrumModule : BaseModule
                     );
                     schemaFinding.ScoreEligible = false;
                     findings.Add(schemaFinding);
-
-                    LogPartialError(
-                        $"SRUM: schema da tabela de rede — faltam {string.Join(", ", missing)}. " +
-                        $"TimeStamp coltyp={tsColtyp}. Continuando sem totais de bytes.");
+                    // Note: bytes ausentes são degradação informativa — NÃO chama LogPartialError,
+                    // pois AppId + TimeStamp + IdMap foram lidos com sucesso → módulo = Executed.
                 }
 
                 var cutoff = DateTime.UtcNow - lookback;
