@@ -152,7 +152,7 @@ public class SrumModule : BaseModule
 
             ct.ThrowIfCancellationRequested();
 
-            var appMap = BuildAppMap(sesid, dbid, ct);
+            var appMap = BuildAppMap(sesid, dbid, findings, ct);
             ct.ThrowIfCancellationRequested();
 
             ReadNetworkUsage(sesid, dbid, appMap, findings, lookback, ct);
@@ -203,16 +203,42 @@ public class SrumModule : BaseModule
     }
 
     // Builds idIndex → app path dictionary from SruDbIdMapTable.
-    private static Dictionary<int, string> BuildAppMap(JET_SESID sesid, JET_DBID dbid, CancellationToken ct)
+    private Dictionary<int, string> BuildAppMap(JET_SESID sesid, JET_DBID dbid,
+        List<Finding> findings, CancellationToken ct)
     {
         var map = new Dictionary<int, string>();
+        bool tableOpened = false;
+
         try
         {
             Api.JetOpenTable(sesid, dbid, IdTable, null, 0, OpenTableGrbit.ReadOnly, out var tableId);
+            tableOpened = true;
             try
             {
-                var idxCol = TryGetColumn(sesid, tableId, "IdIndex", "IdIdx", "Id");
-                var appCol = TryGetColumn(sesid, tableId, "App", "ExeInfo", "AppName");
+                JET_COLUMNID idxCol, appCol;
+                try
+                {
+                    idxCol = TryGetColumn(sesid, tableId, "IdIndex", "IdIdx", "Id");
+                    appCol = TryGetColumn(sesid, tableId, "App", "ExeInfo", "AppName");
+                }
+                catch (InvalidOperationException)
+                {
+                    var schema    = DumpTableSchema(sesid, tableId);
+                    var schemaStr = string.Join(", ", schema.Select(c => $"{c.Name}({c.Coltyp})"));
+                    LogPartialError(
+                        $"SRUM: colunas do IdMap não encontradas. Colunas disponíveis: [{schemaStr}]");
+                    var f = new Finding(
+                        RiskLevel.Info, FindingCategory.LogCoverage, Name,
+                        "SRUM: schema do IdMap incompatível — colunas de identificação não encontradas",
+                        "As colunas IdIndex e App da tabela de mapeamento não foram encontradas.\n" +
+                        "App paths não serão resolvidos — detecção por nome de arquivo do cheat ainda funciona.",
+                        $"Colunas disponíveis: {schemaStr}",
+                        confidence: Confidence.Confirmed,
+                        ruleId: "SRUM_IDMAP_SCHEMA_INCOMPATIBLE");
+                    f.ScoreEligible = false;
+                    findings.Add(f);
+                    return map;
+                }
 
                 Api.MoveBeforeFirst(sesid, tableId);
                 while (Api.TryMoveNext(sesid, tableId))
@@ -227,7 +253,27 @@ public class SrumModule : BaseModule
             }
             finally { Api.JetCloseTable(sesid, tableId); }
         }
-        catch { /* table may not exist on older Windows */ }
+        catch (EsentObjectNotFoundException)
+        {
+            LogPartialError("SRUM: SruDbIdMapTable não encontrada — versão do Windows incompatível");
+        }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception ex) { LogPartialError("SRUM: falha ao ler IdMap", ex); }
+
+        if (tableOpened && map.Count == 0)
+        {
+            var f = new Finding(
+                RiskLevel.Info, FindingCategory.LogCoverage, Name,
+                "SRUM: IdMap vazio — app paths não resolvidos",
+                "A tabela SruDbIdMapTable foi lida mas não contém mapeamentos de app path.\n" +
+                "Pode ocorrer em sistemas recém-instalados ou com SRUM ainda sem dados.\n" +
+                "Detecção por nome de executável permanece ativa.",
+                confidence: Confidence.Confirmed,
+                ruleId: "SRUM_IDMAP_EMPTY");
+            f.ScoreEligible = false;
+            findings.Add(f);
+        }
+
         return map;
     }
 
