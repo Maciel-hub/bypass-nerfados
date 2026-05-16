@@ -20,15 +20,19 @@ public static class EvidenceExporter
 
         var dto = new EvidenceExportDto
         {
-            Machine         = result.MachineName,
-            User            = result.CurrentUser,
-            ScanTime        = result.ScanTime,
-            LookbackDays    = lookback,
-            TotalScore      = result.TotalScore,
-            OverallRisk     = result.OverallRiskLabel,
-            Findings        = result.Findings.Select(FindingDto.From).ToList(),
-            EvidenceBundles = result.EvidenceBundles.Select(BundleDto.From).ToList(),
-            ModuleCoverage  = result.ModuleCoverage.Select(ModuleCoverageDto.From).ToList()
+            Machine               = result.MachineName,
+            User                  = result.CurrentUser,
+            ScanTime              = result.ScanTime,
+            LookbackDays          = lookback,
+            TotalScore            = result.TotalScore,
+            RawScore              = result.RawScore,
+            FilteredCount         = result.FilteredCount,
+            EligibleFindingCount  = result.Findings.Count(f => f.ScoreEligible),
+            FilteredFindingCount  = result.FilteredCount,
+            OverallRisk           = result.OverallRiskLabel,
+            Findings              = result.Findings.Select(FindingDto.From).ToList(),
+            EvidenceBundles       = result.EvidenceBundles.Select(BundleDto.From).ToList(),
+            ModuleCoverage        = result.ModuleCoverage.Select(ModuleCoverageDto.From).ToList()
         };
         WriteJson(Path.Combine(runFolder, "evidence.json"), dto);
 
@@ -151,12 +155,16 @@ public static class EvidenceExporter
 
 file sealed class EvidenceExportDto
 {
-    public string   Machine         { get; init; } = "";
-    public string   User            { get; init; } = "";
-    public DateTime ScanTime        { get; init; }
-    public int      LookbackDays    { get; init; }
-    public int      TotalScore      { get; init; }
-    public string   OverallRisk     { get; init; } = "";
+    public string   Machine              { get; init; } = "";
+    public string   User                 { get; init; } = "";
+    public DateTime ScanTime             { get; init; }
+    public int      LookbackDays         { get; init; }
+    public int      TotalScore           { get; init; }
+    public int      RawScore             { get; init; }
+    public int      FilteredCount        { get; init; }
+    public int      EligibleFindingCount { get; init; }
+    public int      FilteredFindingCount { get; init; }
+    public string   OverallRisk          { get; init; } = "";
     public List<FindingDto>         Findings        { get; init; } = [];
     public List<BundleDto>          EvidenceBundles { get; init; } = [];
     public List<ModuleCoverageDto>  ModuleCoverage  { get; init; } = [];
@@ -187,6 +195,9 @@ file sealed class FindingDto
     public string?   RuleId         { get; init; }
     public string?   Entity         { get; init; }
     public string?   ValidationHint { get; init; }
+    public bool      ScoreEligible  { get; init; }
+    public int       BaseScore      { get; init; }
+    public double    WeightedScore  { get; init; }
 
     public static FindingDto From(Finding f) => new()
     {
@@ -200,7 +211,10 @@ file sealed class FindingDto
         Confidence     = f.Confidence.ToString(),
         RuleId         = f.RuleId,
         Entity         = f.Entity,
-        ValidationHint = f.ValidationHint
+        ValidationHint = f.ValidationHint,
+        ScoreEligible  = f.ScoreEligible,
+        BaseScore      = f.BaseScore,
+        WeightedScore  = f.WeightedScore
     };
 }
 

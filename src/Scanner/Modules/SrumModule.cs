@@ -72,10 +72,10 @@ public class SrumModule : BaseModule
                 var dstFile = Path.Combine(dst, Path.GetFileName(file));
                 var copied  = false;
 
-                // Use CopyLockedFile for SRUDB.dat — permissive FileShare copy; fallback below if it fails
+                // SRUDB.dat: try permissive FileShare first, then VSS if ESE holds an exclusive lock
                 if (string.Equals(Path.GetFileName(file), SruDb, StringComparison.OrdinalIgnoreCase))
                 {
-                    var vssTemp = CopyLockedFile(file);
+                    var vssTemp = CopyLockedFileWithVss(file);
                     if (vssTemp != null)
                     {
                         try { File.Move(vssTemp, dstFile, overwrite: true); copied = true; }

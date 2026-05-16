@@ -57,15 +57,30 @@ public class ProcessMemoryModule : BaseModule
                 }
 
                 // Check for known cheat executables running
-                if (CheatDatabase.KnownExecutables.ContainsKey(nameLower + ".exe"))
+                if (CheatDatabase.KnownExecutables.TryGetValue(nameLower + ".exe", out var cheatEntry))
                 {
-                    findings.Add(new Finding(
-                        RiskLevel.Critical,
-                        FindingCategory.Cheat,
-                        "Process Memory",
-                        $"CHEAT EM EXECUÇÃO: {proc.ProcessName} (PID {proc.Id})",
-                        $"Processo de cheat conhecido ativo no sistema."
-                    ));
+                    if (cheatEntry.IsGenericName)
+                    {
+                        findings.Add(new Finding(
+                            RiskLevel.Medium,
+                            FindingCategory.SuspiciousExecution,
+                            "Process Memory",
+                            $"Processo com nome associado a loader genérico: {proc.ProcessName} (PID {proc.Id})",
+                            $"Nome genérico associado a cheats FiveM — confirmar por caminho, hash ou correlação.",
+                            confidence: Confidence.Low,
+                            validationHint: "Verificar caminho do executável, hash SHA256 e correlação com Prefetch/BAM/UserAssist"
+                        ));
+                    }
+                    else
+                    {
+                        findings.Add(new Finding(
+                            RiskLevel.Critical,
+                            FindingCategory.Cheat,
+                            "Process Memory",
+                            $"CHEAT EM EXECUÇÃO: {proc.ProcessName} (PID {proc.Id})",
+                            $"Processo de cheat conhecido ativo no sistema."
+                        ));
+                    }
                 }
             }
             catch (OperationCanceledException) { throw; }

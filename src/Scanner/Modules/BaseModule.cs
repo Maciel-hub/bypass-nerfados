@@ -257,6 +257,30 @@ public abstract class BaseModule
         return TryCopyLocked(sourcePath, temp) ? temp : null;
     }
 
+    // Like CopyLockedFile but falls back to VSS when the ESE engine holds an exclusive lock
+    // (e.g. SRUDB.dat — the SRUM service holds an exclusive write lock even with FileShare).
+    protected static string? CopyLockedFileWithVss(string sourcePath)
+    {
+        var temp = Path.Combine(Path.GetTempPath(), $"echo_scan_{Guid.NewGuid():N}.tmp");
+        if (TryCopyLocked(sourcePath, temp)) return temp;
+        try { File.Delete(temp); } catch { }
+
+        var root = Path.GetPathRoot(sourcePath) ?? @"C:\";
+        var (shadowId, device) = CreateVssShadow(root);
+        if (device == null) return null;
+
+        try
+        {
+            var rel     = sourcePath[root.Length..];
+            var vssPath = device.TrimEnd('\\') + "\\" + rel;
+            temp = Path.Combine(Path.GetTempPath(), $"echo_scan_{Guid.NewGuid():N}.tmp");
+            if (TryCopyLocked(vssPath, temp)) return temp;
+            try { File.Delete(temp); } catch { }
+            return null;
+        }
+        finally { TryDeleteVssShadow(shadowId!); }
+    }
+
     // Loads an offline hive under HKLM\<tempKeyName>. Returns the RegistryKey on success;
     // caller must dispose the key then call UnloadOfflineHive(tempKeyName, tempFile).
     //
