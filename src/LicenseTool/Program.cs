@@ -115,6 +115,12 @@ static int CmdIssue(string[] args)
         return 1;
     }
 
+    if (!Version.TryParse(maxVersion, out _))
+    {
+        Console.Error.WriteLine($"--max-version inválida: '{maxVersion}' — use formato X.Y ou X.Y.Z");
+        return 1;
+    }
+
     if (!File.Exists(keyPath))
     {
         Console.Error.WriteLine($"Chave privada não encontrada: {keyPath}");

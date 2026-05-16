@@ -50,9 +50,15 @@ if (!licResult.Success)
 var _lic = licResult.License!;
 AnsiConsole.MarkupLine($"[green]✓[/] [grey]Cliente: [white]{Markup.Escape(_lic.CustomerId)}[/] · Expira: [white]{_lic.ExpiresAt.LocalDateTime:dd/MM/yyyy}[/][/]");
 AnsiConsole.WriteLine();
+LicenseValidator.RecordValidation(DateTimeOffset.UtcNow);
 
 var config        = new ScanConfig { Rules = RulesLoader.Load() };
 var noFinalPrompt = false;
+
+// Apply license feature gates — set before arg parsing so --profile deep below can be re-blocked
+config.LicenseFeatures = new HashSet<string>(_lic.Features, StringComparer.OrdinalIgnoreCase);
+if (!config.LicenseFeatures.Contains("memory"))
+    config.DeepMemoryScan = false;
 
 // Parse arguments
 for (int i = 0; i < args.Length; i++)
@@ -92,6 +98,13 @@ for (int i = 0; i < args.Length; i++)
             break;
         case "--help" or "-h": PrintHelp(); return 0;
     }
+}
+
+// Post-arg-parse feature gates (deep profile can be set via --profile deep in arg loop)
+if (!config.LicenseFeatures.Contains("deep") && config.Profile == ScanProfile.Deep)
+{
+    AnsiConsole.MarkupLine("[yellow]⚠ Licença não inclui feature 'deep' — perfil alterado para Default.[/]");
+    config.Profile = ScanProfile.Default;
 }
 
 AnsiConsole.Clear();

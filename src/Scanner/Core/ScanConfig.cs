@@ -38,6 +38,11 @@ public class ScanConfig
     public ScanProfile Profile { get; set; } = ScanProfile.Default;
     public ExternalRules Rules { get; set; } = ExternalRules.Empty;
 
+    // Features granted by license.nerf. Default includes all features (dev / no-license-check builds).
+    // Set from LicenseInfo.Features after validation in Program.cs.
+    public HashSet<string> LicenseFeatures { get; set; } =
+        new(["deep", "memory", "br_pack", "forensic"], StringComparer.OrdinalIgnoreCase);
+
     public string ReportFileName =>
         $"Echo_Nerfados_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}";
 

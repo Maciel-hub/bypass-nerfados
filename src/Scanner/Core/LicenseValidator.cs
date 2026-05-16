@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.Win32;
 
 namespace BypassNerfados.Scanner.Core;
 
@@ -14,7 +15,8 @@ public enum LicenseErrorCode
     InvalidSignature,
     Expired,
     WrongMachine,
-    VersionTooHigh
+    VersionTooHigh,
+    ClockRollback
 }
 
 public sealed record LicenseInfo(
@@ -47,47 +49,71 @@ public static class LicenseValidator
         PropertyNameCaseInsensitive = true
     };
 
+    // Known OEM placeholder strings that are NOT stable identifiers
+    private static readonly HashSet<string> s_placeholders = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "", "N/A", "None", "Unknown", "0", "00000000",
+        "To be filled by O.E.M.", "To Be Filled By O.E.M.",
+        "Not Specified", "System Serial Number",
+        "Default string", "OEM", "OEM Chassis",
+        "00000000000000000000000000000000",
+        "INVALID", "Base Board Serial Number"
+    };
+
+    // Clock rollback state (DPAPI-protected, LocalMachine scope)
+    private static readonly string s_stateDir =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EchoNerfados");
+    private static readonly string s_statePath =
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EchoNerfados", "last_check");
+    private const int ClockToleranceMinutes = 5;
+
+    // ── Public API ────────────────────────────────────────────────────────────
+
     /// <summary>
-    /// Returns a stable 16-hex-char machine ID derived from CPU + motherboard serial numbers.
+    /// Computes a stable 16-hex-char machine ID from 4 hardware/OS sources.
+    /// Order: ProcessorId, BaseBoard.SerialNumber, BIOS.SerialNumber, MachineGuid.
+    /// Placeholder values are excluded. Falls back to MachineName+Domain if all fail.
     /// </summary>
     public static string ComputeMachineId()
     {
-        string cpuId = "", boardSerial = "";
-        try
-        {
-            using var cpu = new ManagementObjectSearcher("SELECT ProcessorId FROM Win32_Processor");
-            cpuId = cpu.Get().Cast<ManagementObject>()
-                .Select(o => o["ProcessorId"]?.ToString()?.Trim())
-                .FirstOrDefault(s => !string.IsNullOrEmpty(s)) ?? "";
-        }
-        catch { }
-        try
-        {
-            using var board = new ManagementObjectSearcher("SELECT SerialNumber FROM Win32_BaseBoard");
-            boardSerial = board.Get().Cast<ManagementObject>()
-                .Select(o => o["SerialNumber"]?.ToString()?.Trim())
-                .FirstOrDefault(s => !string.IsNullOrEmpty(s) && s != "To be filled by O.E.M.") ?? "";
-        }
-        catch { }
+        var parts = new List<string>();
 
-        var raw = string.IsNullOrEmpty(cpuId) && string.IsNullOrEmpty(boardSerial)
-            ? Environment.MachineName + "|" + Environment.UserDomainName
-            : cpuId + "|" + boardSerial;
+        // ProcessorId — survives OS reinstall, changes with new CPU
+        parts.AddRange(GetWmiStrings("SELECT ProcessorId FROM Win32_Processor", "ProcessorId"));
+        // BaseBoard SerialNumber — motherboard
+        parts.AddRange(GetWmiStrings("SELECT SerialNumber FROM Win32_BaseBoard", "SerialNumber"));
+        // BIOS SerialNumber — often same as chassis serial
+        parts.AddRange(GetWmiStrings("SELECT SerialNumber FROM Win32_BIOS", "SerialNumber"));
+        // MachineGuid — set at Windows install time, survives hardware swaps
+        var guid = GetRegistryString(@"SOFTWARE\Microsoft\Cryptography", "MachineGuid", RegistryView.Registry64);
+        if (!IsPlaceholder(guid)) parts.Add(guid!);
 
-        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
+        if (parts.Count == 0)
+        {
+            parts.Add(Environment.MachineName);
+            parts.Add(Environment.UserDomainName ?? "WORKGROUP");
+        }
+
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(string.Join("|", parts)));
         return Convert.ToHexString(hash)[..16].ToLowerInvariant();
     }
 
     /// <summary>
-    /// Validates license.nerf beside the EXE. Returns <see cref="LicenseResult.Success"/> == true if valid.
+    /// Validates license.nerf beside the EXE. Returns Success=true if all checks pass.
     /// </summary>
     public static LicenseResult Validate()
     {
+        var utcNow      = DateTimeOffset.UtcNow;
         var licensePath = Path.Combine(AppContext.BaseDirectory, "license.nerf");
 
         if (!File.Exists(licensePath))
             return Fail(LicenseErrorCode.NotFound,
                 "Arquivo de licença não encontrado. Coloque license.nerf ao lado do EXE.");
+
+        // Clock rollback check — before anything else
+        if (IsClockRolledBack(utcNow))
+            return Fail(LicenseErrorCode.ClockRollback,
+                "Relógio do sistema foi retrocedido. Verifique data/hora e sincronize com NTP.");
 
         LicenseData? data;
         try
@@ -120,7 +146,7 @@ public static class LicenseValidator
                 System.Globalization.DateTimeStyles.RoundtripKind, out var expiresAt))
             return Fail(LicenseErrorCode.ParseError, "Datas de licença inválidas em license.nerf.");
 
-        if (DateTimeOffset.UtcNow > expiresAt)
+        if (utcNow > expiresAt)
             return Fail(LicenseErrorCode.Expired,
                 $"Licença expirada em {expiresAt.LocalDateTime:dd/MM/yyyy}. Renove sua licença.");
 
@@ -133,6 +159,7 @@ public static class LicenseValidator
                     $"Licença não é válida para esta máquina.\nID desta máquina: {myId}");
         }
 
+        // maxVersion: fail closed — invalid format treated as version too high
         var currentVersion = GetAssemblyVersion();
         if (!IsVersionAllowed(currentVersion, data.MaxVersion))
             return Fail(LicenseErrorCode.VersionTooHigh,
@@ -147,6 +174,25 @@ public static class LicenseValidator
             data.MaxVersion));
     }
 
+    /// <summary>
+    /// Records successful validation timestamp (DPAPI-protected, used to detect clock rollback).
+    /// Call immediately after a successful Validate().
+    /// </summary>
+    public static void RecordValidation(DateTimeOffset utcNow)
+    {
+        try
+        {
+            Directory.CreateDirectory(s_stateDir);
+            var plain = Encoding.UTF8.GetBytes(utcNow.UtcTicks.ToString("D20"));
+            var enc   = System.Security.Cryptography.ProtectedData.Protect(
+                plain, null, System.Security.Cryptography.DataProtectionScope.LocalMachine);
+            File.WriteAllBytes(s_statePath, enc);
+        }
+        catch { }
+    }
+
+    // ── Internal helpers ──────────────────────────────────────────────────────
+
     // Canonical payload: pipe-separated raw string fields, features sorted.
     // Must match LicenseTool.CanonicalPayload exactly.
     internal static string CanonicalPayload(LicenseData d)
@@ -155,6 +201,21 @@ public static class LicenseValidator
             ? string.Join(",", d.Features.OrderBy(x => x, StringComparer.Ordinal))
             : "";
         return $"{d.CustomerId}|{d.IssuedAt}|{d.ExpiresAt}|{d.MachineId}|{features}|{d.MaxVersion}";
+    }
+
+    private static bool IsClockRolledBack(DateTimeOffset utcNow)
+    {
+        try
+        {
+            if (!File.Exists(s_statePath)) return false;
+            var enc   = File.ReadAllBytes(s_statePath);
+            var plain = System.Security.Cryptography.ProtectedData.Unprotect(
+                enc, null, System.Security.Cryptography.DataProtectionScope.LocalMachine);
+            var ticks = long.Parse(Encoding.UTF8.GetString(plain).Trim());
+            var last  = new DateTimeOffset(ticks, TimeSpan.Zero);
+            return utcNow < last.AddMinutes(-ClockToleranceMinutes);
+        }
+        catch { return false; }
     }
 
     private static bool VerifySignature(string payload, string sigBase64)
@@ -179,12 +240,43 @@ public static class LicenseValidator
         return plus > 0 ? info[..plus] : info;
     }
 
+    // Fail closed: if maxVersion can't be parsed, it's treated as too restrictive.
     private static bool IsVersionAllowed(string current, string maxVersion)
     {
-        if (!Version.TryParse(current, out var cur) || !Version.TryParse(maxVersion, out var max))
-            return true;
+        if (!Version.TryParse(maxVersion, out var max)) return false;
+        if (!Version.TryParse(current,    out var cur)) return true;
         return cur <= max;
     }
+
+    private static List<string> GetWmiStrings(string query, string property)
+    {
+        var result = new List<string>();
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(query);
+            foreach (ManagementObject obj in searcher.Get())
+            {
+                var v = obj[property]?.ToString()?.Trim();
+                if (!IsPlaceholder(v)) result.Add(v!);
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    private static string? GetRegistryString(string subKey, string name, RegistryView view = RegistryView.Default)
+    {
+        try
+        {
+            using var hive = RegistryKey.OpenBaseKey(RegistryHive.LocalMachine, view);
+            using var key  = hive.OpenSubKey(subKey);
+            return key?.GetValue(name)?.ToString();
+        }
+        catch { return null; }
+    }
+
+    private static bool IsPlaceholder(string? v) =>
+        string.IsNullOrWhiteSpace(v) || s_placeholders.Contains(v.Trim());
 
     private static LicenseResult Fail(LicenseErrorCode code, string msg) =>
         new(false, code, msg);

@@ -30,7 +30,7 @@ public class MemoryStringScanModule : BaseModule
         var findings = new List<Finding>();
 
         // Load rule packs — emit diagnostics for any load failure, never fail silently
-        var (globalPack, brPack) = LoadRulePacks();
+        var (globalPack, brPack) = LoadRulePacks(config);
         if (globalPack.Error != null) findings.Add(MakePackDiagnostic(globalPack.Error));
         if (brPack.Error    != null) findings.Add(MakePackDiagnostic(brPack.Error));
 
@@ -410,10 +410,15 @@ public class MemoryStringScanModule : BaseModule
 
     // ── Rule pack loading ──────────────────────────────────────────────────────
 
-    private static (CheatFamilyPack global, CheatFamilyPack br) LoadRulePacks()
+    private static (CheatFamilyPack global, CheatFamilyPack br) LoadRulePacks(ScanConfig config)
     {
-        var dir = Path.Combine(AppContext.BaseDirectory, "rules");
-        return (LoadPack(dir, "memory_strings.json"), LoadPack(dir, "memory_strings_br.json"));
+        var dir    = Path.Combine(AppContext.BaseDirectory, "rules");
+        var global = LoadPack(dir, "memory_strings.json");
+        // BR pack requires the 'br_pack' license feature
+        var br = config.LicenseFeatures.Contains("br_pack")
+            ? LoadPack(dir, "memory_strings_br.json")
+            : new CheatFamilyPack { Families = [], Error = null };
+        return (global, br);
     }
 
     private static CheatFamilyPack LoadPack(string dir, string file)
