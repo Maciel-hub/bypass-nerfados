@@ -291,6 +291,31 @@ public class SrumModule : BaseModule
         return result;
     }
 
+    // Reads the timestamp column using the correct retrieval method for the column's ESE type.
+    // JET_coltyp.DateTime (8) stores an OLE Automation date — use RetrieveColumnAsDateTime.
+    // Long/LongLong/Currency store a Windows FILETIME (100-ns ticks since 1601-01-01 UTC).
+    // Returns null on any error so callers can skip the row without throwing.
+    private static DateTime? ReadSrumTimestamp(JET_SESID sesid, JET_TABLEID tableId,
+        JET_COLUMNID colTs, string tsColtyp)
+    {
+        try
+        {
+            if (string.Equals(tsColtyp, "DateTime", StringComparison.OrdinalIgnoreCase))
+            {
+                var dt = Api.RetrieveColumnAsDateTime(sesid, tableId, colTs);
+                if (!dt.HasValue) return null;
+                // SRUDB DateTime columns store UTC — SpecifyKind then convert to local
+                return DateTime.SpecifyKind(dt.Value, DateTimeKind.Utc).ToLocalTime();
+            }
+            else
+            {
+                var raw = Api.RetrieveColumnAsInt64(sesid, tableId, colTs);
+                return raw.HasValue ? FileTimeToDateTime(raw.Value) : null;
+            }
+        }
+        catch { return null; }
+    }
+
     private void ReadNetworkUsage(JET_SESID sesid, JET_DBID dbid,
         Dictionary<int, string> appMap, List<Finding> findings,
         TimeSpan lookback, CancellationToken ct)
@@ -325,11 +350,16 @@ public class SrumModule : BaseModule
 
                 bool bytesAvailable = colSent.HasValue && colRecvd.HasValue;
 
+                // Enumerate schema once for TimeStamp type detection and byte-column diagnostics
+                var tableSchema = DumpTableSchema(sesid, tableId)
+                    .ToDictionary(c => c.Name, c => c.Coltyp, StringComparer.OrdinalIgnoreCase);
+                var tsColName  = new[] { "TimeStamp", "Timestamp", "timestamp" }
+                    .FirstOrDefault(tableSchema.ContainsKey) ?? "TimeStamp";
+                var tsColtyp   = tableSchema.GetValueOrDefault(tsColName, "Long");
+
                 if (!bytesAvailable)
                 {
-                    // Dump the actual schema so the next fix attempt has the correct column names
-                    var schema = DumpTableSchema(sesid, tableId);
-                    var schemaStr = string.Join(", ", schema.Select(c => $"{c.Name}({c.Coltyp})"));
+                    var schemaStr = string.Join(", ", tableSchema.Select(kvp => $"{kvp.Key}({kvp.Value})"));
                     var missing   = new List<string>();
                     if (!colSent.HasValue)  missing.Add("BytesSent (e variantes)");
                     if (!colRecvd.HasValue) missing.Add("BytesRecvd (e variantes)");
@@ -351,13 +381,13 @@ public class SrumModule : BaseModule
 
                     LogPartialError(
                         $"SRUM: schema da tabela de rede — faltam {string.Join(", ", missing)}. " +
-                        $"Colunas disponíveis: [{schemaStr}]. " +
-                        $"Continuando sem totais de bytes.");
+                        $"TimeStamp coltyp={tsColtyp}. Continuando sem totais de bytes.");
                 }
 
                 var cutoff = DateTime.UtcNow - lookback;
                 var appTotals = new Dictionary<string, (long sent, long recvd, DateTime? lastSeen)>(
                     StringComparer.OrdinalIgnoreCase);
+                int malformedRows = 0;
 
                 Api.MoveBeforeFirst(sesid, tableId);
                 while (Api.TryMoveNext(sesid, tableId))
@@ -367,10 +397,10 @@ public class SrumModule : BaseModule
                     var appId = Api.RetrieveColumnAsInt32(sesid, tableId, colAppId);
                     var sent  = colSent.HasValue  ? Api.RetrieveColumnAsInt64(sesid, tableId, colSent.Value)  ?? 0 : 0;
                     var recvd = colRecvd.HasValue ? Api.RetrieveColumnAsInt64(sesid, tableId, colRecvd.Value) ?? 0 : 0;
-                    var tsRaw = Api.RetrieveColumnAsInt64(sesid, tableId, colTs);
-                    var ts    = tsRaw.HasValue ? FileTimeToDateTime(tsRaw.Value) : null;
+                    var ts    = ReadSrumTimestamp(sesid, tableId, colTs, tsColtyp);
 
-                    if (ts.HasValue && ts.Value.ToUniversalTime() < cutoff) continue;
+                    if (ts == null) { malformedRows++; continue; }
+                    if (ts.Value.ToUniversalTime() < cutoff) continue;
                     if (!appId.HasValue) continue;
                     if (!appMap.TryGetValue(appId.Value, out var appPath)) continue;
                     if (string.IsNullOrWhiteSpace(appPath) || appPath.StartsWith("S-1-")) continue;
@@ -379,10 +409,12 @@ public class SrumModule : BaseModule
                     if (!appTotals.TryGetValue(appPath, out var totals))
                         totals = (0, 0, null);
 
-                    var lastTs = ts.HasValue && (!totals.lastSeen.HasValue || ts > totals.lastSeen)
-                        ? ts : totals.lastSeen;
+                    var lastTs = !totals.lastSeen.HasValue || ts > totals.lastSeen ? ts : totals.lastSeen;
                     appTotals[appPath] = (totals.sent + sent, totals.recvd + recvd, lastTs);
                 }
+
+                if (malformedRows > 0)
+                    LogPartialError($"SRUM: {malformedRows} linha(s) com timestamp inválido ignoradas");
 
                 foreach (var (appPath, (totalSent, totalRecvd, lastSeen)) in appTotals)
                 {
