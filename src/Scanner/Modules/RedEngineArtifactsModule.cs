@@ -80,20 +80,31 @@ public class RedEngineArtifactsModule : BaseModule
                     bool hasLoader = Directory.GetFiles(dir, "*.exe", SearchOption.TopDirectoryOnly)
                         .Any(f => Path.GetFileName(f).Equals("redengine.exe", StringComparison.OrdinalIgnoreCase));
 
+                    // settings.cock alone → High/Medium (unique name, but single-source)
+                    // settings.cock + redengine.exe co-located → Critical/High (two artifacts)
+                    var risk       = hasLoader ? RiskLevel.Critical : RiskLevel.High;
+                    var confidence = hasLoader ? Confidence.High    : Confidence.Medium;
+                    var ruleId     = hasLoader ? "REDENGINE_SETTINGS_COCK_WITH_LOADER"
+                                               : "REDENGINE_SETTINGS_COCK";
+
                     findings.Add(new Finding(
-                        RiskLevel.Critical,
+                        risk,
                         FindingCategory.Cheat,
                         Name,
-                        "REDENGINE CONFIRMADO: settings.cock encontrado" + (hasLoader ? " + redengine.exe" : ""),
+                        hasLoader
+                            ? "REDENGINE CONFIRMADO: settings.cock + redengine.exe co-localizados"
+                            : "REDENGINE FORTE INDÍCIO: settings.cock encontrado",
                         $"Arquivo de configuração exclusivo do RedENGINE detectado.\n" +
                         $"Nenhum software legítimo usa este nome de arquivo.\n" +
-                        (hasLoader ? "redengine.exe encontrado no mesmo diretório.\n" : "") +
+                        (hasLoader ? "redengine.exe encontrado no mesmo diretório — dois artefatos distintos confirmam a ferramenta.\n" : "") +
                         $"Caminho: {file}",
                         $"Tamanho: {sizeBytes} bytes | Modificado: {modified:dd/MM/yyyy HH:mm:ss}",
                         timestamp: modified,
-                        confidence: Confidence.High,
-                        ruleId: "REDENGINE_SETTINGS_COCK",
-                        entity: file
+                        confidence: confidence,
+                        ruleId: ruleId,
+                        entity: file,
+                        validationHint: hasLoader ? null
+                            : "Correlacionar com Prefetch/BAM de redengine.exe e sessão FiveM para confirmar"
                     ));
                 }
             }
@@ -166,29 +177,29 @@ public class RedEngineArtifactsModule : BaseModule
             var imguiPath = Path.Combine(gtaDir, "imgui.ini");
             if (!File.Exists(imguiPath)) continue;
 
-            var modified = File.GetLastWriteTime(imguiPath);
-            var age = DateTime.Now - modified;
+            var modified  = File.GetLastWriteTime(imguiPath);
+            var age       = DateTime.Now - modified;
             var sizeBytes = new FileInfo(imguiPath).Length;
 
-            // imgui.ini in the GTA V folder is suspicious — GTA V does not use ImGui.
-            // A recently modified file (< 30 days) alongside a FiveM session is a strong indicator.
-            var risk = age.TotalDays < 7 ? RiskLevel.High : RiskLevel.Medium;
-            var confidence = age.TotalDays < 7 ? Confidence.Medium : Confidence.Low;
-
+            // imgui.ini in GTA V dir is suspicious — GTA V does not use ImGui.
+            // However, overlays and mod tools (e.g. reshade, mod menus) also write imgui.ini.
+            // Alone it is at most Medium/Low; escalation requires correlation in the Correlator.
             findings.Add(new Finding(
-                risk,
+                RiskLevel.Medium,
                 FindingCategory.SuspiciousExecution,
                 Name,
-                $"imgui.ini no diretório do GTA V — indicativo de RedENGINE",
-                $"O GTA V não usa ImGui internamente. A documentação do RedENGINE indica que\n" +
-                $"este arquivo é gerado durante a injeção do overlay no GTA V.\n" +
+                $"imgui.ini no diretório do GTA V — possível indicativo de RedENGINE",
+                $"O GTA V não usa ImGui internamente. A documentação do RedENGINE instrui\n" +
+                $"usuários a deletar este arquivo quando o overlay falha ao aparecer, confirmando\n" +
+                $"que o RedENGINE o grava neste diretório durante a injeção.\n" +
+                $"Nota: overlays e mod tools legítimos também podem gerar este arquivo.\n" +
                 $"Caminho: {imguiPath}\nÚltima modificação: {modified:dd/MM/yyyy HH:mm:ss} ({(int)age.TotalDays} dias atrás)",
                 $"Tamanho: {sizeBytes} bytes | Idade: {(int)age.TotalDays} dias",
                 timestamp: modified,
-                confidence: confidence,
+                confidence: Confidence.Low,
                 ruleId: "REDENGINE_IMGUI_INI",
                 entity: imguiPath,
-                validationHint: "Correlacionar timestamp com sessão FiveM (BAM/Prefetch) e Prefetch de redengine.exe"
+                validationHint: "Correlacionar timestamp com sessão FiveM (BAM/Prefetch), Prefetch de redengine.exe, settings.cock ou menu .lua para escalar risco"
             ));
         }
     }

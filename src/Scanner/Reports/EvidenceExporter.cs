@@ -75,6 +75,9 @@ public static class EvidenceExporter
         WriteModuleJson(result, runFolder, "File System",           $"filesystem_{d}.json",          lookback);
         WriteModuleJson(result, runFolder, "Network Usage",         $"network_{d}.json",             lookback);
 
+        // Cheat-family artifact modules
+        WriteModuleJson(result, runFolder, "RedENGINE Artifacts",   $"redengine_{d}.json",           lookback);
+
         // Optional modules — always written so investigator can confirm whether they ran
         WriteModuleJson(result, runFolder, "USN Journal",           $"usnjournal_{d}.json",          lookback);
         WriteModuleJson(result, runFolder, "Process Memory",        $"processmemory_{d}.json",       lookback);
