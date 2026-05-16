@@ -1,6 +1,6 @@
 # Echo Nerfados Shield XDR — Relatório de QA
 **Versão:** 1.0.0+1d0f2cd  
-**Build:** bdf89c9 `ED4B8C3774E825558C5E9A662B16C0F9F50888827B51DD345A6190B8805BCBEB` — fix: SRUM bytes ausentes = degradação informativa, não Partial; 1d0f2cd — feat: SRUM IdBlob parser Win11+; 851e9af — fix: SRUM DateTime; 8f0bf22 — feat: RedENGINE  
+**Build:** 5622fc2 `E66B799D63DACBEDFE7C1C94ACE4A6A0F5253B8CD1A7E37646FF5E963D049AE2` — release v1.0.0 (fonte + QA_REPORT + artefato casados); bdf89c9 — fix: SRUM bytes ausentes = degradação informativa; 1d0f2cd — feat: SRUM IdBlob parser Win11+; 8f0bf22 — feat: RedENGINE  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
 **SHA256:** `8E7D7E8F03BE98DF59DA629C00FE23AC3644E0D857C31396CEF777F7AAF056C6`  
 **Tamanho:** ~67 MB (self-contained, sem dependência de .NET no host)  
@@ -757,4 +757,4 @@ Módulos baseados em log de eventos (`Event Viewer`, `Windows Defender`) continu
 
 ---
 
-*Relatório gerado em: 2026-05-15 | Build: bdf89c9 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-16 | Build: 5622fc2 | Echo Nerfados Shield XDR v1.0.0*
