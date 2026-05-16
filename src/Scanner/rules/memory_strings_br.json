@@ -1,0 +1,136 @@
+{
+  "_comment": "Pack brasileiro de famílias de cheat FiveM para MemoryStringScanModule. Atualize conforme novos menus surgem no mercado BR.",
+  "version": "1.0",
+  "families": [
+    {
+      "name": "Shark Menu",
+      "priority": "p0",
+      "familyTokens": ["SharkMenu", "Shark Menu", "shark-fivem", "SharkBR", "sharkbr", "shark_executor"],
+      "behaviorTokens": ["shark_inject", "shark_lua", "shark_exec", "shark_hook"],
+      "evasionTokens": ["shark_bypass", "shark_antichat_bypass", "shark_anticheat"],
+      "abuseTokens": ["crashar servidor", "dropar servidor", "kick geral shark", "crash all shark"],
+      "licenseTokens": ["shark_license", "shark_auth_key", "sharkbr_activation"],
+      "menuTokens": ["Shark Menu", "SHARK_MENU", "SharkMenu v", "shark_menu_draw"]
+    },
+    {
+      "name": "Laira Menu",
+      "priority": "p0",
+      "familyTokens": ["LairaMenu", "Laira Menu", "laira-fivem", "lairamenu", "laira_executor"],
+      "behaviorTokens": ["laira_inject", "laira_lua", "laira_exec"],
+      "evasionTokens": ["laira_bypass", "laira_antichat"],
+      "abuseTokens": ["crashar lobby laira", "derrubar jogadores laira", "kick todos laira"],
+      "licenseTokens": ["laira_license", "laira_auth", "lairamenu_key"],
+      "menuTokens": ["Laira Menu", "LAIRA_MENU", "LairaMenu v"]
+    },
+    {
+      "name": "Felipe Menu",
+      "priority": "p0",
+      "familyTokens": ["FelipeMenu", "Felipe Menu", "felipe-cheat", "felipemenu", "felipe_executor"],
+      "behaviorTokens": ["felipe_inject", "felipe_lua", "felipe_exec"],
+      "evasionTokens": ["felipe_bypass", "felipe_antichat"],
+      "abuseTokens": ["crashar servidor felipe", "esvaziar servidor", "crash all felipe"],
+      "licenseTokens": ["felipe_license", "felipe_auth", "felipemenu_key"],
+      "menuTokens": ["Felipe Menu", "FELIPE_MENU", "FelipeMenu v"]
+    },
+    {
+      "name": "Stan Menu",
+      "priority": "p0",
+      "familyTokens": ["StanMenu", "Stan Menu", "stan-fivem", "stanmenu", "stan_executor"],
+      "behaviorTokens": ["stan_inject", "stan_lua", "stan_exec"],
+      "evasionTokens": ["stan_bypass", "stan_antichat"],
+      "abuseTokens": ["crash all stan", "kick todos stan", "dropar lobby stan"],
+      "licenseTokens": ["stan_license", "stan_auth", "stanmenu_key"],
+      "menuTokens": ["Stan Menu", "STAN_MENU", "StanMenu v"]
+    },
+    {
+      "name": "Eclypse Menu",
+      "priority": "p0",
+      "familyTokens": ["EclypseMenu", "Eclypse Menu", "eclypse-fivem", "eclypse", "eclypse_executor"],
+      "behaviorTokens": ["eclypse_inject", "eclypse_lua", "eclypse_exec"],
+      "evasionTokens": ["eclypse_bypass", "eclypse_antichat"],
+      "abuseTokens": ["derrubar servidor eclypse", "crash server eclypse", "kick all eclypse"],
+      "licenseTokens": ["eclypse_license", "eclypse_auth", "eclypse_key"],
+      "menuTokens": ["Eclypse Menu", "ECLYPSE_MENU", "EclypseMenu v"]
+    },
+    {
+      "name": "Scarlet Menu",
+      "priority": "p0",
+      "familyTokens": ["ScarletMenu", "Scarlet Menu", "scarlet-fivem", "scarletmenu", "scarlet_executor"],
+      "behaviorTokens": ["scarlet_inject", "scarlet_lua", "scarlet_exec"],
+      "evasionTokens": ["scarlet_bypass", "scarlet_antichat"],
+      "abuseTokens": ["crashar todos scarlet", "crash players scarlet", "kick geral scarlet"],
+      "licenseTokens": ["scarlet_license", "scarlet_auth", "scarletmenu_key"],
+      "menuTokens": ["Scarlet Menu", "SCARLET_MENU", "ScarletMenu v"]
+    },
+    {
+      "name": "Magnata",
+      "priority": "p0",
+      "familyTokens": ["Magnata", "Magnatta", "MagnataMenu", "MagnattaMenu", "magnata-br", "magnata_executor"],
+      "behaviorTokens": ["magnata_inject", "magnata_lua", "magnatta_exec"],
+      "evasionTokens": ["magnata_bypass", "magnatta_antichat"],
+      "abuseTokens": ["crash servidor magnata", "kick players magnata", "dropar lobby magnata"],
+      "licenseTokens": ["magnata_license", "magnata_auth", "magnata_key"],
+      "menuTokens": ["Magnata Menu", "Magnatta Menu", "MAGNATA_MENU"]
+    },
+    {
+      "name": "Avelino Menu",
+      "priority": "p1",
+      "familyTokens": ["AvelinoMenu", "Avelino Menu", "avelino-fivem", "avelinomenu", "avelino_executor"],
+      "behaviorTokens": ["avelino_inject", "avelino_lua", "avelino_exec"],
+      "evasionTokens": ["avelino_bypass", "avelino_antichat"],
+      "abuseTokens": ["crashar avelino", "kick avelino", "crash server avelino"],
+      "licenseTokens": ["avelino_license", "avelino_auth", "avelino_key"],
+      "menuTokens": ["Avelino Menu", "AVELINO_MENU", "AvelinoMenu v"]
+    },
+    {
+      "name": "GOSTH",
+      "priority": "p1",
+      "familyTokens": ["GOSTH", "Gohst", "gosth-menu", "gohst-fivem", "GosthMenu", "gosth_executor"],
+      "behaviorTokens": ["gosth_inject", "gosth_lua", "gohst_exec"],
+      "evasionTokens": ["gosth_bypass", "gohst_antichat", "gosth_anticheat"],
+      "abuseTokens": ["crash gosth", "gosth crash server", "kick gosth"],
+      "licenseTokens": ["gosth_license", "gosth_auth", "gohst_key"],
+      "menuTokens": ["GOSTH Menu", "Gohst Menu", "GOSTH_MENU"]
+    },
+    {
+      "name": "Cold Menu",
+      "priority": "p1",
+      "familyTokens": ["ColdMenu", "Cold Menu", "cold-fivem", "coldmenu", "cold_executor"],
+      "behaviorTokens": ["cold_inject", "cold_lua", "cold_exec"],
+      "evasionTokens": ["cold_bypass", "cold_antichat"],
+      "abuseTokens": ["crashar servidor cold", "crash cold", "kick players cold"],
+      "licenseTokens": ["cold_license", "cold_auth", "coldmenu_key"],
+      "menuTokens": ["Cold Menu", "COLD_MENU", "ColdMenu v"]
+    },
+    {
+      "name": "Mystic Menu",
+      "priority": "p1",
+      "familyTokens": ["MysticMenu", "Mystic Menu", "mystic-fivem", "mysticmenu", "mystic_executor"],
+      "behaviorTokens": ["mystic_inject", "mystic_lua", "mystic_exec"],
+      "evasionTokens": ["mystic_bypass", "mystic_antichat"],
+      "abuseTokens": ["crash players mystic", "crashar mystic", "dropar lobby mystic"],
+      "licenseTokens": ["mystic_license", "mystic_auth", "mysticmenu_key"],
+      "menuTokens": ["Mystic Menu", "MYSTIC_MENU", "MysticMenu v"]
+    },
+    {
+      "name": "Project PVP",
+      "priority": "p1",
+      "familyTokens": ["ProjectPVP", "Project PVP", "project-pvp", "projectpvp", "pvp_executor"],
+      "behaviorTokens": ["pvp_inject", "pvp_lua", "projectpvp_exec"],
+      "evasionTokens": ["pvp_bypass", "projectpvp_antichat"],
+      "abuseTokens": ["crash pvp", "kick server pvp", "crashar pvp"],
+      "licenseTokens": ["pvp_license", "pvp_auth", "projectpvp_key"],
+      "menuTokens": ["Project PVP Menu", "PROJECTPVP_MENU", "ProjectPVP v"]
+    },
+    {
+      "name": "027 Menu",
+      "priority": "p1",
+      "familyTokens": ["027Menu", "027 Menu", "menu027", "027fivem", "027_executor"],
+      "behaviorTokens": ["027_inject", "027_lua", "027_exec"],
+      "evasionTokens": ["027_bypass", "027_antichat"],
+      "abuseTokens": ["crash 027", "027 crash", "kick players 027"],
+      "licenseTokens": ["027_license", "027_auth", "menu027_key"],
+      "menuTokens": ["027 Menu", "MENU_027", "027Menu v"]
+    }
+  ]
+}

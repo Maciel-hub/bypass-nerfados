@@ -1,0 +1,116 @@
+{
+  "_comment": "Global cheat family string patterns for MemoryStringScanModule. Não recompila — edite e redistribua.",
+  "version": "1.0",
+  "families": [
+    {
+      "name": "RedENGINE",
+      "priority": "p0",
+      "familyTokens": ["RedENGINE", "redengine", "re-injector", "settings.cock", "RE_INJECTOR", "redengine_core", "re-loader"],
+      "behaviorTokens": ["redengine_lua", "re_lua_exec", "re_inject", "re_hook", "rip_relative_call", "re_manual_map"],
+      "evasionTokens": ["re_eac_bypass", "re_be_bypass", "redengine_bypass", "re_anticheat_evade", "re_nprotect_bypass"],
+      "spooferTokens": ["re_hwid_spoof", "redengine_spoof", "re_disk_serial_spoof", "re_mac_spoof"],
+      "licenseTokens": ["redengine.gg/auth", "re_license_key", "re_auth_server", "redengine_activation", "re_license_check"],
+      "menuTokens": ["RedENGINE Menu", "RE_MENU_INIT", "re_menu_draw", "RedENGINE v"]
+    },
+    {
+      "name": "Eulen",
+      "priority": "p0",
+      "familyTokens": ["Eulen", "eulen", "eulen.gg", "eulen-injector", "EULEN_EXECUTOR", "eulen_core"],
+      "behaviorTokens": ["eulen_lua", "eulen_inject", "eulen_hook", "eulen_cef", "eulen_exec"],
+      "evasionTokens": ["eulen_bypass", "eulen_be_bypass", "eulen_eac_bypass", "eulen_anticheat"],
+      "spooferTokens": ["eulen_spoof", "eulen_hwid", "eulen_serial_spoof"],
+      "licenseTokens": ["eulen.gg/license", "eulen_license", "eulen_auth_key", "eulen_activation"],
+      "menuTokens": ["Eulen Menu", "EULEN_MENU", "eulen_menu_draw", "Eulen v"]
+    },
+    {
+      "name": "Macho",
+      "priority": "p0",
+      "familyTokens": ["MachoBrasil", "macho-menu", "MaChO", "macho_fivem", "machobr", "macho_executor"],
+      "behaviorTokens": ["macho_inject", "macho_lua", "macho_exec", "macho_hook"],
+      "evasionTokens": ["macho_bypass", "macho_anticheat_bypass"],
+      "spooferTokens": ["macho_spoof", "macho_hwid"],
+      "licenseTokens": ["macho_license", "macho_auth", "macho_activation_key"],
+      "menuTokens": ["MaChO Menu", "MachoBrasil Menu", "MACHO_MENU", "MaChO v"]
+    },
+    {
+      "name": "Susano",
+      "priority": "p1",
+      "familyTokens": ["Susano", "susano", "susano-menu", "SusanoFiveM", "susanogg", "susano_executor"],
+      "behaviorTokens": ["susano_inject", "susano_lua", "susano_exec"],
+      "evasionTokens": ["susano_bypass", "susano_anticheat"],
+      "spooferTokens": ["susano_spoof", "susano_hwid"],
+      "licenseTokens": ["susano_license", "susano_auth", "susano.gg/license"],
+      "menuTokens": ["Susano Menu", "SUSANO_MENU", "susano_menu_draw"]
+    },
+    {
+      "name": "Phaze-Nexus",
+      "priority": "p1",
+      "familyTokens": ["Phaze", "phaze", "phaze-menu", "Nexus FiveM", "nexus-menu", "NexusFiveM", "phaze_executor"],
+      "behaviorTokens": ["phaze_inject", "nexus_inject", "phaze_lua", "nexus_exec"],
+      "evasionTokens": ["phaze_bypass", "nexus_bypass", "phaze_anticheat"],
+      "spooferTokens": ["phaze_spoof", "nexus_hwid"],
+      "licenseTokens": ["phaze_license", "nexus_license", "phaze_auth", "nexus_activation"],
+      "menuTokens": ["Phaze Menu", "Nexus Menu", "PHAZE_MENU", "Phaze v"]
+    },
+    {
+      "name": "HamMafia",
+      "priority": "p1",
+      "familyTokens": ["HamMafia", "hammafia", "ham-mafia", "HamMafiaFiveM", "hammafia_core"],
+      "behaviorTokens": ["hammafia_inject", "hammafia_lua", "hammafia_exec"],
+      "evasionTokens": ["hammafia_bypass", "hammafia_anticheat"],
+      "spooferTokens": ["hammafia_spoof", "hammafia_hwid"],
+      "licenseTokens": ["hammafia_license", "hammafia_auth", "hammafia_key"],
+      "menuTokens": ["HamMafia Menu", "HAMMAFIA_MENU", "HamMafia v"]
+    },
+    {
+      "name": "FiveSense",
+      "priority": "p2",
+      "familyTokens": ["FiveSense", "fivesense", "five-sense", "FiveSenseFiveM", "fivesense_core"],
+      "behaviorTokens": ["fivesense_inject", "fivesense_lua", "fivesense_exec"],
+      "evasionTokens": ["fivesense_bypass", "fivesense_anticheat"],
+      "spooferTokens": ["fivesense_spoof", "fivesense_hwid"],
+      "licenseTokens": ["fivesense_license", "fivesense_auth", "fivesense_key"],
+      "menuTokens": ["FiveSense Menu", "FIVESENSE_MENU", "FiveSense v"]
+    },
+    {
+      "name": "Onyx",
+      "priority": "p2",
+      "familyTokens": ["OnyxFiveM", "onyx-menu", "OnyxMenu", "onyxfivem", "onyx_executor"],
+      "behaviorTokens": ["onyx_inject", "onyx_lua", "onyx_exec"],
+      "evasionTokens": ["onyx_bypass", "onyx_anticheat"],
+      "spooferTokens": ["onyx_spoof", "onyx_hwid"],
+      "licenseTokens": ["onyx_license", "onyx_auth", "onyxfivem_key"],
+      "menuTokens": ["Onyx Menu", "ONYX_MENU", "OnyxMenu v"]
+    },
+    {
+      "name": "TZ-Project",
+      "priority": "p2",
+      "familyTokens": ["TZProject", "tz-project", "tzproject", "TZ_PROJECT", "tz_fivem"],
+      "behaviorTokens": ["tz_inject", "tz_lua", "tz_exec", "tzproject_hook"],
+      "evasionTokens": ["tz_bypass", "tzproject_anticheat"],
+      "spooferTokens": ["tz_spoof", "tz_hwid"],
+      "licenseTokens": ["tz_license", "tzproject_auth", "tz_activation"],
+      "menuTokens": ["TZ Menu", "TZProject Menu", "TZPROJECT_MENU"]
+    },
+    {
+      "name": "Absolute-Lumia-Vortex",
+      "priority": "p2",
+      "familyTokens": ["AbsoluteMenu", "LumiaMenu", "VortexMenu", "absolute-menu", "lumia-menu", "vortex-menu", "absolute_fivem"],
+      "behaviorTokens": ["absolute_inject", "lumia_inject", "vortex_inject", "absolute_lua"],
+      "evasionTokens": ["absolute_bypass", "lumia_bypass", "vortex_anticheat"],
+      "spooferTokens": ["absolute_spoof", "lumia_hwid", "vortex_spoof"],
+      "licenseTokens": ["absolute_license", "lumia_license", "vortex_auth"],
+      "menuTokens": ["Absolute Menu", "Lumia Menu", "Vortex Menu"]
+    },
+    {
+      "name": "Unex-Synapse-Cock",
+      "priority": "p2",
+      "familyTokens": ["UnexMenu", "SynapseFiveM", "CockMenu", "unex-menu", "synapse-fivem", "unex_executor"],
+      "behaviorTokens": ["unex_inject", "synapse_inject", "unex_lua", "cock_exec"],
+      "evasionTokens": ["unex_bypass", "synapse_anticheat", "cock_bypass"],
+      "spooferTokens": ["unex_spoof", "synapse_hwid"],
+      "licenseTokens": ["unex_license", "synapse_license", "cock_auth"],
+      "menuTokens": ["Unex Menu", "Synapse Menu", "Cock Menu"]
+    }
+  ]
+}

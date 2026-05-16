@@ -82,6 +82,7 @@ public static class EvidenceExporter
         WriteModuleJson(result, runFolder, "USN Journal",           $"usnjournal_{d}.json",          lookback);
         WriteModuleJson(result, runFolder, "Process Memory",        $"processmemory_{d}.json",       lookback);
         WriteModuleJson(result, runFolder, "Memory DLL Trace",      $"memorydlltrace_{d}.json",      lookback);
+        WriteModuleJson(result, runFolder, "Memory String Scan",    $"memorystrscan_{d}.json",       lookback);
     }
 
     private static void WriteModuleJson(
@@ -124,7 +125,7 @@ public static class EvidenceExporter
         "Known Cheats", "File System", "RedENGINE Artifacts",
         "Registry Artifacts", "RegistryPersistence", "SystemTampering",
         "System Reset/Restore", "System Info", "Services",
-        "Process Memory", "Memory DLL Trace", "Network Usage",
+        "Process Memory", "Memory DLL Trace", "Memory String Scan", "Network Usage",
     };
 
     // Maps each module export to the Windows logs that back it, then reads coverage days
