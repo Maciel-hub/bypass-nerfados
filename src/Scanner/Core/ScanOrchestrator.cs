@@ -267,6 +267,7 @@ public class ScanOrchestrator
         Queue(new SystemTamperingModule(),     "LabConfig/MoSetup bypass, BatchGotAdmin, scripts de elevação UAC");
         Queue(new BrowserDownloadsModule(),    "Downloads do Chrome/Edge/Brave/Opera/Firefox — executáveis e URLs suspeitos");
         Queue(new TimelineInvestigationModule(), "Linha do tempo unificada — Prefetch, BAM, LNK, Downloads, Temp");
+        Queue(new RedEngineArtifactsModule(),  "Artefatos do executor FiveM RedENGINE (settings.cock, menus .lua, imgui.ini, WinRAR)");
 
         // ── Deep-only modules — skipped in fast profile ───────────────────────
         if (isFast)

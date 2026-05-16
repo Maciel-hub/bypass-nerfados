@@ -129,7 +129,19 @@ public static class CheatDatabase
         "storm", "xrc", "wexize", "regedit_cleaner", "logcleaner",
         // Famílias FiveM conhecidas
         "eulen", "redengine", "susano", "tzproject", "spoofer",
-        "phaze", "cherax", "hamafia", "cheathub"
+        "phaze", "cherax", "hamafia", "cheathub",
+        // RedENGINE menus/aliases
+        "lumia", "nexus", "strata", "insec", "hoax", "tiagomenu", "skidmenu", "lydia"
+    ];
+
+    // RedENGINE-specific artifact filenames (non-executable).
+    // Any occurrence of these in user-writable paths is a strong signal.
+    public static readonly string[] RedEngineArtifacts =
+    [
+        // Config file dropped by RedENGINE — unique name, no legitimate software uses it
+        "settings.cock",
+        // Known menu .lua scripts distributed with or for RedENGINE
+        "absolute.lua", "lumia.lua", "phaze.lua", "nexus.lua",
     ];
 
     public static readonly string[] SuspiciousStrings =
