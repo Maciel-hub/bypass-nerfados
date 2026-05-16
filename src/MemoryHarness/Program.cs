@@ -18,7 +18,12 @@
 //
 // Common:
 //   --wait N  Stay alive N seconds (default 60, max 600)
+//             MEMSTR scenarios require --wait 600: Memory String Scan runs late in the
+//             module queue and the process must still be alive when the scanner reaches it.
 //   --setup   Print Defender exclusion command and exit
+//
+// NOTE: Do NOT redirect EchoNerfados.exe stdout (e.g. *> log.txt).
+//       The scanner blocks waiting for an interactive terminal if stdout is redirected.
 //
 // DELETED scenario technique:
 //   SetFileInformationByHandle + FileDispositionInfoEx + POSIX_SEMANTICS removes the
