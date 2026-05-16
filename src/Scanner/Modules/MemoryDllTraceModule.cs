@@ -9,7 +9,7 @@ namespace BypassNerfados.Scanner.Modules;
 
 // Deep memory forensics for FiveM/GTA processes.
 // Complements ProcessMemoryModule (anonymous exec regions) by adding:
-//   - loaded module validation (known cheat DLLs, deleted-on-disk, suspicious path)
+//   - loaded module validation (known cheat DLLs, deleted-on-disk, suspicious path + Authenticode)
 //   - unlinked image detection (MEM_IMAGE not in Toolhelp module list)
 //   - MZ/PE header check in MEM_PRIVATE exec regions (manual map / reflective DLL)
 //   - thread start address correlation with private exec regions
@@ -24,7 +24,7 @@ public class MemoryDllTraceModule : BaseModule
     // FiveM spawns versioned child processes (e.g. FiveM_b3095_GTAProcess); match by prefix.
     private static readonly string[] FiveMPrefixes = ["fivem_b", "fivem_gt", "fivem_rgl"];
 
-    // Standard system paths — DLLs here are unconditionally trusted.
+    // Standard system paths — DLLs here are unconditionally trusted without signature check.
     private static readonly string[] SystemPathPrefixes =
     [
         @"C:\Windows\",
@@ -36,7 +36,21 @@ public class MemoryDllTraceModule : BaseModule
     {
         var findings = new List<Finding>();
         var targets  = CollectTargetProcesses();
-        if (targets.Count == 0) return Task.FromResult(findings);
+
+        if (targets.Count == 0)
+        {
+            // Emit diagnostic so investigator knows module ran but had no targets to scan.
+            var f = new Finding(
+                RiskLevel.Info, FindingCategory.LogCoverage, Name,
+                "Memory DLL Trace — nenhum processo alvo ativo",
+                "Nenhum processo FiveM/GTA/RedENGINE encontrado em execução.\n" +
+                "O módulo não pode varrer memória sem processo alvo.",
+                confidence: Confidence.Confirmed,
+                ruleId: "MEMDLL_NO_TARGET_PROCESS");
+            f.ScoreEligible = false;
+            findings.Add(f);
+            return Task.FromResult(findings);
+        }
 
         foreach (var proc in targets)
         {
@@ -75,15 +89,34 @@ public class MemoryDllTraceModule : BaseModule
     private void AnalyzeProcess(Process proc, List<Finding> findings, CancellationToken ct)
     {
         var handle = OpenProcess(PROCESS_VM_READ | PROCESS_QUERY_INFORMATION, false, (uint)proc.Id);
-        if (handle == IntPtr.Zero || handle == INVALID_HANDLE_VALUE) return;
+        if (handle == IntPtr.Zero || handle == INVALID_HANDLE_VALUE)
+        {
+            LogPartialError($"MemoryDllTrace: acesso negado ao processo {proc.ProcessName} PID {proc.Id}");
+            return;
+        }
 
         try
         {
-            var modules       = EnumModules((uint)proc.Id);
+            // Module enumeration — must succeed before unlinked-image detection is safe
+            var modules = EnumModules((uint)proc.Id, out bool moduleEnumOk);
+            if (!moduleEnumOk)
+            {
+                var f = new Finding(
+                    RiskLevel.Info, FindingCategory.LogCoverage, Name,
+                    $"MemoryDllTrace: enumeração de módulos falhou em {proc.ProcessName} (PID {proc.Id})",
+                    "Toolhelp32 não conseguiu listar os módulos carregados.\n" +
+                    "MEMDLL_UNLINKED_IMAGE não será emitido — lista parcial causaria falsos positivos.\n" +
+                    "Demais detecções (RWX, PE privado, thread start) permanecem ativas.",
+                    confidence: Confidence.Confirmed,
+                    ruleId: "MEMDLL_MODULE_ENUM_FAILED");
+                f.ScoreEligible = false;
+                findings.Add(f);
+            }
+
             var moduleBaseSet = new HashSet<long>(modules.Select(m => m.Base));
 
             var privateExecRegions = new List<(long Base, long Size)>();
-            WalkMemory(handle, proc, moduleBaseSet, privateExecRegions, findings, ct);
+            WalkMemory(handle, proc, moduleBaseSet, moduleEnumOk, privateExecRegions, findings, ct);
 
             foreach (var mod in modules)
             {
@@ -100,7 +133,7 @@ public class MemoryDllTraceModule : BaseModule
     // ── Memory walk ────────────────────────────────────────────────────────────
 
     private void WalkMemory(IntPtr handle, Process proc,
-        HashSet<long> moduleBaseSet,
+        HashSet<long> moduleBaseSet, bool moduleEnumOk,
         List<(long Base, long Size)> privateExecRegions,
         List<Finding> findings, CancellationToken ct)
     {
@@ -175,10 +208,10 @@ public class MemoryDllTraceModule : BaseModule
                         ));
                     }
                 }
-                else if (isImage && isExec)
+                // Only detect unlinked images when module enumeration succeeded.
+                // An empty/partial module list would cause every MEM_IMAGE to appear unlinked.
+                else if (isImage && isExec && moduleEnumOk && moduleBaseSet.Count > 0)
                 {
-                    // MEM_IMAGE region whose AllocationBase is not in the Toolhelp module list
-                    // → DLL injected and removed from PEB/loader list to hide its presence
                     var allocBase = mbi.AllocationBase.ToInt64();
                     if (!moduleBaseSet.Contains(allocBase))
                     {
@@ -224,7 +257,7 @@ public class MemoryDllTraceModule : BaseModule
 
         if (string.IsNullOrWhiteSpace(path) || IsOwnProcess(path)) return;
 
-        // Suppress standard system directories unconditionally
+        // Standard system paths are unconditionally trusted
         if (SystemPathPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase))) return;
         if (CheatDatabase.IsKnownLegitimate(path)) return;
 
@@ -265,30 +298,33 @@ public class MemoryDllTraceModule : BaseModule
         }
 
         // DLL loaded from suspicious path (Temp, Downloads, Desktop, Rar$*, etc.)?
-        if (CheatDatabase.IsSuspiciousPath(path))
-        {
-            string? publisher = null;
-            try { publisher = FileVersionInfo.GetVersionInfo(path).CompanyName?.Trim(); } catch { }
+        if (!CheatDatabase.IsSuspiciousPath(path)) return;
 
-            if (!string.IsNullOrEmpty(publisher) && CheatDatabase.IsKnownLegitimatePublisher(publisher)) return;
+        // Use WinVerifyTrust for Authenticode — CompanyName is editable metadata, not trusted.
+        // A cheat DLL can set "Microsoft Corporation" in FileVersionInfo.
+        bool signed = IsAuthenticodeSigned(path);
+        if (signed) return; // valid Authenticode chain → suppress
 
-            string? sha256 = null;
-            try { sha256 = ComputeSha256(path); } catch { }
+        string? sha256dll = null;
+        try { sha256dll = ComputeSha256(path); } catch { }
 
-            findings.Add(new Finding(
-                RiskLevel.High, FindingCategory.MemoryAnomaly, Name,
-                $"MEMDLL_UNSIGNED_USER_DLL — DLL em path suspeito: {proc.ProcessName} (PID {proc.Id})",
-                $"DLL carregada de localização de risco sem publisher confiável.\n" +
-                $"DLLs legítimas residem em Program Files ou System32.",
-                $"DLL: {path}" +
-                (sha256      != null ? $"\nSHA256: {sha256}"      : "") +
-                (publisher   != null ? $"\nPublisher: {publisher}" : "\nPublisher: ausente"),
-                confidence: Confidence.Medium,
-                ruleId: "MEMDLL_UNSIGNED_USER_DLL",
-                entity: path,
-                validationHint: "Consultar hash em VirusTotal; correlacionar com extração WinRAR/7z ou download recente"
-            ));
-        }
+        // Collect CompanyName as additional context only, not as trust signal
+        string? companyName = null;
+        try { companyName = FileVersionInfo.GetVersionInfo(path).CompanyName?.Trim(); } catch { }
+
+        findings.Add(new Finding(
+            RiskLevel.High, FindingCategory.MemoryAnomaly, Name,
+            $"MEMDLL_UNSIGNED_USER_DLL — DLL sem assinatura em path suspeito: {proc.ProcessName} (PID {proc.Id})",
+            $"DLL carregada de localização de risco sem assinatura Authenticode válida.\n" +
+            $"DLLs legítimas residem em Program Files ou System32 e são assinadas digitalmente.",
+            $"DLL: {path}" +
+            (sha256dll    != null ? $"\nSHA256: {sha256dll}"       : "") +
+            (companyName  != null ? $"\nCompanyName: {companyName} (metadata não verificado)" : "\nCompanyName: ausente"),
+            confidence: Confidence.Medium,
+            ruleId: "MEMDLL_UNSIGNED_USER_DLL",
+            entity: path,
+            validationHint: "Consultar hash em VirusTotal; correlacionar com extração WinRAR/7z ou download recente"
+        ));
     }
 
     // ── Thread start address check ─────────────────────────────────────────────
@@ -299,6 +335,9 @@ public class MemoryDllTraceModule : BaseModule
     {
         var snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
         if (snapshot == IntPtr.Zero || snapshot == INVALID_HANDLE_VALUE) return;
+
+        int inaccessibleThreads = 0;
+        int ntQueryFailures     = 0;
 
         try
         {
@@ -311,13 +350,15 @@ public class MemoryDllTraceModule : BaseModule
                 if (entry.th32OwnerProcessID != (uint)proc.Id) continue;
 
                 var th = OpenThread(THREAD_QUERY_INFORMATION, false, entry.th32ThreadID);
-                if (th == IntPtr.Zero) continue;
+                if (th == IntPtr.Zero) { inaccessibleThreads++; continue; }
 
                 try
                 {
                     // NtQueryInformationThread class 9 = ThreadQuerySetWin32StartAddress
-                    if (NtQueryInformationThread(th, THREAD_WIN32_START_ADDRESS,
-                            out var startAddr, IntPtr.Size, out _) != 0) continue;
+                    int ntStatus = NtQueryInformationThread(th, THREAD_WIN32_START_ADDRESS,
+                        out var startAddr, IntPtr.Size, out _);
+
+                    if (ntStatus != 0) { ntQueryFailures++; continue; }
 
                     var sa = startAddr.ToInt64();
                     foreach (var (regBase, regSize) in privateExecRegions)
@@ -342,27 +383,95 @@ public class MemoryDllTraceModule : BaseModule
             while (Thread32Next(snapshot, ref entry));
         }
         finally { CloseHandle(snapshot); }
+
+        // Only warn when failures are forensically relevant (process had suspicious regions)
+        if (inaccessibleThreads > 0 || ntQueryFailures > 0)
+            LogPartialError(
+                $"MemoryDllTrace: {proc.ProcessName} PID {proc.Id} — " +
+                $"{inaccessibleThreads} thread(s) inacessível(is), " +
+                $"{ntQueryFailures} falha(s) NtQueryInformationThread. " +
+                $"Processo tinha {privateExecRegions.Count} região(ões) privada(s) executável(is).");
     }
 
     // ── Module enumeration ─────────────────────────────────────────────────────
 
-    private static List<ModuleInfo> EnumModules(uint pid)
+    private static List<ModuleInfo> EnumModules(uint pid, out bool ok)
     {
         var result   = new List<ModuleInfo>();
         var snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
-        if (snapshot == IntPtr.Zero || snapshot == INVALID_HANDLE_VALUE) return result;
+
+        if (snapshot == IntPtr.Zero || snapshot == INVALID_HANDLE_VALUE) { ok = false; return result; }
 
         try
         {
             var entry = new MODULEENTRY32W { dwSize = (uint)Marshal.SizeOf<MODULEENTRY32W>() };
-            if (!Module32FirstW(snapshot, ref entry)) return result;
-            do { result.Add(new ModuleInfo(entry.modBaseAddr.ToInt64(), entry.szExePath)); }
+            if (!Module32FirstW(snapshot, ref entry)) { ok = false; return result; }
+            do { result.Add(new ModuleInfo(entry.modBaseAddr.ToInt64(), entry.szExePath ?? "")); }
             while (Module32NextW(snapshot, ref entry));
         }
-        catch { }
+        catch { ok = false; return result; }
         finally { CloseHandle(snapshot); }
 
+        ok = result.Count > 0;
         return result;
+    }
+
+    // ── Authenticode (WinVerifyTrust) ──────────────────────────────────────────
+
+    // Returns true if the file carries a valid Authenticode signature trusted by the OS.
+    // Uses WTD_CACHE_ONLY_URL_RETRIEVAL to avoid network calls during scan.
+    // CompanyName from FileVersionInfo is NOT a trust signal — any cheat can set it.
+    private static bool IsAuthenticodeSigned(string path)
+    {
+        if (!File.Exists(path)) return false;
+        try
+        {
+            var pathPtr      = Marshal.StringToHGlobalUni(path);
+            var fileInfoSize = Marshal.SizeOf<WINTRUST_FILE_INFO>();
+            var fileInfoPtr  = Marshal.AllocHGlobal(fileInfoSize);
+            try
+            {
+                Marshal.StructureToPtr(new WINTRUST_FILE_INFO
+                {
+                    cbStruct      = (uint)fileInfoSize,
+                    pcwszFilePath = pathPtr,
+                    hFile         = IntPtr.Zero,
+                    pgKnownSubject = IntPtr.Zero
+                }, fileInfoPtr, false);
+
+                var trustData = new WINTRUST_DATA
+                {
+                    cbStruct            = (uint)Marshal.SizeOf<WINTRUST_DATA>(),
+                    pPolicyCallbackData = IntPtr.Zero,
+                    pSIPClientData      = IntPtr.Zero,
+                    dwUIChoice          = WTD_UI_NONE,
+                    fdwRevocationChecks = WTD_REVOKE_NONE,
+                    dwUnionChoice       = WTD_CHOICE_FILE,
+                    pFile               = fileInfoPtr,
+                    dwStateAction       = WTD_STATEACTION_VERIFY,
+                    hWVTStateData       = IntPtr.Zero,
+                    pwszURLReference    = IntPtr.Zero,
+                    dwProvFlags         = WTD_CACHE_ONLY_URL_RETRIEVAL,
+                    dwUIContext         = 0,
+                    pSignatureSettings  = IntPtr.Zero
+                };
+
+                var actionGuid = WINTRUST_ACTION_GENERIC_VERIFY_V2;
+                uint result    = WinVerifyTrust(IntPtr.Zero, ref actionGuid, ref trustData);
+
+                // Always close the state handle to prevent leaks
+                trustData.dwStateAction = WTD_STATEACTION_CLOSE;
+                WinVerifyTrust(IntPtr.Zero, ref actionGuid, ref trustData);
+
+                return result == 0; // 0 = ERROR_SUCCESS = signed and trusted
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(fileInfoPtr);
+                Marshal.FreeHGlobal(pathPtr);
+            }
+        }
+        catch { return false; }
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────────
@@ -394,9 +503,7 @@ public class MemoryDllTraceModule : BaseModule
         _                        => $"0x{p:X}"
     };
 
-    // ── Win32 / structs ────────────────────────────────────────────────────────
-
-    private sealed record ModuleInfo(long Base, string Path);
+    // ── Win32 constants ────────────────────────────────────────────────────────
 
     private const uint MEM_COMMIT  = 0x1000;
     private const uint MEM_PRIVATE = 0x20000;
@@ -417,7 +524,22 @@ public class MemoryDllTraceModule : BaseModule
 
     private const int THREAD_WIN32_START_ADDRESS = 9;
 
+    // WinVerifyTrust constants
+    private const uint WTD_UI_NONE                  = 2;
+    private const uint WTD_REVOKE_NONE              = 0;
+    private const uint WTD_CHOICE_FILE              = 1;
+    private const uint WTD_STATEACTION_VERIFY       = 1;
+    private const uint WTD_STATEACTION_CLOSE        = 2;
+    private const uint WTD_CACHE_ONLY_URL_RETRIEVAL = 0x00001000;
+
+    private static readonly Guid WINTRUST_ACTION_GENERIC_VERIFY_V2 =
+        new("00AAC56B-CD44-11d0-8CC2-00C04FC295EE");
+
     private static readonly IntPtr INVALID_HANDLE_VALUE = new(-1);
+
+    // ── Structs ────────────────────────────────────────────────────────────────
+
+    private sealed record ModuleInfo(long Base, string Path);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct MEMORY_BASIC_INFORMATION
@@ -458,6 +580,38 @@ public class MemoryDllTraceModule : BaseModule
         public uint dwFlags;
     }
 
+    // WinVerifyTrust structs — layout must match Win32 64-bit ABI exactly.
+    // WINTRUST_FILE_INFO: cbStruct(4)+pad(4)+pcwszFilePath(8)+hFile(8)+pgKnownSubject(8) = 32 bytes
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WINTRUST_FILE_INFO
+    {
+        public uint   cbStruct;
+        public IntPtr pcwszFilePath; // LPCWSTR — allocated via Marshal.StringToHGlobalUni
+        public IntPtr hFile;
+        public IntPtr pgKnownSubject;
+    }
+
+    // WINTRUST_DATA: total 88 bytes on 64-bit (see layout comment in IsAuthenticodeSigned)
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WINTRUST_DATA
+    {
+        public uint   cbStruct;
+        public IntPtr pPolicyCallbackData;
+        public IntPtr pSIPClientData;
+        public uint   dwUIChoice;
+        public uint   fdwRevocationChecks;
+        public uint   dwUnionChoice;
+        public IntPtr pFile;               // union — only file variant used
+        public uint   dwStateAction;
+        public IntPtr hWVTStateData;
+        public IntPtr pwszURLReference;
+        public uint   dwProvFlags;
+        public uint   dwUIContext;
+        public IntPtr pSignatureSettings;
+    }
+
+    // ── P/Invoke ───────────────────────────────────────────────────────────────
+
     [DllImport("kernel32.dll")] private static extern IntPtr OpenProcess(uint dwAccess, bool bInherit, uint dwPid);
     [DllImport("kernel32.dll")] private static extern IntPtr OpenThread(uint dwAccess, bool bInherit, uint dwTid);
     [DllImport("kernel32.dll")] private static extern bool   CloseHandle(IntPtr h);
@@ -469,4 +623,6 @@ public class MemoryDllTraceModule : BaseModule
     [DllImport("kernel32.dll")] private static extern bool Thread32First(IntPtr hSnap, ref THREADENTRY32 lpte);
     [DllImport("kernel32.dll")] private static extern bool Thread32Next(IntPtr hSnap, ref THREADENTRY32 lpte);
     [DllImport("ntdll.dll")]    private static extern int  NtQueryInformationThread(IntPtr hThread, int threadInfoClass, out IntPtr threadInfo, int threadInfoLen, out int returnLen);
+    [DllImport("wintrust.dll", SetLastError = false, CharSet = CharSet.Unicode)]
+    private static extern uint WinVerifyTrust(IntPtr hwnd, ref Guid pgActionID, ref WINTRUST_DATA pWVTData);
 }
