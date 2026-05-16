@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>LicenseTool</AssemblyName>
+    <RootNamespace>BypassNerfados.LicenseTool</RootNamespace>
+    <AssemblyTitle>Echo Nerfados License Tool</AssemblyTitle>
+    <Product>Echo Nerfados License Tool</Product>
+    <Description>Ferramenta interna de emissão de licenças — Echo Nerfados Shield XDR</Description>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

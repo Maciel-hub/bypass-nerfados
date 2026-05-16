@@ -42,6 +42,11 @@ launchSettings.json
 Thumbs.db
 desktop.ini
 
+# Chaves e licenças (nunca versionar)
+*.pem
+*.nerf
+keys/
+
 # Documentos sensíveis
 *.docx
 *.pdf

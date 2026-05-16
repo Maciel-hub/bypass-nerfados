@@ -5,14 +5,20 @@ using BypassNerfados.Scanner.Models;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 Console.Title = "Echo Nerfados Shield XDR v1.0";
 
-// --help / -h: process before authentication — no login required, exit 0
+// --help / --machine-id: work without license, without interactive terminal
 if (args.Any(a => a is "--help" or "-h"))
 {
     PrintHelp();
     return 0;
 }
 
-// Require interactive terminal — AnsiConsole.Clear() and prompts crash otherwise
+if (args.Any(a => a is "--machine-id"))
+{
+    Console.WriteLine(LicenseValidator.ComputeMachineId());
+    return 0;
+}
+
+// Require interactive terminal — AnsiConsole rendering crashes otherwise
 if (Console.IsInputRedirected || Console.IsOutputRedirected || Console.IsErrorRedirected)
 {
     Console.Error.WriteLine("Echo Nerfados Shield XDR requires an interactive terminal.");
@@ -20,9 +26,30 @@ if (Console.IsInputRedirected || Console.IsOutputRedirected || Console.IsErrorRe
     return 1;
 }
 
-// Authentication gate
-if (!ConsoleUI.PromptLogin())
-    return 2;
+// Banner
+AnsiConsole.Clear();
+AnsiConsole.Write(new FigletText("ECHO NERFADOS").Centered().Color(Color.Red));
+AnsiConsole.Write(new Rule("[bold red]Shield XDR v1.0 — Anti-Cheat Investigation Platform[/]"));
+AnsiConsole.WriteLine();
+
+// License gate
+AnsiConsole.Markup("[grey]Verificando licença...[/] ");
+var licResult = LicenseValidator.Validate();
+if (!licResult.Success)
+{
+    AnsiConsole.MarkupLine("[red]✗[/]");
+    AnsiConsole.WriteLine();
+    AnsiConsole.MarkupLine("[red bold]LICENÇA INVÁLIDA[/]");
+    AnsiConsole.MarkupLine($"[red]{Markup.Escape(licResult.ErrorMessage)}[/]");
+    AnsiConsole.WriteLine();
+    AnsiConsole.MarkupLine("[grey]Contato: contato@nerfados.gg[/]");
+    AnsiConsole.WriteLine();
+    return 3;
+}
+
+var _lic = licResult.License!;
+AnsiConsole.MarkupLine($"[green]✓[/] [grey]Cliente: [white]{Markup.Escape(_lic.CustomerId)}[/] · Expira: [white]{_lic.ExpiresAt.LocalDateTime:dd/MM/yyyy}[/][/]");
+AnsiConsole.WriteLine();
 
 var config        = new ScanConfig { Rules = RulesLoader.Load() };
 var noFinalPrompt = false;
@@ -302,6 +329,7 @@ static void PrintHelp()
     Console.WriteLine("  --no-report             Nao gerar relatorio em arquivo");
     Console.WriteLine("  --no-final-prompt       Nao exibir menu apos conclusao (automacao)");
     Console.WriteLine("  --verbose               Mostrar todos os findings (incluindo INFO)");
+    Console.WriteLine("  --machine-id            Exibir Machine ID desta máquina (para solicitar licença)");
     Console.WriteLine("  --help                  Exibir esta ajuda");
     Console.WriteLine();
     Console.WriteLine("EXEMPLOS:");
