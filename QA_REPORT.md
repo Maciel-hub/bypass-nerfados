@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+851e9af  
-**Build:** 851e9af — fix: SRUM TimeStamp DateTime vs FILETIME; e01edf7 — fix: SRUM BuildAppMap; 94567fa — fix: SRUM bytes optional; f7fe5c6 — fix: coverage filesystem; 8f0bf22 — feat: RedENGINE  
+**Versão:** 1.0.0+1d0f2cd  
+**Build:** bdf89c9 `ED4B8C3774E825558C5E9A662B16C0F9F50888827B51DD345A6190B8805BCBEB` — fix: SRUM bytes ausentes = degradação informativa, não Partial; 1d0f2cd — feat: SRUM IdBlob parser Win11+; 851e9af — fix: SRUM DateTime; 8f0bf22 — feat: RedENGINE  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `394F1635DA36215A5ABC6E1C77FBA79F88D9122B2C0E8861D141916A367A0373`  
+**SHA256:** `8E7D7E8F03BE98DF59DA629C00FE23AC3644E0D857C31396CEF777F7AAF056C6`  
 **Tamanho:** ~67 MB (self-contained, sem dependência de .NET no host)  
 **Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
@@ -717,14 +717,31 @@ SRUDB.dat usa ESE e os nomes de coluna variam entre builds do Windows.
 **Critério de aceite — degradação graciosa:**
 - Se colunas de bytes não forem encontradas: `SRUM_SCHEMA_INCOMPATIBLE` presente em `srum_90d.json` com lista de colunas disponíveis
 - Finding com `ruleId = "SRUM_SCHEMA_INCOMPATIBLE"`, `risk = "info"`, `scoreEligible = false`
-- Módulo continua — cheats conhecidos ainda detectados por nome (sem totais de bytes)
-- `reason` do `moduleCoverage` lista colunas disponíveis, NÃO `"No such column"` genérico
+- Módulo **não chama `LogPartialError`** — bytes ausentes são degradação informativa
+- `moduleCoverage` SRUM = `Executed` (não `Partial`) quando `AppId`, `TimeStamp` e `IdMap` foram lidos com sucesso
+- `Partial` só ocorre se: `AppId` ausente, `TimeStamp` ausente, tabela de rede não encontrada, ou `IdMap` impossível
+- Cheats conhecidos ainda detectados por app path e timeline — detecção por bytes não é bloqueante
+
+**IdMap — dual-schema (BuildAppMap):**
+
+`SruDbIdMapTable` sofreu mudança de schema no Windows 11 (build 22000+):
+
+| Campo | Schema antigo (Win10) | Schema novo (Win11+) |
+|---|---|---|
+| Índice | `IdIndex (Long)` | `IdIndex (Long)` |
+| App path | `App (Text / Unicode)` | `IdBlob (LongBinary)` — UTF-16LE |
+| Tipo de entrada | *(implícito — apenas paths)* | `IdType (UnsignedByte)`: 1=exe, 2=SID, 3=serviço |
+
+Parser tenta schema antigo primeiro (`App`/`ExeInfo`/`AppName`). Se nenhuma dessas colunas existir, tenta `IdBlob` (schema novo). Entradas com `IdType ≠ 1` e paths que começam com `S-1-` são ignoradas.
 
 **Critério de aceite — IdMap (BuildAppMap):**
-- Se `SruDbIdMapTable` não existir: `LogPartialError` com mensagem `"SruDbIdMapTable não encontrada"` — sem crash
-- Se colunas `IdIndex`/`App` não forem encontradas: finding `SRUM_IDMAP_SCHEMA_INCOMPATIBLE` (info/LogCoverage/scoreEligible=false) com schema dump
-- Se tabela existe mas `appMap.Count == 0`: finding `SRUM_IDMAP_EMPTY` (info/LogCoverage/scoreEligible=false)
+- Se `SruDbIdMapTable` não existir: `LogPartialError` `"SruDbIdMapTable não encontrada"` — sem crash
+- Schema antigo detectado → app path lido via `RetrieveColumnAsString(Unicode)`
+- Schema novo detectado → `IdBlob` decodificado como UTF-16LE; entradas `IdType ≠ 1` descartadas
+- Se nem `App/*` nem `IdBlob` encontrados: finding `SRUM_IDMAP_SCHEMA_INCOMPATIBLE` (info/LogCoverage/scoreEligible=false) com schema dump
+- Se tabela existe mas `appMap.Count == 0` após parsing: finding `SRUM_IDMAP_EMPTY` (info/LogCoverage/scoreEligible=false)
 - Em nenhum caso o módulo encerra silenciosamente sem diagnóstico
+- **Schema novo resolvido com sucesso → SRUM status = `Executed` (não `Partial`)**
 
 ---
 
@@ -740,4 +757,4 @@ Módulos baseados em log de eventos (`Event Viewer`, `Windows Defender`) continu
 
 ---
 
-*Relatório gerado em: 2026-05-15 | Build: 851e9af | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-15 | Build: bdf89c9 | Echo Nerfados Shield XDR v1.0.0*
