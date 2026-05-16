@@ -6,7 +6,8 @@ public record CheatInfo(
     string[] KnownPaths,
     string[]? Hashes = null,
     string[]? AssociatedFiles = null,
-    bool IsGenericName = false  // true when the filename is common (launcher, setup) — needs path/hash to be credible
+    bool IsGenericName = false,  // true when the filename is common (launcher, setup) — needs path/hash to be credible
+    string[]? LegitPaths = null  // known-legitimate install paths for this exe name — suppress when matched
 );
 
 public static class CheatDatabase
@@ -19,14 +20,16 @@ public static class CheatDatabase
                 "Loader de cheat FiveM fora de paths legítimos (padrão GOSTH). Gera arquivo de 8-10 chars aleatórios na System32.",
                 [@"AppData\Local\Programs\Common", @"AppData\Local\Temp\"],
                 AssociatedFiles: ["dxsetup"],
-                IsGenericName: true   // "launcher.exe" é usado por Rockstar, Steam, Epic etc. — só paths muito específicos confirmam
+                IsGenericName: true,
+                LegitPaths: [@"Rockstar Games\", @"steamapps\", @"Epic Games\", @"Battle.net\", @"Origin\", @"ubisoft\", @"gog\", @"EA Games\"]
             ),
 
             ["spotify.exe"] = new CheatInfo(
                 "Loader FiveM Disfarçado (padrão GOSTH/Spotify)",
                 "Loader de cheat renomeado como spotify.exe para evasão. O binário legítimo do Spotify reside em AppData\\Roaming\\Spotify\\ — fora desse path é suspeito.",
                 [@"AppData\Local\Temp\", @"Downloads\", @"Desktop\", @"AppData\Local\Programs\Common"],
-                IsGenericName: true   // spotify.exe legítimo está em AppData\Roaming\Spotify\ — fora desses paths é suspeito
+                IsGenericName: true,
+                LegitPaths: [@"AppData\Roaming\Spotify\"]
             ),
 
             ["farinhafree.exe"] = new CheatInfo(
@@ -47,7 +50,8 @@ public static class CheatDatabase
                 "GOSTH Loader (dxsetup)",
                 "Loader do cheat GOSTH disfarçado de instalador DirectX. Normalmente em AppData\\Local\\Programs\\Common",
                 [@"AppData\Local\Programs\Common", @"AppData\Local\Temp\"],
-                IsGenericName: true   // "dxsetup.exe" é o instalador legítimo do DirectX redistribuível
+                IsGenericName: true,
+                LegitPaths: [@"\DirectX\", @"\redist\", @"steamapps\", @"\Windows\System32\", @"\Windows\SysWOW64\"]
             ),
 
             // --- Famílias FiveM conhecidas ---
@@ -242,14 +246,48 @@ public static class CheatDatabase
         KnownExecutables.ContainsKey(filename);
 
     // Returns CheatInfo only when the match is credible for the given path.
+    // 3-tier classification for generic-name executables.
+    // Suppressed = known-legitimate path or publisher → emit nothing.
+    // Suspect    = unknown path, no legit signals → Medium with ValidationHint.
+    // Credible   = known cheat path or hash → High/Critical.
+    public enum GenericTier { Suppressed, Suspect, Credible }
+
+    // Classifies a generic-name process into one of three tiers.
+    // publisher: FileVersionInfo.CompanyName (or null when unavailable).
+    public static (GenericTier Tier, CheatInfo? Info) ClassifyGenericProcess(
+        string fileName, string path, string? publisher = null)
+    {
+        if (!KnownExecutables.TryGetValue(fileName, out var entry) || !entry.IsGenericName)
+            return (GenericTier.Suppressed, null);
+
+        var lower = path.ToLowerInvariant();
+
+        // Suppress: known-legitimate publisher (Spotify AB, Rockstar Games, Valve, etc.)
+        if (!string.IsNullOrEmpty(publisher) && IsKnownLegitimatePublisher(publisher))
+            return (GenericTier.Suppressed, null);
+
+        // Suppress: known-legitimate install path for this exe name
+        if (entry.LegitPaths?.Any(p => lower.Contains(p.ToLowerInvariant())) == true)
+            return (GenericTier.Suppressed, null);
+
+        // Credible: path matches a known cheat install location
+        if (entry.KnownPaths.Any(p => lower.Contains(p.ToLowerInvariant())))
+            return (GenericTier.Credible, entry);
+
+        // Suspect: unknown path, no legit signals
+        return (GenericTier.Suspect, entry);
+    }
+
     // For IsGenericName entries (launcher.exe, dxsetup.exe), requires the path to match
-    // a known cheat install location; otherwise returns null to suppress the finding.
+    // a known cheat install location AND not match a known-legitimate path.
     // This is the canonical entry point — all modules with a full path must use this.
     public static CheatInfo? TryGetCredibleCheat(string fileName, string path)
     {
         if (!KnownExecutables.TryGetValue(fileName, out var entry)) return null;
         if (!entry.IsGenericName) return entry;
         var lower = path.ToLowerInvariant();
+        // Suppress if known-legitimate path (e.g. spotify.exe in AppData\Roaming\Spotify\)
+        if (entry.LegitPaths?.Any(p => lower.Contains(p.ToLowerInvariant())) == true) return null;
         return entry.KnownPaths.Any(p => lower.Contains(p.ToLowerInvariant())) ? entry : null;
     }
 

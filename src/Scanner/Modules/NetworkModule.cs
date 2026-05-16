@@ -38,15 +38,37 @@ public class NetworkModule : BaseModule
                 string exePath = "desconhecido";
                 try { exePath = proc.MainModule?.FileName ?? nameLower; } catch { }
 
-                // TryGetCredibleCheat excludes generic names (spotify, launcher, dxsetup) unless
-                // the process path matches a known cheat location — prevents false positives on
-                // legitimate Spotify.exe, launcher.exe from Rockstar/Steam, etc.
-                var credibleCheat = CheatDatabase.TryGetCredibleCheat(nameLower + ".exe", exePath);
+                string? publisher = null;
+                try { publisher = System.Diagnostics.FileVersionInfo.GetVersionInfo(exePath).CompanyName; } catch { }
+
+                // 3-tier classification for generic names (spotify.exe, launcher.exe, dxsetup.exe):
+                // Suppressed = legit path or legit publisher → skip.
+                // Suspect    = unknown path, no legit signals → Medium with hint.
+                // Credible   = known cheat path → Critical.
+                // Non-generic names that are in KnownExecutables are always Credible.
+                CheatInfo? credibleCheat = null;
+                bool isGenericSuspect = false;
+
+                if (CheatDatabase.KnownExecutables.TryGetValue(nameLower + ".exe", out var anyEntry))
+                {
+                    if (anyEntry.IsGenericName)
+                    {
+                        var (tier, info) = CheatDatabase.ClassifyGenericProcess(nameLower + ".exe", exePath, publisher);
+                        if (tier == CheatDatabase.GenericTier.Suppressed) continue;
+                        if (tier == CheatDatabase.GenericTier.Credible) credibleCheat = info;
+                        else isGenericSuspect = true;
+                    }
+                    else
+                    {
+                        credibleCheat = anyEntry;
+                    }
+                }
+
                 bool isKnownCheat = credibleCheat != null;
+                if (!isKnownCheat && !isGenericSuspect && IsKnownSafeProcess(nameLower)) continue;
 
-                if (!isKnownCheat && IsKnownSafeProcess(nameLower)) continue;
-
-                bool isSuspicious = CheatDatabase.HasSuspiciousKeyword(nameLower) ||
+                bool isSuspicious = isGenericSuspect ||
+                                    CheatDatabase.HasSuspiciousKeyword(nameLower) ||
                                     CheatDatabase.IsSuspiciousPath(exePath);
 
                 if (isKnownCheat || isSuspicious)
@@ -60,16 +82,35 @@ public class NetworkModule : BaseModule
                         var remotes = string.Join(", ",
                             externalConns.Take(3).Select(c => $"{c.RemoteAddress}:{c.RemotePort}"));
 
-                        findings.Add(new Finding(
-                            isKnownCheat ? RiskLevel.Critical : RiskLevel.High,
-                            isKnownCheat ? FindingCategory.Cheat : FindingCategory.NetworkActivity,
-                            Name,
-                            isKnownCheat
-                                ? $"CHEAT COM CONEXÃO ATIVA: {credibleCheat!.Name} ({proc.ProcessName})"
-                                : $"Conexão suspeita: {proc.ProcessName} (PID {proc.Id})",
-                            $"Executável suspeito com conexões externas ativas.\nCaminho: {exePath}",
-                            $"Conexões: {remotes}"
-                        ));
+                        if (isKnownCheat)
+                        {
+                            findings.Add(new Finding(
+                                RiskLevel.Critical, FindingCategory.Cheat, Name,
+                                $"CHEAT COM CONEXÃO ATIVA: {credibleCheat!.Name} ({proc.ProcessName})",
+                                $"Executável suspeito com conexões externas ativas.\nCaminho: {exePath}",
+                                $"Conexões: {remotes}"
+                            ));
+                        }
+                        else if (isGenericSuspect)
+                        {
+                            findings.Add(new Finding(
+                                RiskLevel.Medium, FindingCategory.SuspiciousExecution, Name,
+                                $"Processo genérico com nome associado a loader e conexão ativa: {proc.ProcessName}",
+                                $"Nome associado a cheats FiveM, path fora de localização legítima conhecida, com rede ativa.\nCaminho: {exePath}",
+                                $"Conexões: {remotes} | Publisher: {publisher ?? "ausente"}",
+                                confidence: Confidence.Low,
+                                validationHint: "Verificar hash SHA256, assinatura digital e correlação com Prefetch/BAM/sessão FiveM"
+                            ));
+                        }
+                        else
+                        {
+                            findings.Add(new Finding(
+                                RiskLevel.High, FindingCategory.NetworkActivity, Name,
+                                $"Conexão suspeita: {proc.ProcessName} (PID {proc.Id})",
+                                $"Executável suspeito com conexões externas ativas.\nCaminho: {exePath}",
+                                $"Conexões: {remotes}"
+                            ));
+                        }
                     }
                 }
 

@@ -39,13 +39,12 @@ public class ProcessMemoryModule : BaseModule
             try
             {
                 var nameLower = proc.ProcessName.ToLowerInvariant();
+                string exePath = "desconhecido";
+                try { exePath = proc.MainModule?.FileName ?? "desconhecido"; } catch { }
 
                 // Detect processes with suspicious names
                 if (CheatDatabase.HasSuspiciousKeyword(nameLower))
                 {
-                    string exePath = "desconhecido";
-                    try { exePath = proc.MainModule?.FileName ?? "desconhecido"; } catch { }
-
                     findings.Add(new Finding(
                         RiskLevel.High,
                         FindingCategory.SuspiciousExecution,
@@ -56,27 +55,43 @@ public class ProcessMemoryModule : BaseModule
                     continue;
                 }
 
-                // Check for known cheat executables running
+                // Check for known cheat executables running — apply 3-tier for generic names
                 if (CheatDatabase.KnownExecutables.TryGetValue(nameLower + ".exe", out var cheatEntry))
                 {
                     if (cheatEntry.IsGenericName)
                     {
-                        findings.Add(new Finding(
-                            RiskLevel.Medium,
-                            FindingCategory.SuspiciousExecution,
-                            "Process Memory",
-                            $"Processo com nome associado a loader genérico: {proc.ProcessName} (PID {proc.Id})",
-                            $"Nome genérico associado a cheats FiveM — confirmar por caminho, hash ou correlação.",
-                            confidence: Confidence.Low,
-                            validationHint: "Verificar caminho do executável, hash SHA256 e correlação com Prefetch/BAM/UserAssist"
-                        ));
+                        string? publisher = null;
+                        try { publisher = System.Diagnostics.FileVersionInfo.GetVersionInfo(exePath).CompanyName; } catch { }
+
+                        var (tier, _) = CheatDatabase.ClassifyGenericProcess(nameLower + ".exe", exePath, publisher);
+                        switch (tier)
+                        {
+                            case CheatDatabase.GenericTier.Suppressed:
+                                break; // legit path or publisher — emit nothing
+                            case CheatDatabase.GenericTier.Credible:
+                                findings.Add(new Finding(
+                                    RiskLevel.Critical, FindingCategory.Cheat, "Process Memory",
+                                    $"CHEAT EM EXECUÇÃO: {cheatEntry.Name} ({proc.ProcessName}, PID {proc.Id})",
+                                    $"Processo de cheat em path suspeito ativo no sistema.\nCaminho: {exePath}",
+                                    confidence: Confidence.High
+                                ));
+                                break;
+                            default: // Suspect
+                                findings.Add(new Finding(
+                                    RiskLevel.Medium, FindingCategory.SuspiciousExecution, "Process Memory",
+                                    $"Processo com nome associado a loader genérico: {proc.ProcessName} (PID {proc.Id})",
+                                    $"Nome associado a cheats FiveM, path fora de localização legítima — confirmar por hash ou correlação.\nCaminho: {exePath}",
+                                    $"Publisher: {publisher ?? "ausente"}",
+                                    confidence: Confidence.Low,
+                                    validationHint: "Verificar hash SHA256, assinatura digital e correlação com Prefetch/BAM/UserAssist/sessão FiveM"
+                                ));
+                                break;
+                        }
                     }
                     else
                     {
                         findings.Add(new Finding(
-                            RiskLevel.Critical,
-                            FindingCategory.Cheat,
-                            "Process Memory",
+                            RiskLevel.Critical, FindingCategory.Cheat, "Process Memory",
                             $"CHEAT EM EXECUÇÃO: {proc.ProcessName} (PID {proc.Id})",
                             $"Processo de cheat conhecido ativo no sistema."
                         ));

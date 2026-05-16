@@ -85,10 +85,25 @@ public class KnownCheatsModule : BaseModule
                     }
                     else if (cheat.IsGenericName)
                     {
-                        // Generic filename (launcher.exe, dxsetup.exe) — needs path or hash to be credible
-                        confidence = Confidence.Low;
-                        risk = RiskLevel.Medium;
-                        validationHint = "Nome genérico associado a cheats — confirmar por hash, assinatura, caminho típico da família ou correlação com Prefetch/MuiCache/BAM/UserAssist";
+                        // 3-tier: check if this is a known-legitimate install path → suppress
+                        string? publisher = null;
+                        try { publisher = System.Diagnostics.FileVersionInfo.GetVersionInfo(file).CompanyName; } catch { }
+
+                        var (tier, _) = CheatDatabase.ClassifyGenericProcess(fileName, file, publisher);
+                        if (tier == CheatDatabase.GenericTier.Suppressed) continue;
+
+                        if (tier == CheatDatabase.GenericTier.Credible)
+                        {
+                            confidence = Confidence.High;
+                            risk = RiskLevel.Critical;
+                            validationHint = null;
+                        }
+                        else // Suspect
+                        {
+                            confidence = Confidence.Low;
+                            risk = RiskLevel.Medium;
+                            validationHint = "Nome genérico fora de path legítimo — confirmar por hash, assinatura, correlação com Prefetch/MuiCache/BAM/UserAssist";
+                        }
                     }
                     else
                     {
