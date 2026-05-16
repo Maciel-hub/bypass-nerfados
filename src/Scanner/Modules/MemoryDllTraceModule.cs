@@ -161,19 +161,26 @@ public class MemoryDllTraceModule : BaseModule
                 if (isPrivate && (mbi.Protect & 0xFF) == PAGE_EXECUTE_READWRITE)
                 {
                     rwxCount++;
+                    // RWX regions are baseline for FiveM/GTA (CEF/V8 JIT, BattlEye, anti-tamper,
+                    // DirectX hooks). Emit as Info/scoreEligible=false; escalate only when a
+                    // strong corroborating signal exists (PE header, thread start, unlinked image).
                     if (rwxCount <= 3)
                     {
-                        var risk = regionSize > 0x10000 ? RiskLevel.Critical : RiskLevel.High;
-                        findings.Add(new Finding(
-                            risk, FindingCategory.MemoryAnomaly, Name,
+                        var f = new Finding(
+                            RiskLevel.Info, FindingCategory.MemoryAnomaly, Name,
                             $"MEMDLL_RWX_REGION — PAGE_EXECUTE_READWRITE em {proc.ProcessName} (PID {proc.Id})",
-                            $"Região PAGE_EXECUTE_READWRITE privada em processo FiveM/GTA.\n" +
-                            $"Padrão clássico de injector: aloca RWX, copia payload, executa.",
+                            $"Região PAGE_EXECUTE_READWRITE privada. Baseline esperado em FiveM/GTA\n" +
+                            $"(CEF/V8 JIT, anti-cheat, hooking legítimo). Escalável se corroborado por\n" +
+                            $"PE em memória, thread start em região privada ou módulo deslinkado.",
                             $"Base: 0x{regionBase:X} | Tamanho: {regionSize / 1024} KB",
-                            confidence: Confidence.High,
+                            confidence: Confidence.Low,
                             ruleId: "MEMDLL_RWX_REGION",
-                            entity: $"{proc.ProcessName}:0x{regionBase:X}"
-                        ));
+                            entity: $"{proc.ProcessName}:0x{regionBase:X}",
+                            validationHint: "Escalar somente se correlacionado com MEMDLL_PRIVATE_EXEC_PE, " +
+                                           "MEMDLL_THREAD_START_PRIVATE_EXEC ou MEMDLL_UNLINKED_IMAGE"
+                        );
+                        f.ScoreEligible = false;
+                        findings.Add(f);
                     }
                 }
                 else if (isPrivate && isExec && regionSize > 0x4000)
@@ -181,6 +188,7 @@ public class MemoryDllTraceModule : BaseModule
                     bool hasMz = ReadHasMzHeader(handle, mbi.BaseAddress);
                     if (hasMz)
                     {
+                        // MZ/PE header in private memory is NOT normal even in FiveM — keep Critical.
                         findings.Add(new Finding(
                             RiskLevel.Critical, FindingCategory.MemoryAnomaly, Name,
                             $"MEMDLL_PRIVATE_EXEC_PE — PE em memória privada: {proc.ProcessName} (PID {proc.Id})",
@@ -194,18 +202,21 @@ public class MemoryDllTraceModule : BaseModule
                     }
                     else if (regionSize > 0x10000)
                     {
-                        // Only flag large anonymous exec regions to suppress JIT compiler thunks
-                        findings.Add(new Finding(
-                            RiskLevel.High, FindingCategory.MemoryAnomaly, Name,
-                            $"MEMDLL_PRIVATE_EXEC_NO_PE — Executável anônimo grande em {proc.ProcessName} (PID {proc.Id})",
-                            $"Região MEM_PRIVATE executável sem header PE e sem módulo associado.\n" +
-                            $"Possível shellcode ou trampolim de injeção.",
+                        // Large anonymous exec without PE — also baseline for Lua/CEF/V8 in FiveM.
+                        // Emit as Info/scoreEligible=false; corroboration needed to escalate.
+                        var f = new Finding(
+                            RiskLevel.Info, FindingCategory.MemoryAnomaly, Name,
+                            $"MEMDLL_PRIVATE_EXEC_NO_PE — Executável anônimo em {proc.ProcessName} (PID {proc.Id})",
+                            $"Região MEM_PRIVATE executável sem header PE. Baseline para Lua/CEF/V8/JIT\n" +
+                            $"no ambiente FiveM/GTA. Relevante apenas com corroboração forte.",
                             $"Base: 0x{regionBase:X} | Tamanho: {regionSize / 1024} KB | Protect: {ProtectName(mbi.Protect)}",
-                            confidence: Confidence.Medium,
+                            confidence: Confidence.Low,
                             ruleId: "MEMDLL_PRIVATE_EXEC_NO_PE",
                             entity: $"{proc.ProcessName}:0x{regionBase:X}",
-                            validationHint: "Correlacionar com thread start address; descartar se processo é .NET/runtime JIT"
-                        ));
+                            validationHint: "Verificar thread start address nessa região; descartar se não houver PE/thread/DLL suspeita"
+                        );
+                        f.ScoreEligible = false;
+                        findings.Add(f);
                     }
                 }
                 // Only detect unlinked images when module enumeration succeeded.
@@ -234,16 +245,22 @@ public class MemoryDllTraceModule : BaseModule
 
         if (rwxCount > 3)
         {
-            findings.Add(new Finding(
-                RiskLevel.Critical, FindingCategory.MemoryAnomaly, Name,
-                $"MEMDLL_RWX_REGION — {rwxCount} regiões RWX em {proc.ProcessName} (PID {proc.Id})",
-                $"Volume elevado de regiões PAGE_EXECUTE_READWRITE ({rwxCount} regiões).\n" +
-                $"Fortemente indicativo de hook framework ou injector ativo.",
+            // Mass RWX count is baseline for FiveM (CEF/V8 can produce 1000+ allocations).
+            // Emit as Info/scoreEligible=false so the investigator sees the count but it
+            // does not contribute to score without stronger corroboration.
+            var fMass = new Finding(
+                RiskLevel.Info, FindingCategory.MemoryAnomaly, Name,
+                $"MEMDLL_RWX_REGION_MASS — {rwxCount} regiões RWX em {proc.ProcessName} (PID {proc.Id})",
+                $"Contagem total de regiões PAGE_EXECUTE_READWRITE privadas: {rwxCount}.\n" +
+                $"Esperado no ambiente FiveM/GTA (CEF/V8 JIT gera centenas de alocações RWX).\n" +
+                $"Relevante apenas se acompanhado de PE em memória, thread start ou módulo deslinkado.",
                 $"Total RWX: {rwxCount}",
-                confidence: Confidence.High,
+                confidence: Confidence.Low,
                 ruleId: "MEMDLL_RWX_REGION_MASS",
                 entity: proc.ProcessName
-            ));
+            );
+            fMass.ScoreEligible = false;
+            findings.Add(fMass);
         }
     }
 
@@ -257,22 +274,36 @@ public class MemoryDllTraceModule : BaseModule
 
         if (string.IsNullOrWhiteSpace(path) || IsOwnProcess(path)) return;
 
-        // KnownDlls always checked first — a cheat DLL placed under Program Files must not be suppressed.
+        // KnownDlls always checked first — before any path suppression.
+        // Filename alone is insufficient: d3d10.dll is a legitimate Windows DLL when outside
+        // the FiveM Plugins directory. Only emit Critical when KnownPaths match (same logic
+        // as TryGetCredibleCheat for executables).
         if (CheatDatabase.KnownDlls.TryGetValue(lower, out var dllInfo))
         {
-            string? sha256 = null;
-            if (File.Exists(path)) { try { sha256 = ComputeSha256(path); } catch { } }
+            var lowerPath   = path.ToLowerInvariant();
+            bool legitMatch = dllInfo.LegitPaths?.Any(lp => lowerPath.Contains(lp.ToLowerInvariant())) == true;
+            bool pathMatch  = dllInfo.KnownPaths.Any(kp => lowerPath.Contains(kp.ToLowerInvariant()));
 
-            findings.Add(new Finding(
-                RiskLevel.Critical, FindingCategory.MemoryAnomaly, Name,
-                $"MEMDLL_KNOWN_CHEAT_DLL_LOADED — {dllInfo.Name} em {proc.ProcessName} (PID {proc.Id})",
-                $"DLL de cheat conhecida carregada no processo FiveM/GTA.\n{dllInfo.Description}",
-                $"DLL: {path}" + (sha256 != null ? $"\nSHA256: {sha256}" : ""),
-                confidence: sha256 != null ? Confidence.Confirmed : Confidence.High,
-                ruleId: "MEMDLL_KNOWN_CHEAT_DLL_LOADED",
-                entity: path
-            ));
-            return;
+            if (legitMatch) return; // explicitly a legitimate install path
+
+            if (pathMatch)
+            {
+                string? sha256 = null;
+                if (File.Exists(path)) { try { sha256 = ComputeSha256(path); } catch { } }
+
+                findings.Add(new Finding(
+                    RiskLevel.Critical, FindingCategory.MemoryAnomaly, Name,
+                    $"MEMDLL_KNOWN_CHEAT_DLL_LOADED — {dllInfo.Name} em {proc.ProcessName} (PID {proc.Id})",
+                    $"DLL de cheat conhecida carregada do path de cheat conhecido.\n{dllInfo.Description}",
+                    $"DLL: {path}" + (sha256 != null ? $"\nSHA256: {sha256}" : ""),
+                    confidence: sha256 != null ? Confidence.Confirmed : Confidence.High,
+                    ruleId: "MEMDLL_KNOWN_CHEAT_DLL_LOADED",
+                    entity: path
+                ));
+                return;
+            }
+            // Path doesn't match known cheat location — fall through to standard checks.
+            // C:\Windows\System32\d3d10.dll will be suppressed below by the Windows\ guard.
         }
 
         // C:\Windows\ — unconditionally trusted (KnownDlls already won above)
