@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+09613d3  
-**Build:** 09613d3 (2026-05-15) — chore: add *.lscache to .gitignore; 38907aa — feat: Sprint 3 — external rules JSON, executive HTML report; 7d457b9 — feat: Sprint 2 — Florence profile, FiveM session timeline, bypass alert banner; c7e65d2 — feat: Sprint 1 — ScanProfile, score noise reduction, Provas Fortes tab, explainable score  
+**Versão:** 1.0.0+4d93642  
+**Build:** 4d93642 — fix: QA P0/P1 — redengine JSON export + risk recalibration; 8f0bf22 — feat: RedENGINE artifacts module; 49400c3 — feat: 3-tier generic process classification; 38907aa — feat: Sprint 3  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `E92FA5F19BD46C1735F06F3281B497493F699B00BE48067C963AF29F8D7AE0DB`  
+**SHA256:** `A84434D19FF9CB53AEE815A63968A0CF39530A45FF36F6E9D776DE9644B6111A`  
 **Tamanho:** ~67 MB (self-contained, sem dependência de .NET no host)  
 **Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
@@ -50,7 +50,7 @@ O executável exige login antes de qualquer varredura.
 
 ## 4. Módulos de Varredura
 
-**Default/Deep profile: 27 módulos** | **Fast profile: 16 módulos** (ShimCache, ShellBags, JumpLists, SRUM, NvidiaArtifacts, ExternalToolResidue, RecycleBin, Amcache, UserAssist, USN Journal e ProcessMemory são pulados)
+**Default/Deep profile: 28 módulos** | **Fast profile: 17 módulos** (ShimCache, ShellBags, JumpLists, SRUM, NvidiaArtifacts, ExternalToolResidue, RecycleBin, Amcache, UserAssist, USN Journal e ProcessMemory são pulados)
 
 ### Módulos sem requisito de admin (funcionam com asInvoker)
 
@@ -72,6 +72,7 @@ O executável exige login antes de qualquer varredura.
 | **SystemTampering** | LabConfig/MoSetup keys, getadmin.vbs, scripts bat/ps1 | Bypass de requisitos Windows 11, BatchGotAdmin, scripts de elevação UAC |
 | **BrowserDownloads** | Chrome/Edge/Brave/Opera/Firefox History SQLite | Downloads de executáveis suspeitos + URLs de C2 conhecidos; domínios extensíveis via `rules/suspicious_domains.json` |
 | **Timeline** | Prefetch + BAM + LNK + Downloads + Temp | Linha do tempo unificada — sequência de eventos dentro da janela de lookback (padrão: 90 dias) |
+| **RedENGINE Artifacts** | File system scan | `settings.cock`, menus `.lua` (absolute/lumia/phaze/nexus/strata/insec/hoax/etc.), `imgui.ini` no dir GTA V, diretórios WinRAR `Rar$*` com artefatos RedENGINE |
 
 ### Módulos pulados no perfil Fast (16 módulos essenciais)
 
@@ -98,6 +99,74 @@ O executável exige login antes de qualquer varredura.
 |--------|---------|---------------|
 | **USN Journal** | `RunUsnJournal=true` + admin (ou `--profile deep`) | Operações de arquivo de baixo nível (criação, deleção, renomeação) |
 | **Process Memory** | `DeepMemoryScan=true` + admin (ou `--profile deep`) | Strings suspeitas em memória de processos em execução |
+
+---
+
+## 4a. Módulo RedENGINE Artifacts — Critérios e Teste Sintético
+
+### Sinais e níveis de risco esperados
+
+| Artefato | Condição | Risk | Confidence | RuleId |
+|----------|----------|------|------------|--------|
+| `settings.cock` encontrado sozinho | Qualquer path em user-writable | **High** | Medium | `REDENGINE_SETTINGS_COCK` |
+| `settings.cock` + `redengine.exe` no mesmo dir | Co-localização de loader e config | **Critical** | High | `REDENGINE_SETTINGS_COCK_WITH_LOADER` |
+| `absolute.lua`, `lumia.lua`, `phaze.lua`, etc. em Downloads/Desktop/Temp | Nome de menu RedENGINE conhecido | **High** | Medium | `REDENGINE_MENU_LUA_*` |
+| `imgui.ini` no diretório GTA V | GTA V não usa ImGui — sozinho | **Medium** | Low | `REDENGINE_IMGUI_INI` |
+| WinRAR temp com `redengine.exe` ou `settings.cock` | Extração recente do RAR | **Critical** | High | `REDENGINE_WINRAR_TEMP` |
+| WinRAR temp com menus `.lua` | Artefatos RedENGINE em extração | **High** | Medium | `REDENGINE_WINRAR_TEMP` |
+
+**Nota:** `imgui.ini` sozinho permanece Medium/Low — overlays legítimos (ReShade, GTA mod tools) também escrevem este arquivo. Escalação para High requer correlação com `settings.cock`, menu `.lua` ou Prefetch de `redengine.exe`.
+
+### JSON esperado
+
+`redengine_90d.json` deve sempre ser gerado no run folder, mesmo quando vazio (FindingCount=0).
+
+### Teste sintético (criar artefatos antes do scan)
+
+```powershell
+# Criar diretório WinRAR fake com artefatos
+$test = "$env:TEMP\Rar`$EXa_QA_redengine"
+New-Item -ItemType Directory -Force $test | Out-Null
+New-Item -ItemType File -Force "$test\redEngine.exe" | Out-Null
+New-Item -ItemType File -Force "$test\settings.cock" | Out-Null
+New-Item -ItemType File -Force "$test\absolute.lua" | Out-Null
+
+# Também criar settings.cock solto em Downloads para testar High sem loader
+New-Item -ItemType File -Force "$env:USERPROFILE\Downloads\settings.cock" | Out-Null
+```
+
+### Validação pós-scan
+
+```powershell
+cd D:\BypassNerfados\publish\win-x64
+.\EchoNerfados.exe --profile deep --no-open-report --no-final-prompt
+
+$desktop = [Environment]::GetFolderPath("Desktop")
+$folder  = Get-ChildItem "$desktop\Echo_Nerfados_*" | Sort-Object LastWriteTime | Select-Object -Last 1
+
+# P0: JSON exportado
+Test-Path "$($folder.FullName)\redengine_90d.json"  # deve ser True
+
+# Cobertura do módulo
+$e = Get-Content "$($folder.FullName)\evidence.json" -Raw | ConvertFrom-Json
+$e.moduleCoverage | Where-Object name -eq "RedENGINE Artifacts"  # status = "Executed"
+
+# Findings esperados
+$rf = $e.findings | Where-Object module -eq "RedENGINE Artifacts"
+$rf | Select-Object risk, confidence, ruleId, title
+
+# Critérios de aceite:
+# - WinRAR temp com co-localização: risk=Critical, confidence=High, ruleId=REDENGINE_WINRAR_TEMP
+# - settings.cock em Downloads: risk=High, confidence=Medium, ruleId=REDENGINE_SETTINGS_COCK
+# - NÃO deve haver Critical sem loader co-localizado para settings.cock sozinho
+```
+
+### Limpeza após teste
+
+```powershell
+Remove-Item -Recurse -Force "$env:TEMP\Rar`$EXa_QA_redengine" -ErrorAction SilentlyContinue
+Remove-Item -Force "$env:USERPROFILE\Downloads\settings.cock" -ErrorAction SilentlyContinue
+```
 
 ---
 
@@ -607,6 +676,17 @@ dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained
 - [ ] Scanner não crasha quando `rules/` ausente (graceful fallback)
 - [ ] `rules/score_weights.json` controla threshold de noise reduction (noiseMinRisk / noiseMaxConfidence)
 
+### RedENGINE Artifacts
+
+- [ ] `redengine_90d.json` gerado em todo scan (mesmo quando vazio)
+- [ ] `settings.cock` sozinho → **High/Medium** — NÃO Critical
+- [ ] `settings.cock` + `redengine.exe` no mesmo dir → **Critical/High** — ruleId `REDENGINE_SETTINGS_COCK_WITH_LOADER`
+- [ ] Menu `.lua` conhecido (absolute/lumia/phaze/nexus) em Downloads/Desktop/Temp → **High/Medium**
+- [ ] `imgui.ini` no dir GTA V sozinho → **Medium/Low** — NÃO escala sem correlação
+- [ ] WinRAR temp com loader co-localizado → **Critical/High** — ruleId `REDENGINE_WINRAR_TEMP`
+- [ ] Módulo aparece como `Executed` em `moduleCoverage` do `evidence.json`
+- [ ] Teste sintético: findings presentes para artefatos criados em `$TEMP\Rar$EXa_QA_redengine`
+
 ---
 
-*Relatório gerado em: 2026-05-15 | Build: 09613d3 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-15 | Build: 4d93642 | Echo Nerfados Shield XDR v1.0.0*
