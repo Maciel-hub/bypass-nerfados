@@ -47,14 +47,12 @@ public class SrumModule : BaseModule
                 return;
             }
 
-            // Try page sizes in order — Windows 10/11 SRUDB.dat uses 32768
-            foreach (var pageSize in new[] { 32768, 16384, 8192 })
-            {
-                if (TryReadWithPageSize(dbPath, tempDir, pageSize, findings, lookback, ct))
-                    return;
-                ct.ThrowIfCancellationRequested();
-            }
-            LogPartialError("SRUM: não foi possível abrir SRUDB.dat com nenhum tamanho de página (32768/16384/8192)");
+            // Read page size from ESE header (offset 236, cbDbPage) rather than looping through
+            // all sizes — JET_param.DatabasePageSize is process-wide; multiple JetCreateInstance2
+            // calls with different sizes in the same process cause "engine already initialized".
+            var pageSize = DetectEsePageSize(dbPath);
+            if (!TryReadWithPageSize(dbPath, tempDir, pageSize, findings, lookback, ct))
+                LogPartialError($"SRUM: não foi possível abrir SRUDB.dat (pageSize={pageSize} detectado no header)");
         }
         finally
         {
@@ -105,6 +103,24 @@ public class SrumModule : BaseModule
 
         if (skipped.Count > 0)
             LogPartialError($"SRUM: {skipped.Count} arquivo(s) SRU não copiado(s): {string.Join(", ", skipped)}");
+    }
+
+    // Reads cbDbPage from the ESE database header at offset 236 (0xEC).
+    // Defaults to 32768 (Windows 10/11 standard) when the header can't be read.
+    private static int DetectEsePageSize(string dbPath)
+    {
+        try
+        {
+            using var fs = new FileStream(dbPath, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            if (fs.Length < 240) return 32768;
+            fs.Seek(236, SeekOrigin.Begin);
+            var buf = new byte[4];
+            if (fs.Read(buf, 0, 4) < 4) return 32768;
+            var size = BitConverter.ToInt32(buf, 0);
+            return size is 4096 or 8192 or 16384 or 32768 ? size : 32768;
+        }
+        catch { return 32768; }
     }
 
     // Attempts to open and read SRUDB.dat with the given page size.

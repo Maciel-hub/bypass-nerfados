@@ -38,10 +38,12 @@ public class NetworkModule : BaseModule
                 string exePath = "desconhecido";
                 try { exePath = proc.MainModule?.FileName ?? nameLower; } catch { }
 
-                bool isKnownCheat = CheatDatabase.KnownExecutables.ContainsKey(nameLower + ".exe");
+                // TryGetCredibleCheat excludes generic names (spotify, launcher, dxsetup) unless
+                // the process path matches a known cheat location — prevents false positives on
+                // legitimate Spotify.exe, launcher.exe from Rockstar/Steam, etc.
+                var credibleCheat = CheatDatabase.TryGetCredibleCheat(nameLower + ".exe", exePath);
+                bool isKnownCheat = credibleCheat != null;
 
-                // Skip known-safe processes (Spotify, Python, Teams, etc.) unless they match
-                // a confirmed cheat executable — path heuristics alone are too noisy here
                 if (!isKnownCheat && IsKnownSafeProcess(nameLower)) continue;
 
                 bool isSuspicious = CheatDatabase.HasSuspiciousKeyword(nameLower) ||
@@ -63,7 +65,7 @@ public class NetworkModule : BaseModule
                             isKnownCheat ? FindingCategory.Cheat : FindingCategory.NetworkActivity,
                             Name,
                             isKnownCheat
-                                ? $"CHEAT COM CONEXÃO ATIVA: {proc.ProcessName}"
+                                ? $"CHEAT COM CONEXÃO ATIVA: {credibleCheat!.Name} ({proc.ProcessName})"
                                 : $"Conexão suspeita: {proc.ProcessName} (PID {proc.Id})",
                             $"Executável suspeito com conexões externas ativas.\nCaminho: {exePath}",
                             $"Conexões: {remotes}"
@@ -126,14 +128,30 @@ public class NetworkModule : BaseModule
                 if (CheatDatabase.KnownExecutables.TryGetValue(exeName, out var cheat) &&
                     trimmed.Contains("ESTABLISHED"))
                 {
-                    findings.Add(new Finding(
-                        RiskLevel.Critical,
-                        FindingCategory.Cheat,
-                        Name,
-                        $"CHEAT COM TRÁFEGO ATIVO: {cheat.Name} ({exeName})",
-                        $"Cheat detectado com conexão de rede estabelecida.\n{cheat.Description}",
-                        $"Linha netstat: {trimmed}"
-                    ));
+                    if (cheat.IsGenericName)
+                    {
+                        findings.Add(new Finding(
+                            RiskLevel.Medium,
+                            FindingCategory.SuspiciousExecution,
+                            Name,
+                            $"Processo com nome genérico com tráfego ativo: {exeName}",
+                            $"Nome genérico associado a cheats FiveM com conexão ativa — confirmar por caminho e hash.\n{cheat.Description}",
+                            $"Linha netstat: {trimmed}",
+                            confidence: Confidence.Low,
+                            validationHint: "Verificar caminho completo do processo e hash SHA256 antes de concluir"
+                        ));
+                    }
+                    else
+                    {
+                        findings.Add(new Finding(
+                            RiskLevel.Critical,
+                            FindingCategory.Cheat,
+                            Name,
+                            $"CHEAT COM TRÁFEGO ATIVO: {cheat.Name} ({exeName})",
+                            $"Cheat detectado com conexão de rede estabelecida.\n{cheat.Description}",
+                            $"Linha netstat: {trimmed}"
+                        ));
+                    }
                 }
             }
         }
