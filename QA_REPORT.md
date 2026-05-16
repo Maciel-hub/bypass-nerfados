@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+94567fa  
-**Build:** 94567fa — fix: SRUM byte columns optional + schema dump; f7fe5c6 — fix: SRUM column resilience + coverage; 4d93642 — fix: QA redengine; 8f0bf22 — feat: RedENGINE; 49400c3 — feat: 3-tier  
+**Versão:** 1.0.0+e01edf7  
+**Build:** e01edf7 — fix: SRUM BuildAppMap schema dump; 94567fa — fix: SRUM byte columns optional; f7fe5c6 — fix: coverage filesystem; 4d93642 — fix: redengine QA; 8f0bf22 — feat: RedENGINE  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `12693354C13B544CD0A864E920A4BFFE5F3F1C815B694846208DEC3A0094EE16`  
+**SHA256:** `374596EF9FA807D506F3FF9F3B2870B55CB99CC38F8BC50104F2423CFA1DAE08`  
 **Tamanho:** ~67 MB (self-contained, sem dependência de .NET no host)  
 **Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
@@ -714,6 +714,12 @@ SRUDB.dat usa ESE e os nomes de coluna variam entre builds do Windows.
 - Módulo continua — cheats conhecidos ainda detectados por nome (sem totais de bytes)
 - `reason` do `moduleCoverage` lista colunas disponíveis, NÃO `"No such column"` genérico
 
+**Critério de aceite — IdMap (BuildAppMap):**
+- Se `SruDbIdMapTable` não existir: `LogPartialError` com mensagem `"SruDbIdMapTable não encontrada"` — sem crash
+- Se colunas `IdIndex`/`App` não forem encontradas: finding `SRUM_IDMAP_SCHEMA_INCOMPATIBLE` (info/LogCoverage/scoreEligible=false) com schema dump
+- Se tabela existe mas `appMap.Count == 0`: finding `SRUM_IDMAP_EMPTY` (info/LogCoverage/scoreEligible=false)
+- Em nenhum caso o módulo encerra silenciosamente sem diagnóstico
+
 ---
 
 ## 14. Cobertura de Módulos Filesystem/Registry
@@ -728,4 +734,4 @@ Módulos baseados em log de eventos (`Event Viewer`, `Windows Defender`) continu
 
 ---
 
-*Relatório gerado em: 2026-05-15 | Build: 94567fa | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-15 | Build: e01edf7 | Echo Nerfados Shield XDR v1.0.0*
