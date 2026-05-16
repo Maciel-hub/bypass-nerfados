@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+e01edf7  
-**Build:** e01edf7 — fix: SRUM BuildAppMap schema dump; 94567fa — fix: SRUM byte columns optional; f7fe5c6 — fix: coverage filesystem; 4d93642 — fix: redengine QA; 8f0bf22 — feat: RedENGINE  
+**Versão:** 1.0.0+851e9af  
+**Build:** 851e9af — fix: SRUM TimeStamp DateTime vs FILETIME; e01edf7 — fix: SRUM BuildAppMap; 94567fa — fix: SRUM bytes optional; f7fe5c6 — fix: coverage filesystem; 8f0bf22 — feat: RedENGINE  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `374596EF9FA807D506F3FF9F3B2870B55CB99CC38F8BC50104F2423CFA1DAE08`  
+**SHA256:** `394F1635DA36215A5ABC6E1C77FBA79F88D9122B2C0E8861D141916A367A0373`  
 **Tamanho:** ~67 MB (self-contained, sem dependência de .NET no host)  
 **Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
@@ -706,7 +706,13 @@ SRUDB.dat usa ESE e os nomes de coluna variam entre builds do Windows.
 
 `TryGetColumn()` tenta cada candidato em ordem; lança `InvalidOperationException` apenas se todos falharem, e o erro é capturado e logado como `PartialError`.
 
-**Critério de aceite:** SRUM não deve emitir `No such column` em Windows 10 21H2, 22H2 ou Windows 11 22H2/23H2.
+**Critério de aceite:** SRUM não deve emitir `No such column` nem `Not a valid Win32 FileTime` em nenhuma build do Windows.
+
+**Detecção de tipo de TimeStamp:**
+- `tsColtyp == "DateTime"` → `RetrieveColumnAsDateTime` (OLE Automation date, UTC → local)
+- Outro (Long/LongLong/Currency) → `RetrieveColumnAsInt64` + `FileTimeToDateTime` (FILETIME)
+- Linha com timestamp nulo ou inválido → `malformedRows++; continue` (não derruba o módulo)
+- Após loop: `LogPartialError` se `malformedRows > 0`
 
 **Critério de aceite — degradação graciosa:**
 - Se colunas de bytes não forem encontradas: `SRUM_SCHEMA_INCOMPATIBLE` presente em `srum_90d.json` com lista de colunas disponíveis
@@ -734,4 +740,4 @@ Módulos baseados em log de eventos (`Event Viewer`, `Windows Defender`) continu
 
 ---
 
-*Relatório gerado em: 2026-05-15 | Build: e01edf7 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-15 | Build: 851e9af | Echo Nerfados Shield XDR v1.0.0*
