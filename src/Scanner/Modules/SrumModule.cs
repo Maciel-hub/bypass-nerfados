@@ -231,6 +231,20 @@ public class SrumModule : BaseModule
         return map;
     }
 
+    // Enumerates all columns in a table for diagnostic output.
+    // Used when TryGetColumn fails to identify the actual schema in this Windows build.
+    private static List<(string Name, string Coltyp)> DumpTableSchema(JET_SESID sesid, JET_TABLEID tableId)
+    {
+        var result = new List<(string Name, string Coltyp)>();
+        try
+        {
+            foreach (var col in Api.GetTableColumns(sesid, tableId))
+                result.Add((col.Name, col.Coltyp.ToString()));
+        }
+        catch { }
+        return result;
+    }
+
     private void ReadNetworkUsage(JET_SESID sesid, JET_DBID dbid,
         Dictionary<int, string> appMap, List<Finding> findings,
         TimeSpan lookback, CancellationToken ct)
@@ -240,13 +254,62 @@ public class SrumModule : BaseModule
             Api.JetOpenTable(sesid, dbid, NetTable, null, 0, OpenTableGrbit.ReadOnly, out var tableId);
             try
             {
-                var colAppId  = TryGetColumn(sesid, tableId, "AppId", "AppID", "AppIndex");
-                var colSent   = TryGetColumn(sesid, tableId, "BytesSent", "bytesSent");
-                var colRecvd  = TryGetColumn(sesid, tableId, "BytesRecvd", "BytesRecv", "BytesReceived");
-                var colTs     = TryGetColumn(sesid, tableId, "TimeStamp", "Timestamp", "timestamp");
+                // AppId and TimeStamp are required — without them we can't identify apps or filter by date
+                var colAppId = TryGetColumn(sesid, tableId, "AppId", "AppID", "AppIndex");
+                var colTs    = TryGetColumn(sesid, tableId, "TimeStamp", "Timestamp", "timestamp");
+
+                // Byte columns are optional — try all known variants across Windows builds
+                JET_COLUMNID? colSent = null, colRecvd = null;
+
+                try
+                {
+                    colSent = TryGetColumn(sesid, tableId,
+                        "BytesSent", "bytesSent", "BytesOut", "BytesOutbound",
+                        "BytesTransmitted", "TxBytes", "SentBytes", "UploadBytes");
+                }
+                catch { }
+
+                try
+                {
+                    colRecvd = TryGetColumn(sesid, tableId,
+                        "BytesRecvd", "BytesRecv", "BytesReceived", "BytesIn",
+                        "BytesInbound", "RxBytes", "RecvBytes", "DownloadBytes");
+                }
+                catch { }
+
+                bool bytesAvailable = colSent.HasValue && colRecvd.HasValue;
+
+                if (!bytesAvailable)
+                {
+                    // Dump the actual schema so the next fix attempt has the correct column names
+                    var schema = DumpTableSchema(sesid, tableId);
+                    var schemaStr = string.Join(", ", schema.Select(c => $"{c.Name}({c.Coltyp})"));
+                    var missing   = new List<string>();
+                    if (!colSent.HasValue)  missing.Add("BytesSent (e variantes)");
+                    if (!colRecvd.HasValue) missing.Add("BytesRecvd (e variantes)");
+
+                    var schemaFinding = new Finding(
+                        RiskLevel.Info,
+                        FindingCategory.LogCoverage,
+                        Name,
+                        $"SRUM: schema incompatível — {string.Join(" e ", missing)} não encontradas",
+                        $"As colunas de bytes não foram encontradas nesta build do Windows.\n" +
+                        $"AppId e TimeStamp disponíveis — cheats conhecidos ainda são detectáveis por nome.\n" +
+                        $"Colunas não encontradas: {string.Join(", ", missing)}",
+                        $"Colunas disponíveis: {schemaStr}",
+                        confidence: Confidence.Confirmed,
+                        ruleId: "SRUM_SCHEMA_INCOMPATIBLE"
+                    );
+                    schemaFinding.ScoreEligible = false;
+                    findings.Add(schemaFinding);
+
+                    LogPartialError(
+                        $"SRUM: schema da tabela de rede — faltam {string.Join(", ", missing)}. " +
+                        $"Colunas disponíveis: [{schemaStr}]. " +
+                        $"Continuando sem totais de bytes.");
+                }
 
                 var cutoff = DateTime.UtcNow - lookback;
-                // Accumulate per-app totals before emitting findings
                 var appTotals = new Dictionary<string, (long sent, long recvd, DateTime? lastSeen)>(
                     StringComparer.OrdinalIgnoreCase);
 
@@ -255,11 +318,11 @@ public class SrumModule : BaseModule
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    var appId  = Api.RetrieveColumnAsInt32(sesid, tableId, colAppId);
-                    var sent   = Api.RetrieveColumnAsInt64(sesid, tableId, colSent)   ?? 0;
-                    var recvd  = Api.RetrieveColumnAsInt64(sesid, tableId, colRecvd)  ?? 0;
-                    var tsRaw  = Api.RetrieveColumnAsInt64(sesid, tableId, colTs);
-                    var ts     = tsRaw.HasValue ? FileTimeToDateTime(tsRaw.Value) : null;
+                    var appId = Api.RetrieveColumnAsInt32(sesid, tableId, colAppId);
+                    var sent  = colSent.HasValue  ? Api.RetrieveColumnAsInt64(sesid, tableId, colSent.Value)  ?? 0 : 0;
+                    var recvd = colRecvd.HasValue ? Api.RetrieveColumnAsInt64(sesid, tableId, colRecvd.Value) ?? 0 : 0;
+                    var tsRaw = Api.RetrieveColumnAsInt64(sesid, tableId, colTs);
+                    var ts    = tsRaw.HasValue ? FileTimeToDateTime(tsRaw.Value) : null;
 
                     if (ts.HasValue && ts.Value.ToUniversalTime() < cutoff) continue;
                     if (!appId.HasValue) continue;
@@ -275,11 +338,10 @@ public class SrumModule : BaseModule
                     appTotals[appPath] = (totals.sent + sent, totals.recvd + recvd, lastTs);
                 }
 
-                // Evaluate accumulated entries
                 foreach (var (appPath, (totalSent, totalRecvd, lastSeen)) in appTotals)
                 {
                     ct.ThrowIfCancellationRequested();
-                    EvaluateSrumEntry(appPath, totalSent, totalRecvd, lastSeen, findings);
+                    EvaluateSrumEntry(appPath, totalSent, totalRecvd, lastSeen, bytesAvailable, findings);
                 }
             }
             finally { Api.JetCloseTable(sesid, tableId); }
@@ -293,19 +355,23 @@ public class SrumModule : BaseModule
     }
 
     private void EvaluateSrumEntry(string appPath, long totalSent, long totalRecvd,
-        DateTime? lastSeen, List<Finding> findings)
+        DateTime? lastSeen, bool bytesAvailable, List<Finding> findings)
     {
         var fileName = Path.GetFileName(appPath).ToLowerInvariant();
         if (string.IsNullOrEmpty(fileName)) return;
 
         var totalMb = (totalSent + totalRecvd) / 1_048_576.0;
-        var netDetail = $"Enviado: {totalSent / 1024:N0} KB | Recebido: {totalRecvd / 1024:N0} KB | Total: {totalMb:F1} MB";
+        var netDetail = bytesAvailable
+            ? $"Enviado: {totalSent / 1024:N0} KB | Recebido: {totalRecvd / 1024:N0} KB | Total: {totalMb:F1} MB"
+            : "Totais de bytes indisponíveis (schema SRUDB incompatível nesta build do Windows)";
 
         var cheat = CheatDatabase.TryGetCredibleCheat(fileName, appPath);
         if (cheat != null)
         {
+            // When bytes unavailable, default to High since we can't confirm traffic volume
+            var risk = bytesAvailable ? (totalMb > 1 ? RiskLevel.Critical : RiskLevel.High) : RiskLevel.High;
             findings.Add(new Finding(
-                totalMb > 1 ? RiskLevel.Critical : RiskLevel.High,
+                risk,
                 FindingCategory.Cheat,
                 Name,
                 $"SRUM — CHEAT COM ATIVIDADE DE REDE: {cheat.Name} ({fileName})",
@@ -337,7 +403,8 @@ public class SrumModule : BaseModule
             return;
         }
 
-        if (CheatDatabase.IsSuspiciousPath(appPath.ToLowerInvariant()) && totalMb > 0.5)
+        // Threshold-based path check only when bytes are actually known
+        if (bytesAvailable && CheatDatabase.IsSuspiciousPath(appPath.ToLowerInvariant()) && totalMb > 0.5)
         {
             findings.Add(new Finding(
                 RiskLevel.Medium,
