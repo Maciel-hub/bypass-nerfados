@@ -6,6 +6,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Scanner", "src\Scanner\Scanner.csproj", "{AA2974CB-254E-07BC-9B8C-EA23A62873B1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MemoryHarness", "src\MemoryHarness\MemoryHarness.csproj", "{B3F12E44-7A1C-4D8B-9C2F-5E8A1D0F3C76}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -16,12 +18,17 @@ Global
 		{AA2974CB-254E-07BC-9B8C-EA23A62873B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AA2974CB-254E-07BC-9B8C-EA23A62873B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AA2974CB-254E-07BC-9B8C-EA23A62873B1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B3F12E44-7A1C-4D8B-9C2F-5E8A1D0F3C76}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B3F12E44-7A1C-4D8B-9C2F-5E8A1D0F3C76}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B3F12E44-7A1C-4D8B-9C2F-5E8A1D0F3C76}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B3F12E44-7A1C-4D8B-9C2F-5E8A1D0F3C76}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{AA2974CB-254E-07BC-9B8C-EA23A62873B1} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{B3F12E44-7A1C-4D8B-9C2F-5E8A1D0F3C76} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {E025B91A-3AE4-4941-9E9F-073F41F7189F}
