@@ -158,7 +158,7 @@ public class MemoryDllTraceModule : BaseModule
                 if (isPrivate && isExec && regionSize > 0x1000)
                     privateExecRegions.Add((regionBase, regionSize));
 
-                if (isPrivate && mbi.Protect == PAGE_EXECUTE_READWRITE)
+                if (isPrivate && (mbi.Protect & 0xFF) == PAGE_EXECUTE_READWRITE)
                 {
                     rwxCount++;
                     if (rwxCount <= 3)
@@ -257,11 +257,7 @@ public class MemoryDllTraceModule : BaseModule
 
         if (string.IsNullOrWhiteSpace(path) || IsOwnProcess(path)) return;
 
-        // Standard system paths are unconditionally trusted
-        if (SystemPathPrefixes.Any(p => path.StartsWith(p, StringComparison.OrdinalIgnoreCase))) return;
-        if (CheatDatabase.IsKnownLegitimate(path)) return;
-
-        // Known cheat DLL?
+        // KnownDlls always checked first — a cheat DLL placed under Program Files must not be suppressed.
         if (CheatDatabase.KnownDlls.TryGetValue(lower, out var dllInfo))
         {
             string? sha256 = null;
@@ -278,6 +274,20 @@ public class MemoryDllTraceModule : BaseModule
             ));
             return;
         }
+
+        // C:\Windows\ — unconditionally trusted (KnownDlls already won above)
+        if (path.StartsWith(@"C:\Windows\", StringComparison.OrdinalIgnoreCase)) return;
+
+        // C:\Program Files\ — trusted only with a valid Authenticode chain.
+        // An unsigned DLL under Program Files in a FiveM/GTA process is still suspicious.
+        if (path.StartsWith(@"C:\Program Files\",      StringComparison.OrdinalIgnoreCase) ||
+            path.StartsWith(@"C:\Program Files (x86)\", StringComparison.OrdinalIgnoreCase))
+        {
+            if (IsAuthenticodeSigned(path)) return;
+            // Fall through — unsigned Program Files DLL warrants inspection
+        }
+
+        if (CheatDatabase.IsKnownLegitimate(path)) return;
 
         // File deleted from disk after load?
         bool exists = File.Exists(path);
@@ -491,17 +501,27 @@ public class MemoryDllTraceModule : BaseModule
         return Convert.ToHexString(sha.ComputeHash(fs));
     }
 
+    // Strip PAGE_GUARD (0x100), PAGE_NOCACHE (0x200), PAGE_WRITECOMBINE (0x400) modifiers
+    // before comparing — they can be OR'd into any base protection value.
     private static bool IsExecutable(uint p) =>
-        p is PAGE_EXECUTE or PAGE_EXECUTE_READ or PAGE_EXECUTE_READWRITE or PAGE_EXECUTE_WRITECOPY;
+        (p & 0xFF) is PAGE_EXECUTE or PAGE_EXECUTE_READ or PAGE_EXECUTE_READWRITE or PAGE_EXECUTE_WRITECOPY;
 
-    private static string ProtectName(uint p) => p switch
+    private static string ProtectName(uint p)
     {
-        PAGE_EXECUTE             => "EXECUTE",
-        PAGE_EXECUTE_READ        => "EXECUTE_READ",
-        PAGE_EXECUTE_READWRITE   => "EXECUTE_READWRITE",
-        PAGE_EXECUTE_WRITECOPY   => "EXECUTE_WRITECOPY",
-        _                        => $"0x{p:X}"
-    };
+        var mods = new List<string>();
+        if ((p & 0x100) != 0) mods.Add("GUARD");
+        if ((p & 0x200) != 0) mods.Add("NOCACHE");
+        if ((p & 0x400) != 0) mods.Add("WRITECOMBINE");
+        var suffix = mods.Count > 0 ? $"|{string.Join("|", mods)}" : "";
+        return ((p & 0xFF) switch
+        {
+            PAGE_EXECUTE           => "EXECUTE",
+            PAGE_EXECUTE_READ      => "EXECUTE_READ",
+            PAGE_EXECUTE_READWRITE => "EXECUTE_READWRITE",
+            PAGE_EXECUTE_WRITECOPY => "EXECUTE_WRITECOPY",
+            _                      => $"0x{p & 0xFF:X}"
+        }) + suffix;
+    }
 
     // ── Win32 constants ────────────────────────────────────────────────────────
 
