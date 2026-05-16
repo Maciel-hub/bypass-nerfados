@@ -311,18 +311,21 @@ public class ScanOrchestrator
         // ── Flag-gated modules (Deep profile ignores flags and runs both) ─────
         if (isFast)
         {
-            Skip("USN Journal",    "Perfil rápido (--profile fast)", "Operações de arquivo de baixo nível não coletadas");
-            Skip("Process Memory", "Perfil rápido (--profile fast)", "Varredura de memória de processos não realizada");
+            Skip("USN Journal",       "Perfil rápido (--profile fast)", "Operações de arquivo de baixo nível não coletadas");
+            Skip("Process Memory",    "Perfil rápido (--profile fast)", "Varredura de memória de processos não realizada");
+            Skip("Memory DLL Trace",  "Perfil rápido (--profile fast)", "Análise de DLLs e regiões de memória FiveM/GTA não realizada");
         }
         else if (isDeep && _result.IsAdministrator)
         {
-            Queue(new UsnJournalModule(),    "Operações de arquivo de baixo nível (criação/deleção/renomeação)");
-            Queue(new ProcessMemoryModule(), "Strings suspeitas em memória de processos");
+            Queue(new UsnJournalModule(),       "Operações de arquivo de baixo nível (criação/deleção/renomeação)");
+            Queue(new ProcessMemoryModule(),    "Strings suspeitas em memória de processos");
+            Queue(new MemoryDllTraceModule(),   "DLLs carregadas, módulos ocultos/manual map e regiões executáveis em processos FiveM/GTA");
         }
         else if (isDeep)
         {
-            Skip("USN Journal",    "Requer Administrador (perfil deep)", "Operações de arquivo de baixo nível não coletadas");
-            Skip("Process Memory", "Requer Administrador (perfil deep)", "Strings suspeitas em memória não varridas");
+            Skip("USN Journal",      "Requer Administrador (perfil deep)", "Operações de arquivo de baixo nível não coletadas");
+            Skip("Process Memory",   "Requer Administrador (perfil deep)", "Strings suspeitas em memória não varridas");
+            Skip("Memory DLL Trace", "Requer Administrador (perfil deep)", "Análise de DLLs e regiões de memória não realizada");
         }
         else
         {
@@ -334,11 +337,20 @@ public class ScanOrchestrator
                 Skip("USN Journal", "Desativado (--no-usn)", "Operações de arquivo de baixo nível não coletadas");
 
             if (_config.DeepMemoryScan && _result.IsAdministrator)
-                Queue(new ProcessMemoryModule(), "Strings suspeitas em memória de processos");
+            {
+                Queue(new ProcessMemoryModule(),  "Strings suspeitas em memória de processos");
+                Queue(new MemoryDllTraceModule(), "DLLs carregadas, módulos ocultos/manual map e regiões executáveis em processos FiveM/GTA");
+            }
             else if (_config.DeepMemoryScan)
-                Skip("Process Memory", "Requer Administrador", "Strings suspeitas em memória não varridas");
+            {
+                Skip("Process Memory",   "Requer Administrador", "Strings suspeitas em memória não varridas");
+                Skip("Memory DLL Trace", "Requer Administrador", "Análise de DLLs e regiões de memória não realizada");
+            }
             else
-                Skip("Process Memory", "Desativado (--no-memory)", "Varredura de memória de processos não realizada");
+            {
+                Skip("Process Memory",   "Desativado (--no-memory)", "Varredura de memória de processos não realizada");
+                Skip("Memory DLL Trace", "Desativado (--no-memory)", "Análise de DLLs e regiões de memória não realizada");
+            }
         }
 
         return list;
