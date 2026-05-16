@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+f7fe5c6  
-**Build:** f7fe5c6 — fix: SRUM column resilience + filesystem coverage; 4d93642 — fix: QA P0/P1 redengine; 8f0bf22 — feat: RedENGINE artifacts; 49400c3 — feat: 3-tier classification; 38907aa — feat: Sprint 3  
+**Versão:** 1.0.0+94567fa  
+**Build:** 94567fa — fix: SRUM byte columns optional + schema dump; f7fe5c6 — fix: SRUM column resilience + coverage; 4d93642 — fix: QA redengine; 8f0bf22 — feat: RedENGINE; 49400c3 — feat: 3-tier  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `117ECFE741CE4CCC24ED84DBB02453A96AEC0F7D756BEC3996417707ED842FE4`  
+**SHA256:** `12693354C13B544CD0A864E920A4BFFE5F3F1C815B694846208DEC3A0094EE16`  
 **Tamanho:** ~67 MB (self-contained, sem dependência de .NET no host)  
 **Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
@@ -708,6 +708,12 @@ SRUDB.dat usa ESE e os nomes de coluna variam entre builds do Windows.
 
 **Critério de aceite:** SRUM não deve emitir `No such column` em Windows 10 21H2, 22H2 ou Windows 11 22H2/23H2.
 
+**Critério de aceite — degradação graciosa:**
+- Se colunas de bytes não forem encontradas: `SRUM_SCHEMA_INCOMPATIBLE` presente em `srum_90d.json` com lista de colunas disponíveis
+- Finding com `ruleId = "SRUM_SCHEMA_INCOMPATIBLE"`, `risk = "info"`, `scoreEligible = false`
+- Módulo continua — cheats conhecidos ainda detectados por nome (sem totais de bytes)
+- `reason` do `moduleCoverage` lista colunas disponíveis, NÃO `"No such column"` genérico
+
 ---
 
 ## 14. Cobertura de Módulos Filesystem/Registry
@@ -722,4 +728,4 @@ Módulos baseados em log de eventos (`Event Viewer`, `Windows Defender`) continu
 
 ---
 
-*Relatório gerado em: 2026-05-15 | Build: f7fe5c6 | Echo Nerfados Shield XDR v1.0.0*
+*Relatório gerado em: 2026-05-15 | Build: 94567fa | Echo Nerfados Shield XDR v1.0.0*
