@@ -203,6 +203,10 @@ public class SrumModule : BaseModule
     }
 
     // Builds idIndex → app path dictionary from SruDbIdMapTable.
+    // Two schemas are supported:
+    //   Old (Win 10 early): IdIndex(Long) + App(Text) — path stored as Unicode string
+    //   New (Win 11+):      IdIndex(Long) + IdBlob(LongBinary) + IdType(UnsignedByte)
+    //                       — path stored as UTF-16LE bytes; IdType 1 = exe, 2 = SID
     private Dictionary<int, string> BuildAppMap(JET_SESID sesid, JET_DBID dbid,
         List<Finding> findings, CancellationToken ct)
     {
@@ -215,29 +219,43 @@ public class SrumModule : BaseModule
             tableOpened = true;
             try
             {
-                JET_COLUMNID idxCol, appCol;
-                try
-                {
-                    idxCol = TryGetColumn(sesid, tableId, "IdIndex", "IdIdx", "Id");
-                    appCol = TryGetColumn(sesid, tableId, "App", "ExeInfo", "AppName");
-                }
+                // Enumerate schema once — used for column resolution and error diagnostics
+                var tableSchema = DumpTableSchema(sesid, tableId)
+                    .ToDictionary(c => c.Name, c => c.Coltyp, StringComparer.OrdinalIgnoreCase);
+
+                // IdIndex is required by both schemas
+                JET_COLUMNID idxCol;
+                try { idxCol = TryGetColumn(sesid, tableId, "IdIndex", "IdIdx", "Id"); }
                 catch (InvalidOperationException)
                 {
-                    var schema    = DumpTableSchema(sesid, tableId);
-                    var schemaStr = string.Join(", ", schema.Select(c => $"{c.Name}({c.Coltyp})"));
-                    LogPartialError(
-                        $"SRUM: colunas do IdMap não encontradas. Colunas disponíveis: [{schemaStr}]");
-                    var f = new Finding(
-                        RiskLevel.Info, FindingCategory.LogCoverage, Name,
-                        "SRUM: schema do IdMap incompatível — colunas de identificação não encontradas",
-                        "As colunas IdIndex e App da tabela de mapeamento não foram encontradas.\n" +
-                        "App paths não serão resolvidos — detecção por nome de arquivo do cheat ainda funciona.",
-                        $"Colunas disponíveis: {schemaStr}",
-                        confidence: Confidence.Confirmed,
-                        ruleId: "SRUM_IDMAP_SCHEMA_INCOMPATIBLE");
-                    f.ScoreEligible = false;
-                    findings.Add(f);
+                    EmitIdMapSchemaError(findings, tableSchema);
                     return map;
+                }
+
+                // Try old schema: App text column
+                JET_COLUMNID appCol   = default;
+                JET_COLUMNID? blobCol = null;
+                JET_COLUMNID? typeCol = null;
+                bool useBlobSchema    = false;
+
+                bool hasAppCol = false;
+                try { appCol = TryGetColumn(sesid, tableId, "App", "ExeInfo", "AppName"); hasAppCol = true; }
+                catch { }
+
+                if (!hasAppCol)
+                {
+                    // New schema: IdBlob(LongBinary) carries the path as UTF-16LE bytes
+                    try { blobCol = TryGetColumn(sesid, tableId, "IdBlob"); useBlobSchema = true; }
+                    catch { }
+
+                    // IdType is optional — filters SID (2) and service (3) entries
+                    try { typeCol = TryGetColumn(sesid, tableId, "IdType"); } catch { }
+
+                    if (!useBlobSchema)
+                    {
+                        EmitIdMapSchemaError(findings, tableSchema);
+                        return map;
+                    }
                 }
 
                 Api.MoveBeforeFirst(sesid, tableId);
@@ -245,9 +263,28 @@ public class SrumModule : BaseModule
                 {
                     ct.ThrowIfCancellationRequested();
                     var idx = Api.RetrieveColumnAsInt32(sesid, tableId, idxCol);
-                    var app = Api.RetrieveColumnAsString(sesid, tableId, appCol,
-                        System.Text.Encoding.Unicode) ?? "";
-                    if (idx.HasValue && !string.IsNullOrEmpty(app))
+                    if (!idx.HasValue) continue;
+
+                    string app;
+                    if (useBlobSchema)
+                    {
+                        // IdType 1 = exe path; 2 = SID; 3 = service — skip non-exe entries
+                        if (typeCol.HasValue)
+                        {
+                            var typeBytes = Api.RetrieveColumn(sesid, tableId, typeCol.Value);
+                            if (typeBytes?.Length > 0 && typeBytes[0] != 1) continue;
+                        }
+                        var blobBytes = Api.RetrieveColumn(sesid, tableId, blobCol!.Value);
+                        if (blobBytes == null || blobBytes.Length == 0) continue;
+                        app = System.Text.Encoding.Unicode.GetString(blobBytes).TrimEnd('\0');
+                    }
+                    else
+                    {
+                        app = Api.RetrieveColumnAsString(sesid, tableId, appCol,
+                            System.Text.Encoding.Unicode) ?? "";
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(app) && !app.StartsWith("S-1-"))
                         map[idx.Value] = app;
                 }
             }
@@ -275,6 +312,24 @@ public class SrumModule : BaseModule
         }
 
         return map;
+    }
+
+    private void EmitIdMapSchemaError(List<Finding> findings,
+        Dictionary<string, string> tableSchema)
+    {
+        var schemaStr = string.Join(", ", tableSchema.Select(kvp => $"{kvp.Key}({kvp.Value})"));
+        LogPartialError(
+            $"SRUM: colunas do IdMap não encontradas. Colunas disponíveis: [{schemaStr}]");
+        var f = new Finding(
+            RiskLevel.Info, FindingCategory.LogCoverage, Name,
+            "SRUM: schema do IdMap incompatível — nenhuma coluna de app path encontrada",
+            "Nenhuma coluna compatível encontrada (App/ExeInfo/IdBlob).\n" +
+            "App paths não serão resolvidos — detecção por nome de cheat ainda funciona.",
+            $"Colunas disponíveis: {schemaStr}",
+            confidence: Confidence.Confirmed,
+            ruleId: "SRUM_IDMAP_SCHEMA_INCOMPATIBLE");
+        f.ScoreEligible = false;
+        findings.Add(f);
     }
 
     // Enumerates all columns in a table for diagnostic output.
