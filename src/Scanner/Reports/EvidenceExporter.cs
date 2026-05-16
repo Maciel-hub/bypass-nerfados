@@ -9,8 +9,9 @@ public static class EvidenceExporter
 {
     private static readonly JsonSerializerOptions Opts = new()
     {
-        WriteIndented = true,
-        Converters    = { new JsonStringEnumConverter() },
+        WriteIndented       = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        Converters          = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
     };
 
@@ -26,6 +27,9 @@ public static class EvidenceExporter
             LookbackDays          = lookback,
             TotalScore            = result.TotalScore,
             RawScore              = result.RawScore,
+            UncappedRawScore      = result.UncappedRawScore,
+            UncappedEligibleScore = result.UncappedEligibleScore,
+            FilteredWeightedScore = result.FilteredWeightedScore,
             FilteredCount         = result.FilteredCount,
             EligibleFindingCount  = result.Findings.Count(f => f.ScoreEligible),
             FilteredFindingCount  = result.FilteredCount,
@@ -155,16 +159,19 @@ public static class EvidenceExporter
 
 file sealed class EvidenceExportDto
 {
-    public string   Machine              { get; init; } = "";
-    public string   User                 { get; init; } = "";
-    public DateTime ScanTime             { get; init; }
-    public int      LookbackDays         { get; init; }
-    public int      TotalScore           { get; init; }
-    public int      RawScore             { get; init; }
-    public int      FilteredCount        { get; init; }
-    public int      EligibleFindingCount { get; init; }
-    public int      FilteredFindingCount { get; init; }
-    public string   OverallRisk          { get; init; } = "";
+    public string   Machine               { get; init; } = "";
+    public string   User                  { get; init; } = "";
+    public DateTime ScanTime              { get; init; }
+    public int      LookbackDays          { get; init; }
+    public int      TotalScore            { get; init; }
+    public int      RawScore              { get; init; }
+    public double   UncappedRawScore      { get; init; }
+    public double   UncappedEligibleScore { get; init; }
+    public double   FilteredWeightedScore { get; init; }
+    public int      FilteredCount         { get; init; }
+    public int      EligibleFindingCount  { get; init; }
+    public int      FilteredFindingCount  { get; init; }
+    public string   OverallRisk           { get; init; } = "";
     public List<FindingDto>         Findings        { get; init; } = [];
     public List<BundleDto>          EvidenceBundles { get; init; } = [];
     public List<ModuleCoverageDto>  ModuleCoverage  { get; init; } = [];

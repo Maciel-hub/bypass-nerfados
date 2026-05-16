@@ -20,9 +20,12 @@ public class ScanResult
     public Dictionary<string, TimeSpan> ModuleDurations { get; } = new();
 
     // Only eligible findings count toward score (Medium+Low without correlation are filtered out)
-    public int TotalScore    => (int)Math.Min(Findings.Where(f => f.ScoreEligible).Sum(f => f.WeightedScore), 100);
-    public int RawScore      => (int)Math.Min(Findings.Sum(f => f.WeightedScore), 100);
-    public int FilteredCount => Findings.Count(f => !f.ScoreEligible);
+    public int    TotalScore            => (int)Math.Min(Findings.Where(f => f.ScoreEligible).Sum(f => f.WeightedScore), 100);
+    public int    RawScore              => (int)Math.Min(Findings.Sum(f => f.WeightedScore), 100);
+    public int    FilteredCount         => Findings.Count(f => !f.ScoreEligible);
+    public double UncappedRawScore      => Findings.Sum(f => f.WeightedScore);
+    public double UncappedEligibleScore => Findings.Where(f => f.ScoreEligible).Sum(f => f.WeightedScore);
+    public double FilteredWeightedScore => Findings.Where(f => !f.ScoreEligible).Sum(f => f.WeightedScore);
 
     public RiskLevel OverallRisk => TotalScore switch
     {
