@@ -5,7 +5,7 @@ using BypassNerfados.Scanner.Models;
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 Console.Title = "Echo Nerfados Shield XDR v1.0";
 
-// --help / --machine-id: work without license, without interactive terminal
+// --help / --machine-id / --test-license: work without interactive terminal
 if (args.Any(a => a is "--help" or "-h"))
 {
     PrintHelp();
@@ -16,6 +16,17 @@ if (args.Any(a => a is "--machine-id"))
 {
     Console.WriteLine(LicenseValidator.ComputeMachineId());
     return 0;
+}
+
+// --test-license: validate license and exit — bypasses interactive terminal check, outputs to stderr.
+// Designed for automated QA; not a user-facing feature.
+if (args.Any(a => a is "--test-license"))
+{
+    var r = LicenseValidator.Validate();
+    Console.Error.WriteLine(r.Success
+        ? $"OK|{r.License!.CustomerId}|{r.License.ExpiresAt:yyyy-MM-dd}|{r.License.MachineId}"
+        : $"FAIL|{r.ErrorCode}|{r.ErrorMessage}");
+    return r.Success ? 0 : 3;
 }
 
 // Require interactive terminal — AnsiConsole rendering crashes otherwise
