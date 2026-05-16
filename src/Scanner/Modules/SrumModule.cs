@@ -189,6 +189,19 @@ public class SrumModule : BaseModule
         }
     }
 
+    // Returns the column ID for the first matching candidate name.
+    // Column names in SRUDB vary slightly across Windows builds — this prevents hard failures.
+    private static JET_COLUMNID TryGetColumn(JET_SESID sesid, JET_TABLEID tableId, params string[] candidates)
+    {
+        foreach (var name in candidates)
+        {
+            try { return Api.GetTableColumnid(sesid, tableId, name); }
+            catch { }
+        }
+        throw new InvalidOperationException(
+            $"SRUM: nenhuma coluna encontrada. Tentativas: {string.Join(", ", candidates)}");
+    }
+
     // Builds idIndex → app path dictionary from SruDbIdMapTable.
     private static Dictionary<int, string> BuildAppMap(JET_SESID sesid, JET_DBID dbid, CancellationToken ct)
     {
@@ -198,8 +211,8 @@ public class SrumModule : BaseModule
             Api.JetOpenTable(sesid, dbid, IdTable, null, 0, OpenTableGrbit.ReadOnly, out var tableId);
             try
             {
-                var idxCol = Api.GetTableColumnid(sesid, tableId, "IdIndex");
-                var appCol = Api.GetTableColumnid(sesid, tableId, "App");
+                var idxCol = TryGetColumn(sesid, tableId, "IdIndex", "IdIdx", "Id");
+                var appCol = TryGetColumn(sesid, tableId, "App", "ExeInfo", "AppName");
 
                 Api.MoveBeforeFirst(sesid, tableId);
                 while (Api.TryMoveNext(sesid, tableId))
@@ -227,10 +240,10 @@ public class SrumModule : BaseModule
             Api.JetOpenTable(sesid, dbid, NetTable, null, 0, OpenTableGrbit.ReadOnly, out var tableId);
             try
             {
-                var colAppId  = Api.GetTableColumnid(sesid, tableId, "AppId");
-                var colSent   = Api.GetTableColumnid(sesid, tableId, "BytesSent");
-                var colRecvd  = Api.GetTableColumnid(sesid, tableId, "BytesRecvd");
-                var colTs     = Api.GetTableColumnid(sesid, tableId, "TimeStamp");
+                var colAppId  = TryGetColumn(sesid, tableId, "AppId", "AppID", "AppIndex");
+                var colSent   = TryGetColumn(sesid, tableId, "BytesSent", "bytesSent");
+                var colRecvd  = TryGetColumn(sesid, tableId, "BytesRecvd", "BytesRecv", "BytesReceived");
+                var colTs     = TryGetColumn(sesid, tableId, "TimeStamp", "Timestamp", "timestamp");
 
                 var cutoff = DateTime.UtcNow - lookback;
                 // Accumulate per-app totals before emitting findings

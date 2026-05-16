@@ -115,6 +115,17 @@ public static class EvidenceExporter
         WriteJson(Path.Combine(runFolder, fileName), dto);
     }
 
+    // Filesystem-scan and registry-scan modules cover the current state of the system —
+    // their finding timestamps reflect artifact age, NOT how far back the scan can see.
+    // Always report full lookback for these to avoid coverageOk=false on clean/synthetic runs.
+    private static readonly HashSet<string> _fullCoverageModules = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Known Cheats", "File System", "RedENGINE Artifacts",
+        "Registry Artifacts", "RegistryPersistence", "SystemTampering",
+        "System Reset/Restore", "System Info", "Services",
+        "Process Memory", "Network Usage",
+    };
+
     // Maps each module export to the Windows logs that back it, then reads coverage days
     // from the LOG_COVERAGE_* findings emitted by EventViewerModule.CheckLogCoverage.
     // Those findings embed "Cobertura: N dias" in their Evidence field.
@@ -132,9 +143,15 @@ public static class EvidenceExporter
         };
 
         if (relevantLogs.Length == 0)
+        {
+            // Filesystem/registry modules: coverage is always the full lookback window
+            if (_fullCoverageModules.Contains(module))
+                return lookbackDays;
+
             return oldestFinding.HasValue
                 ? (int)(DateTime.Now - oldestFinding.Value).TotalDays
                 : lookbackDays;
+        }
 
         var coverageWarnings = result.Findings
             .Where(f => f.RuleId?.StartsWith("LOG_COVERAGE_") == true &&
