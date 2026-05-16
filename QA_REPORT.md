@@ -1,8 +1,8 @@
 # Echo Nerfados Shield XDR — Relatório de QA
-**Versão:** 1.0.0+4d93642  
-**Build:** 4d93642 — fix: QA P0/P1 — redengine JSON export + risk recalibration; 8f0bf22 — feat: RedENGINE artifacts module; 49400c3 — feat: 3-tier generic process classification; 38907aa — feat: Sprint 3  
+**Versão:** 1.0.0+f7fe5c6  
+**Build:** f7fe5c6 — fix: SRUM column resilience + filesystem coverage; 4d93642 — fix: QA P0/P1 redengine; 8f0bf22 — feat: RedENGINE artifacts; 49400c3 — feat: 3-tier classification; 38907aa — feat: Sprint 3  
 **Arquivo:** `publish\win-x64\EchoNerfados.exe`  
-**SHA256:** `A84434D19FF9CB53AEE815A63968A0CF39530A45FF36F6E9D776DE9644B6111A`  
+**SHA256:** `117ECFE741CE4CCC24ED84DBB02453A96AEC0F7D756BEC3996417707ED842FE4`  
 **Tamanho:** ~67 MB (self-contained, sem dependência de .NET no host)  
 **Lookback:** 90 dias (`EventWindowLookback = TimeSpan.FromDays(90)`) — JSONs exportados como `*_90d.json`
 
@@ -689,4 +689,37 @@ dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained
 
 ---
 
-*Relatório gerado em: 2026-05-15 | Build: 4d93642 | Echo Nerfados Shield XDR v1.0.0*
+---
+
+## 13. SRUM — Resiliência de Schema
+
+SRUDB.dat usa ESE e os nomes de coluna variam entre builds do Windows.
+
+| Coluna primária | Fallbacks testados |
+|---|---|
+| `AppId` | `AppID`, `AppIndex` |
+| `BytesSent` | — |
+| `BytesRecvd` | `BytesRecv`, `BytesReceived` |
+| `TimeStamp` | `Timestamp`, `timestamp` |
+| `IdIndex` (IdTable) | `IdIdx`, `Id` |
+| `App` (IdTable) | `ExeInfo`, `AppName` |
+
+`TryGetColumn()` tenta cada candidato em ordem; lança `InvalidOperationException` apenas se todos falharem, e o erro é capturado e logado como `PartialError`.
+
+**Critério de aceite:** SRUM não deve emitir `No such column` em Windows 10 21H2, 22H2 ou Windows 11 22H2/23H2.
+
+---
+
+## 14. Cobertura de Módulos Filesystem/Registry
+
+Para módulos baseados em varredura de disco ou registry (`Known Cheats`, `File System`, `RedENGINE Artifacts`, `Registry Artifacts`, `RegistryPersistence`, `SystemTampering`, `System Reset/Restore`, `System Info`, `Services`, `Process Memory`, `Network Usage`):
+
+- `coverageOk` deve ser **sempre `true`**
+- `coverageDays` deve ser igual a `lookbackDays` (ex: 90)
+- Timestamps de findings refletem idade do artefato, **não** profundidade da cobertura do módulo
+
+Módulos baseados em log de eventos (`Event Viewer`, `Windows Defender`) continuam usando a lógica de cobertura real via `LOG_COVERAGE_*`.
+
+---
+
+*Relatório gerado em: 2026-05-15 | Build: f7fe5c6 | Echo Nerfados Shield XDR v1.0.0*
