@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using BypassNerfados.Scanner.Core;
 using BypassNerfados.Scanner.Data;
@@ -186,33 +187,67 @@ public class UsnJournalModule : BaseModule
     {
         ct.ThrowIfCancellationRequested();
 
-        // Rapid create→delete: same filename in both lists — fileless loader pattern
-        var createdNames = creates
+        // Rapid create→delete: same filename in creates AND deletes.
+        // Requires suspicious name + narrow timestamp window to avoid flagging normal dev/runtime churn
+        // (node.exe, libssl, sqlite3 cycle through temp dirs constantly).
+        var createdByName = creates
             .GroupBy(r => r.FileNameLower, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First().Timestamp);
 
-        var rapidPairs = new List<string>();
+        // confirmedPairs: suspicious name + both timestamps within 30 min → High
+        // untimedPairs:  suspicious name + no usable timestamps         → Medium/Low
+        var confirmedPairs = new List<string>();
+        var untimedPairs   = new List<string>();
+
         foreach (var del in deletes)
         {
             ct.ThrowIfCancellationRequested();
             var ext = Path.GetExtension(del.FileNameLower);
             if (!ExecutableExts.Contains(ext) && !ArchiveExts.Contains(ext)) continue;
+            if (!createdByName.TryGetValue(del.FileNameLower, out var createTime)) continue;
 
-            if (createdNames.ContainsKey(del.FileNameLower))
-                rapidPairs.Add(del.FileName);
+            bool isSuspicious = CheatDatabase.KnownExecutables.ContainsKey(del.FileNameLower)
+                             || CheatDatabase.HasSuspiciousKeyword(del.FileNameLower);
+            if (!isSuspicious) continue; // generic runtime files (node, libssl, sqlite…) — not a signal
+
+            if (del.Timestamp.HasValue && createTime.HasValue)
+            {
+                var gapMinutes = Math.Abs((del.Timestamp.Value - createTime.Value).TotalMinutes);
+                if (gapMinutes <= 30) confirmedPairs.Add(del.FileName);
+                // gap > 30 min: different sessions, not a rapid pattern — skip
+            }
+            else
+            {
+                untimedPairs.Add(del.FileName); // suspicious name but can't confirm timing
+            }
         }
 
-        if (rapidPairs.Count > 0)
+        if (confirmedPairs.Count > 0)
         {
             findings.Add(new Finding(
                 RiskLevel.High,
                 FindingCategory.AntiForensics,
                 "USN Journal",
-                $"Padrão criar→deletar: {rapidPairs.Count} arquivo(s)",
-                "Arquivos criados e depois deletados — padrão típico de loader fileless ou limpeza de rastros.\n" +
-                "Arquivos: " + string.Join(", ", rapidPairs.Take(5)),
-                string.Join(", ", rapidPairs.Take(5)),
+                $"Padrão criar→deletar: {confirmedPairs.Count} arquivo(s) suspeito(s) em <30min",
+                "Arquivo suspeito criado e removido em menos de 30 minutos — padrão típico de loader fileless.\n" +
+                "Arquivos: " + string.Join(", ", confirmedPairs.Take(5)),
+                string.Join(", ", confirmedPairs.Take(5)),
                 ruleId: "USN_RAPID_CREATE_DELETE",
+                entity: "rapid-create-delete"
+            ));
+        }
+        else if (untimedPairs.Count > 0)
+        {
+            findings.Add(new Finding(
+                RiskLevel.Medium,
+                FindingCategory.AntiForensics,
+                "USN Journal",
+                $"Padrão criar→deletar sem timestamp: {untimedPairs.Count} arquivo(s) suspeito(s)",
+                "Arquivos com nome suspeito presentes em criações e deleções, mas sem timestamp para confirmar janela.\n" +
+                "Arquivos: " + string.Join(", ", untimedPairs.Take(5)),
+                string.Join(", ", untimedPairs.Take(5)),
+                confidence: Confidence.Low,
+                ruleId: "USN_RAPID_CREATE_DELETE_UNTIMED",
                 entity: "rapid-create-delete"
             ));
         }
@@ -291,8 +326,19 @@ public class UsnJournalModule : BaseModule
         if (reasonStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
             uint.TryParse(reasonStr[2..], System.Globalization.NumberStyles.HexNumber, null, out reason);
 
+        // Timestamp position varies by Windows version: col 4 (no ReasonText) or col 5 (with ReasonText).
+        // Try both with InvariantCulture first, then current culture as fallback.
         DateTime? timestamp = null;
-        if (DateTime.TryParse(parts[5].Trim(), out var ts)) timestamp = ts;
+        for (int i = 4; i <= 5 && i < parts.Length; i++)
+        {
+            var raw = parts[i].Trim().Trim('"');
+            if (DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt) ||
+                DateTime.TryParse(raw, CultureInfo.CurrentCulture,   DateTimeStyles.None, out dt))
+            {
+                timestamp = dt;
+                break;
+            }
+        }
 
         return new UsnRecord(fileNameOnly, reason, timestamp);
     }

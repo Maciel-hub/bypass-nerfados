@@ -80,6 +80,7 @@ public static class EvidenceExporter
 
         // Optional modules — always written so investigator can confirm whether they ran
         WriteModuleJson(result, runFolder, "USN Journal",           $"usnjournal_{d}.json",          lookback);
+        WriteModuleJson(result, runFolder, "Driver & Kernel",       $"driverkernel_{d}.json",        lookback);
         WriteModuleJson(result, runFolder, "Process Memory",        $"processmemory_{d}.json",       lookback);
         WriteModuleJson(result, runFolder, "Memory DLL Trace",      $"memorydlltrace_{d}.json",      lookback);
         WriteModuleJson(result, runFolder, "Memory String Scan",    $"memorystrscan_{d}.json",       lookback);

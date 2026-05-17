@@ -15,12 +15,16 @@ public class DriverKernelModule : BaseModule
     private const int KernelDriver     = 1;
     private const int FileSystemDriver = 2;
 
-    // Paths where legitimate Windows drivers live (lowercase fragments)
+    // Paths where legitimate Windows drivers live (lowercase fragments).
+    // DriverStore is Windows-managed — drivers there were placed by Windows Update or
+    // an official INF installer and are implicitly trusted regardless of signature check.
     private static readonly string[] LegitDriverPathFragments =
     [
         @"\windows\system32\drivers\",
         @"\systemroot\system32\drivers\",
         @"\system32\drivers\",
+        @"\windows\system32\driverstore\",
+        @"\system32\driverstore\",
     ];
 
     // User-writable locations where .sys files have no business being
