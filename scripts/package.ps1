@@ -5,11 +5,16 @@
 
 .DESCRIPTION
     Ordem de execucao recomendada:
-      1. BUILD.bat [--tools]          # publica EXE (e LicenseTool)
+      1. BUILD.bat --gui [--tools]    # publica CLI + GUI (e opcionalmente LicenseTool)
       2. scripts\package.ps1 [-Sign]  # compila e (opcionalmente) assina o installer
 
     OU em pipeline unico:
       scripts\package.ps1 -Publish [-Sign]
+
+    O installer inclui:
+      - publish\win-x64-gui\EchoNerfados.App.exe  (GUI — atalho principal)
+      - publish\win-x64\EchoNerfados.exe           (CLI — ferramenta avancada)
+      - publish\win-x64-gui\rules\                 (regras de deteccao)
 
     Inno Setup 6 precisa estar instalado: https://jrsoftware.org/isinfo.php
 
@@ -19,7 +24,7 @@
       scripts\package.ps1 -Sign
 
 .PARAMETER Publish
-    Executa BUILD.bat antes de compilar o installer (pipeline completo).
+    Executa BUILD.bat --gui antes de compilar o installer (pipeline completo).
 
 .PARAMETER Sign
     Assina o installer gerado usando scripts\sign.ps1.
@@ -52,10 +57,10 @@ Write-Host "=======================================================" -Foreground
 
 # ---- Step 0: Publish (optional) -------------------------------------------
 if ($Publish) {
-    Write-Host " Step 0 : Running BUILD.bat..." -ForegroundColor Gray
-    cmd.exe /c "BUILD.bat"
+    Write-Host " Step 0 : Running BUILD.bat --gui..." -ForegroundColor Gray
+    cmd.exe /c "BUILD.bat --gui"
     if ($LASTEXITCODE -ne 0) {
-        Write-Error "BUILD.bat failed (exit $LASTEXITCODE)."
+        Write-Error "BUILD.bat --gui failed (exit $LASTEXITCODE)."
         exit 1
     }
     Write-Host "          BUILD.bat OK" -ForegroundColor Gray
@@ -63,12 +68,22 @@ if ($Publish) {
 
 # ---- Step 1: Verify publish output ----------------------------------------
 Write-Host " Step 1 : Checking publish output..." -ForegroundColor Gray
+
+# CLI EXE (needed for --machine-id, verify-report, and version extraction)
 $exePath = "publish\win-x64\EchoNerfados.exe"
 if (-not (Test-Path $exePath)) {
-    Write-Error "EchoNerfados.exe not found at: $exePath`nRun BUILD.bat first, or use -Publish flag."
+    Write-Error "EchoNerfados.exe (CLI) not found at: $exePath`nRun: BUILD.bat --gui"
     exit 1
 }
 Write-Host "          Found: $exePath" -ForegroundColor Gray
+
+# GUI EXE (main installer entry point)
+$guiExePath = "publish\win-x64-gui\EchoNerfados.App.exe"
+if (-not (Test-Path $guiExePath)) {
+    Write-Error "EchoNerfados.App.exe (GUI) not found at: $guiExePath`nRun: BUILD.bat --gui"
+    exit 1
+}
+Write-Host "          Found: $guiExePath" -ForegroundColor Gray
 
 # ---- Step 2: Extract version from EXE -------------------------------------
 Write-Host " Step 2 : Resolving version..." -ForegroundColor Gray

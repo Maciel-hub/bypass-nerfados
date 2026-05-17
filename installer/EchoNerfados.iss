@@ -10,7 +10,8 @@
 #define AppShortName "EchoNerfados"
 #define AppPublisher "Nerfados"
 #define AppURL       "https://nerfados.gg"
-#define AppExeName   "EchoNerfados.exe"
+#define AppExeName   "EchoNerfados.App.exe"
+#define AppCliName   "EchoNerfados.exe"
 
 [Setup]
 ; Stable GUID — do NOT change between versions (upgrade detection depends on this)
@@ -55,29 +56,34 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 Name: "{commonappdata}\{#AppShortName}"; Permissions: users-readexec admins-full
 
 [Files]
-; Main executable
-Source: "..\publish\win-x64\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+; GUI — main application (WPF)
+Source: "..\publish\win-x64-gui\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
-; Detection rules (loaded from AppContext.BaseDirectory\rules\)
-Source: "..\publish\win-x64\rules\*"; DestDir: "{app}\rules"; Flags: ignoreversion recursesubdirs createallsubdirs
+; CLI — advanced forensic tool (verify-report, --machine-id, automation)
+Source: "..\publish\win-x64\{#AppCliName}";  DestDir: "{app}"; Flags: ignoreversion
+
+; Detection rules — use GUI publish output (same content; avoids duplication)
+Source: "..\publish\win-x64-gui\rules\*"; DestDir: "{app}\rules"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 ; Verification scripts
 Source: "..\scripts\verify-report.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "verify-report-shortcut.bat";  DestDir: "{app}";         Flags: ignoreversion
 
 [Icons]
-; Start Menu
-Name: "{group}\{#AppName}";         Filename: "{app}\{#AppExeName}";           Comment: "Launch Echo Nerfados Shield XDR"
-Name: "{group}\Verify Report";      Filename: "{app}\verify-report-shortcut.bat"; Comment: "Verify integrity of a scan report"
+; Start Menu — main entry opens GUI
+Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExeName}";             Comment: "Launch Echo Nerfados Shield XDR"
+; Start Menu — CLI for advanced / automation use
+Name: "{group}\{#AppName} (CLI)";     Filename: "{app}\{#AppCliName}";             Comment: "Command-line interface — advanced and automation use"
+Name: "{group}\Verify Report";        Filename: "{app}\verify-report-shortcut.bat"; Comment: "Verify integrity of a scan report"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 
-; Desktop (optional task)
+; Desktop (optional task) — opens GUI
 Name: "{commondesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon; Comment: "Launch Echo Nerfados Shield XDR"
 
 [Run]
-; Post-install: offer to show Machine ID so user can request a license
+; Post-install: show Machine ID via CLI (works headless, stdout-only)
 Filename: "cmd.exe"; \
-  Parameters: "/k ""{app}\{#AppExeName}"" --machine-id & echo. & echo  Copy the Machine ID above to request your license. & echo  Place license.nerf in: {commonappdata}\{#AppShortName}\ & echo. & pause"; \
+  Parameters: "/k ""{app}\{#AppCliName}"" --machine-id & echo. & echo  Copy the Machine ID above to request your license. & echo  Place license.nerf in: {commonappdata}\{#AppShortName}\ & echo. & pause"; \
   Description: "Show Machine ID (needed to request a license)"; \
   Flags: postinstall skipifsilent nowait
 

@@ -21,7 +21,7 @@ public sealed partial class MainViewModel : ObservableObject
 
     public void NavigateToScan(ScanConfig config)
     {
-        CurrentView = new ScanViewModel(config, NavigateToResult);
+        CurrentView = new ScanViewModel(config, NavigateToResult, NavigateHome);
     }
 
     public void NavigateToResult(ScanResult result, string? htmlReportPath)

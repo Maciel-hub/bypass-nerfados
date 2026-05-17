@@ -11,6 +11,7 @@ public sealed partial class ScanViewModel : ObservableObject
 {
     private readonly ScanConfig _config;
     private readonly Action<ScanResult, string?> _onComplete;
+    private readonly Action _navigateHome;
     private readonly CancellationTokenSource _cts = new();
 
     private ScanResult? _result;
@@ -33,14 +34,18 @@ public sealed partial class ScanViewModel : ObservableObject
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     private bool _isRunning = true;
 
+    // True after cancellation or fatal error — shows "Nova Varredura" button
+    [ObservableProperty] private bool _isAborted = false;
+
     public ObservableCollection<ScanLogLine> LogLines { get; } = new();
 
     // ── Constructor + auto-start ──────────────────────────────────────────────
 
-    public ScanViewModel(ScanConfig config, Action<ScanResult, string?> onComplete)
+    public ScanViewModel(ScanConfig config, Action<ScanResult, string?> onComplete, Action navigateHome)
     {
-        _config     = config;
-        _onComplete = onComplete;
+        _config       = config;
+        _onComplete   = onComplete;
+        _navigateHome = navigateHome;
         _ = RunAsync();
     }
 
@@ -56,13 +61,17 @@ public sealed partial class ScanViewModel : ObservableObject
         catch (OperationCanceledException)
         {
             AddLog("⊘", "Varredura cancelada.", isError: true);
+            Phase     = "Cancelado";
             IsRunning = false;
+            IsAborted = true;
             return;
         }
         catch (Exception ex)
         {
             AddLog("✕", $"Erro fatal: {ex.Message}", isError: true);
+            Phase     = "Erro";
             IsRunning = false;
+            IsAborted = true;
             return;
         }
 
@@ -170,6 +179,9 @@ public sealed partial class ScanViewModel : ObservableObject
         _cts.Cancel();
         Phase = "Cancelando...";
     }
+
+    [RelayCommand]
+    private void NewScan() => _navigateHome();
 }
 
 public sealed record ScanLogLine(string Icon, string Text, bool IsError, bool IsWarning);

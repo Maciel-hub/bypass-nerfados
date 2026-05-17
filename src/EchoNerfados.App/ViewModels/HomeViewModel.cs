@@ -9,15 +9,15 @@ public sealed partial class HomeViewModel : ObservableObject
 {
     private readonly Action<ScanConfig> _startScan;
 
-    // ── License ───────────────────────────────────────────────────────────────
+    // ── License (observable so RefreshLicense can update them) ────────────────
 
-    public bool   LicenseValid    { get; }
-    public string LicenseStatus   { get; }
-    public string LicenseCustomer { get; }
-    public string LicenseExpiry   { get; }
-    public string MachineId       { get; }
+    [ObservableProperty] private bool   _licenseValid    = false;
+    [ObservableProperty] private string _licenseStatus   = "";
+    [ObservableProperty] private string _licenseCustomer = "";
+    [ObservableProperty] private string _licenseExpiry   = "";
+    [ObservableProperty] private string _machineId       = "";
 
-    private readonly string[] _licenseFeatures;
+    private string[] _licenseFeatures = [];
 
     // ── Scan config fields ────────────────────────────────────────────────────
 
@@ -37,38 +37,42 @@ public sealed partial class HomeViewModel : ObservableObject
     public HomeViewModel(Action<ScanConfig> startScan)
     {
         _startScan = startScan;
+        MachineId  = LicenseValidator.ComputeMachineId();
+        LoadLicense();
+    }
 
-        var lic = BypassNerfados.Scanner.Core.LicenseValidator.Validate();
-        LicenseValid    = lic.Success;
-        LicenseFeatures = lic.Success ? lic.License!.Features : [];
+    private void LoadLicense()
+    {
+        var lic = LicenseValidator.Validate();
+        LicenseValid = lic.Success;
 
         if (lic.Success)
         {
-            LicenseCustomer = lic.License!.CustomerId;
-            LicenseExpiry   = lic.License.ExpiresAt.LocalDateTime.ToString("dd/MM/yyyy");
-            LicenseStatus   = $"Válida até {LicenseExpiry}";
-            _licenseFeatures = lic.License.Features;
+            _licenseFeatures = lic.License!.Features;
+            LicenseCustomer  = lic.License.CustomerId;
+            LicenseExpiry    = lic.License.ExpiresAt.LocalDateTime.ToString("dd/MM/yyyy");
+            LicenseStatus    = $"Válida até {LicenseExpiry}";
         }
         else
         {
+            _licenseFeatures = [];
             LicenseCustomer  = "—";
             LicenseExpiry    = "—";
             LicenseStatus    = lic.ErrorMessage;
-            _licenseFeatures = [];
         }
 
-        MachineId = LicenseValidator.ComputeMachineId();
+        StartScanCommand.NotifyCanExecuteChanged();
     }
-
-    // Internal property exposed only for nullable initializer purposes
-    private string[] LicenseFeatures { get; }
 
     // ── Commands ──────────────────────────────────────────────────────────────
 
     [RelayCommand(CanExecute = nameof(CanStartScan))]
     private void StartScan()
     {
-        var rules  = BypassNerfados.Scanner.Core.RulesLoader.Load();
+        // Record timestamp for clock rollback detection — mirrors what CLI does in Program.cs
+        LicenseValidator.RecordValidation(DateTimeOffset.UtcNow);
+
+        var rules  = RulesLoader.Load();
         var config = new ScanConfig
         {
             InvestigatorName = string.IsNullOrWhiteSpace(InvestigatorName) ? null : InvestigatorName.Trim(),
@@ -89,6 +93,12 @@ public sealed partial class HomeViewModel : ObservableObject
     }
 
     private bool CanStartScan() => LicenseValid;
+
+    [RelayCommand]
+    private void RefreshLicense()
+    {
+        LoadLicense();
+    }
 
     [RelayCommand]
     private void CopyMachineId()
@@ -115,10 +125,10 @@ public sealed record ScanProfileOption(string Label, string Description, ScanPro
 {
     public static readonly IReadOnlyList<ScanProfileOption> Profiles =
     [
-        new("Default",  "Todos os módulos (~2-3 min)",              ScanProfile.Default),
-        new("Fast",     "16 módulos essenciais (~30s)",             ScanProfile.Fast),
-        new("Deep",     "Todos + USN + Memória",                    ScanProfile.Deep),
-        new("FiveM",    "Foco FiveM — timeline por sessão",         ScanProfile.FiveM),
-        new("Florence", "Todos + validação de fonte dupla",         ScanProfile.Florence),
+        new("Default",   "Todos os módulos (~2-3 min)",              ScanProfile.Default),
+        new("Fast",      "16 módulos essenciais (~30s)",             ScanProfile.Fast),
+        new("Deep",      "Todos + USN + Memória",                    ScanProfile.Deep),
+        new("FiveM",     "Foco FiveM — timeline por sessão",         ScanProfile.FiveM),
+        new("Florence",  "Todos + validação de fonte dupla",         ScanProfile.Florence),
     ];
 }
