@@ -254,13 +254,25 @@ public static class Correlator
 
         if (kernelFindings.Count == 0) return;
 
-        var hasCheat = result.Findings.Any(f =>
-            f.Category == FindingCategory.Cheat && f.Confidence >= Confidence.Medium);
+        var cheatFindings = result.Findings
+            .Where(f => (f.Category == FindingCategory.Cheat && f.Confidence >= Confidence.Medium) ||
+                        (f.Category == FindingCategory.SuspiciousExecution && f.Risk >= RiskLevel.High))
+            .ToList();
 
-        var hasSuspiciousExecution = result.Findings.Any(f =>
-            f.Category == FindingCategory.SuspiciousExecution && f.Risk >= RiskLevel.High);
+        if (cheatFindings.Count == 0) return;
 
-        if (!hasCheat && !hasSuspiciousExecution) return;
+        // When both sides carry timestamps, require temporal proximity (±2h).
+        // Without timestamps we still fire — e.g. USN records or registry-only kernel findings.
+        var kernelWithTime = kernelFindings.Where(f => f.Timestamp.HasValue).ToList();
+        var cheatWithTime  = cheatFindings.Where(f => f.Timestamp.HasValue).ToList();
+
+        if (kernelWithTime.Count > 0 && cheatWithTime.Count > 0)
+        {
+            bool close = kernelWithTime.Any(k =>
+                cheatWithTime.Any(c =>
+                    Math.Abs((k.Timestamp!.Value - c.Timestamp!.Value).TotalHours) <= 2.0));
+            if (!close) return;
+        }
 
         var driverList = string.Join(", ",
             kernelFindings.Take(3).Select(f => f.Entity ?? f.Title).Distinct());

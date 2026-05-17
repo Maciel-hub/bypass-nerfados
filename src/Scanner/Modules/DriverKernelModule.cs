@@ -1,6 +1,5 @@
 using System.Diagnostics.Eventing.Reader;
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using BypassNerfados.Scanner.Core;
 using BypassNerfados.Scanner.Data;
@@ -13,7 +12,6 @@ public class DriverKernelModule : BaseModule
     public override string Name => "Driver & Kernel";
     public override string Description => "Drivers de kernel — não assinados, caminhos suspeitos, instalados recentemente";
 
-    // Windows Driver Service Type values
     private const int KernelDriver     = 1;
     private const int FileSystemDriver = 2;
 
@@ -36,22 +34,22 @@ public class DriverKernelModule : BaseModule
 
     protected override async Task<List<Finding>> ExecuteAsync(ScanConfig config, CancellationToken ct)
     {
+        // Each task owns its own list — no shared mutable state across threads
+        var t1 = ScanKernelServicesAsync(config, ct);
+        var t2 = ScanSysFilesInUserPathsAsync(ct);
+        var t3 = ScanDriverEventsAsync(config, ct);
+        await Task.WhenAll(t1, t2, t3);
+
         var findings = new List<Finding>();
-
-        // Run concurrently — independent data sources
-        await Task.WhenAll(
-            ScanKernelServicesAsync(findings, config, ct),
-            ScanSysFilesInUserPathsAsync(findings, ct),
-            ScanDriverEventsAsync(findings, config, ct)
-        );
-
+        findings.AddRange(t1.Result);
+        findings.AddRange(t2.Result);
+        findings.AddRange(t3.Result);
         return findings;
     }
 
-    // Enumerate HKLM\SYSTEM\CurrentControlSet\Services where Type = KernelDriver or FileSystemDriver.
-    // Flags drivers installed outside of the standard Windows driver directory.
-    private async Task ScanKernelServicesAsync(List<Finding> findings, ScanConfig config, CancellationToken ct)
+    private async Task<List<Finding>> ScanKernelServicesAsync(ScanConfig config, CancellationToken ct)
     {
+        var local = new List<Finding>();
         await Task.Run(() =>
         {
             try
@@ -64,7 +62,7 @@ public class DriverKernelModule : BaseModule
                 foreach (var name in services.GetSubKeyNames())
                 {
                     ct.ThrowIfCancellationRequested();
-                    try { InspectService(name, services, cutoff, findings); }
+                    try { InspectService(name, services, cutoff, local); }
                     catch (OperationCanceledException) { throw; }
                     catch (Exception ex) { LogPartialError($"Serviço '{name}' inacessível", ex); }
                 }
@@ -72,9 +70,10 @@ public class DriverKernelModule : BaseModule
             catch (OperationCanceledException) { throw; }
             catch (Exception ex) { LogPartialError("Enumeração de serviços de kernel falhou", ex); }
         }, ct);
+        return local;
     }
 
-    private void InspectService(string name, RegistryKey parent, DateTime cutoff, List<Finding> findings)
+    private void InspectService(string name, RegistryKey parent, DateTime cutoff, List<Finding> local)
     {
         using var key = parent.OpenSubKey(name);
         if (key == null) return;
@@ -88,32 +87,21 @@ public class DriverKernelModule : BaseModule
         var expanded = Environment.ExpandEnvironmentVariables(
             imagePath.Replace(@"\SystemRoot\", Environment.GetEnvironmentVariable("SystemRoot") + @"\",
                 StringComparison.OrdinalIgnoreCase));
-
-        // Strip NT path prefix (\??\) and kernel-mode device path syntax
         expanded = expanded.TrimStart().TrimStart('\\').TrimStart('?').TrimStart('\\');
 
         var lowerPath = expanded.ToLowerInvariant();
         bool isLegitPath = LegitDriverPathFragments.Any(f => lowerPath.Contains(f));
 
-        if (isLegitPath) return; // Standard Windows driver location — skip
-
-        // Outside of standard driver path: check if the file exists and its age
         var sysPath = ResolveSysPath(expanded);
         if (sysPath == null || !File.Exists(sysPath)) return;
 
-        var writeTime = File.GetLastWriteTimeUtc(sysPath);
-        var isRecent = writeTime > cutoff;
-        var isSuspiciousUserPath = SuspectedUserPaths.Any(p =>
-            sysPath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
-        var isSigned = TryGetSignatureStatus(sysPath);
-        var typeLabel = type == KernelDriver ? "Kernel" : "FileSystem";
-        var startLabel = StartLabel(key.GetValue("Start") as int?);
+        var fileName = Path.GetFileName(sysPath).ToLowerInvariant();
 
-        // Known cheat driver name
-        if (CheatDatabase.KnownExecutables.TryGetValue(
-            Path.GetFileName(sysPath).ToLowerInvariant(), out var cheat))
+        // Known cheat driver — always report, even if path looks legitimate (disguise)
+        if (CheatDatabase.KnownExecutables.TryGetValue(fileName, out var cheat))
         {
-            findings.Add(new Finding(
+            var wt = File.GetLastWriteTimeUtc(sysPath);
+            local.Add(new Finding(
                 RiskLevel.Critical,
                 FindingCategory.KernelArtifact,
                 Name,
@@ -121,7 +109,7 @@ public class DriverKernelModule : BaseModule
                 $"Driver de kernel com nome de cheat conhecido registrado no sistema.\n" +
                 $"{cheat.Description}\nPath: {sysPath}",
                 sysPath,
-                writeTime.ToLocalTime(),
+                wt.ToLocalTime(),
                 confidence: Confidence.High,
                 ruleId: $"DRV_CHEAT_{name.ToLowerInvariant()}",
                 entity: name.ToLowerInvariant()
@@ -129,16 +117,25 @@ public class DriverKernelModule : BaseModule
             return;
         }
 
-        // Driver in a user-writable path (Temp, Downloads, AppData…)
+        if (isLegitPath) return;
+
+        var writeTime = File.GetLastWriteTimeUtc(sysPath);
+        var isRecent = writeTime > cutoff;
+        var isSuspiciousUserPath = SuspectedUserPaths.Any(p =>
+            sysPath.StartsWith(p, StringComparison.OrdinalIgnoreCase));
+        var sigStatus = VerifyAuthenticode(sysPath);
+        var typeLabel = type == KernelDriver ? "Kernel" : "FileSystem";
+        var startLabel = StartLabel(key.GetValue("Start") as int?);
+
         if (isSuspiciousUserPath)
         {
-            findings.Add(new Finding(
+            local.Add(new Finding(
                 RiskLevel.Critical,
                 FindingCategory.KernelArtifact,
                 Name,
                 $"Driver de kernel em caminho de usuário: {name}",
                 $"Driver ({typeLabel}) registrado em caminho de escrita de usuário — alto risco.\n" +
-                $"Start: {startLabel} | Assinado: {SignLabel(isSigned)}\nPath: {sysPath}",
+                $"Start: {startLabel} | Assinado: {SignLabel(sigStatus)}\nPath: {sysPath}",
                 sysPath,
                 writeTime.ToLocalTime(),
                 confidence: Confidence.High,
@@ -148,10 +145,9 @@ public class DriverKernelModule : BaseModule
             return;
         }
 
-        // Unsigned driver outside standard location
-        if (isSigned == false)
+        if (sigStatus is SignatureStatus.Unsigned or SignatureStatus.Invalid)
         {
-            findings.Add(new Finding(
+            local.Add(new Finding(
                 RiskLevel.High,
                 FindingCategory.KernelArtifact,
                 Name,
@@ -167,16 +163,15 @@ public class DriverKernelModule : BaseModule
             return;
         }
 
-        // Signed driver outside standard location but recently written (within lookback)
         if (isRecent)
         {
-            findings.Add(new Finding(
+            local.Add(new Finding(
                 RiskLevel.Medium,
                 FindingCategory.KernelArtifact,
                 Name,
                 $"Driver de kernel recente fora de System32: {name}",
                 $"Driver ({typeLabel}) instalado dentro da janela de análise.\n" +
-                $"Start: {startLabel} | Assinado: {SignLabel(isSigned)}\nPath: {sysPath}",
+                $"Start: {startLabel} | Assinado: {SignLabel(sigStatus)}\nPath: {sysPath}",
                 sysPath,
                 writeTime.ToLocalTime(),
                 confidence: Confidence.Medium,
@@ -186,10 +181,9 @@ public class DriverKernelModule : BaseModule
         }
     }
 
-    // Scan user-writable directories (top-level only) for .sys files.
-    // A .sys file in Downloads or Temp has essentially no legitimate use case.
-    private async Task ScanSysFilesInUserPathsAsync(List<Finding> findings, CancellationToken ct)
+    private async Task<List<Finding>> ScanSysFilesInUserPathsAsync(CancellationToken ct)
     {
+        var local = new List<Finding>();
         await Task.Run(() =>
         {
             foreach (var basePath in SuspectedUserPaths)
@@ -203,18 +197,18 @@ public class DriverKernelModule : BaseModule
                     {
                         ct.ThrowIfCancellationRequested();
                         var writeTime = File.GetLastWriteTime(file);
-                        var isSigned = TryGetSignatureStatus(file);
+                        var sigStatus = VerifyAuthenticode(file);
 
-                        findings.Add(new Finding(
-                            isSigned == true ? RiskLevel.Medium : RiskLevel.High,
+                        local.Add(new Finding(
+                            sigStatus == SignatureStatus.Valid ? RiskLevel.Medium : RiskLevel.High,
                             FindingCategory.KernelArtifact,
                             Name,
                             $"Arquivo .sys em local suspeito: {Path.GetFileName(file)}",
                             $"Driver (.sys) encontrado fora de System32\\drivers\\.\n" +
-                            $"Assinado: {SignLabel(isSigned)} | Modificado: {writeTime:dd/MM/yyyy HH:mm}",
+                            $"Assinado: {SignLabel(sigStatus)} | Modificado: {writeTime:dd/MM/yyyy HH:mm}",
                             file,
                             writeTime,
-                            confidence: isSigned == false ? Confidence.High : Confidence.Medium,
+                            confidence: sigStatus == SignatureStatus.Valid ? Confidence.Medium : Confidence.High,
                             ruleId: $"DRV_SYSFILE_{Path.GetFileName(file).ToLowerInvariant()}",
                             entity: Path.GetFileName(file).ToLowerInvariant()
                         ));
@@ -224,20 +218,20 @@ public class DriverKernelModule : BaseModule
                 catch (Exception ex) { LogPartialError($"Varredura .sys falhou em {basePath}", ex); }
             }
         }, ct);
+        return local;
     }
 
-    // Query System Event Log for Event ID 219 (Kernel-PnP: driver failed to start).
-    // ID 7045 driver entries are already partially covered by EventViewerModule;
-    // 219 is kernel-specific and not covered anywhere else.
-    private async Task ScanDriverEventsAsync(List<Finding> findings, ScanConfig config, CancellationToken ct)
+    // Query System Event Log for Event IDs 219 and 7045 driver entries.
+    // 219 = Kernel-PnP driver load failure (not covered elsewhere).
+    // 7045 = new service installed, filtered to .sys only.
+    private async Task<List<Finding>> ScanDriverEventsAsync(ScanConfig config, CancellationToken ct)
     {
+        var local = new List<Finding>();
         await Task.Run(() =>
         {
             var since = DateTime.UtcNow - config.EventWindowLookback;
             var sinceStr = since.ToString("yyyy-MM-ddTHH:mm:ss.000Z");
 
-            // 219 = Kernel-PnP driver load failure; Windows blocks these for unsigned or incompatible drivers
-            // 7045 filtered to .sys only (supplements EventViewerModule's keyword filter)
             var specs = new (int Id, RiskLevel Risk, string Label)[]
             {
                 (219,  RiskLevel.High,   "Driver de kernel falhou ao carregar (219)"),
@@ -260,22 +254,22 @@ public class DriverKernelModule : BaseModule
                     while ((record = reader.ReadEvent()) != null && count < 15)
                     {
                         ct.ThrowIfCancellationRequested();
-                        count++;
                         using (record)
                         {
                             string desc;
                             try { desc = record.FormatDescription() ?? ""; }
                             catch { desc = $"EventID {spec.Id}"; }
 
-                            // For 7045: only report if it looks like a driver (has .sys or says "kernel")
+                            // For 7045: only report if it looks like a driver (.sys/kernel driver)
                             if (spec.Id == 7045)
                             {
                                 var lower = desc.ToLowerInvariant();
                                 if (!lower.Contains(".sys") && !lower.Contains("kernel driver")) continue;
                             }
 
+                            count++; // increment only after passing the filter
                             var detail = desc.Length > 400 ? desc[..400] : desc;
-                            findings.Add(new Finding(
+                            local.Add(new Finding(
                                 spec.Risk,
                                 FindingCategory.KernelArtifact,
                                 Name,
@@ -293,26 +287,91 @@ public class DriverKernelModule : BaseModule
                 catch (Exception ex) { LogPartialError($"Eventos de driver ({spec.Id}) inacessíveis", ex); }
             }
         }, ct);
+        return local;
     }
 
-    // Checks for an embedded Authenticode signature in the file.
-    // Returns true = signed, false = unsigned, null = indeterminate (file locked, I/O error, etc.)
-    // Note: does NOT verify the certificate chain — presence of any cert is enough for this triage.
-    private static bool? TryGetSignatureStatus(string path)
+    // WinVerifyTrust P/Invoke — validates Authenticode (embedded cert + catalog signatures)
+    private enum SignatureStatus { Valid, Unsigned, Invalid, Unknown }
+
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct WinTrustFileInfo
     {
+        public uint   StructSize;
+        public IntPtr FilePath;
+        public IntPtr FileHandle;
+        public IntPtr KnownSubject;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WinTrustData
+    {
+        public uint   StructSize;
+        public IntPtr PolicyCallbackData;
+        public IntPtr SIPClientData;
+        public uint   UIChoice;          // 2 = WTD_UI_NONE
+        public uint   RevocationChecks;  // 0 = WTD_REVOKE_NONE
+        public uint   UnionChoice;       // 1 = WTD_CHOICE_FILE
+        public IntPtr FileInfoPtr;
+        public uint   StateAction;       // 1 = VERIFY, 2 = CLOSE
+        public IntPtr StateData;
+        [MarshalAs(UnmanagedType.LPWStr)]
+        public string? URLReference;
+        public uint   ProvFlags;
+        public uint   UIContext;
+        public IntPtr SignatureSettings;
+    }
+
+    [DllImport("wintrust.dll", ExactSpelling = true, SetLastError = false, CharSet = CharSet.Unicode)]
+    private static extern uint WinVerifyTrust(IntPtr hwnd, ref Guid actionId, ref WinTrustData data);
+
+    private static readonly Guid WintrustActionGenericVerifyV2 =
+        new("00AAC56B-CD44-11D0-8CC2-00C04FC295EE");
+
+    private static SignatureStatus VerifyAuthenticode(string filePath)
+    {
+        var filePathPtr = Marshal.StringToHGlobalUni(filePath);
+        var fileInfo = new WinTrustFileInfo
+        {
+            StructSize = (uint)Marshal.SizeOf<WinTrustFileInfo>(),
+            FilePath   = filePathPtr,
+        };
+        var fileInfoPtr = Marshal.AllocHGlobal(Marshal.SizeOf<WinTrustFileInfo>());
+        Marshal.StructureToPtr(fileInfo, fileInfoPtr, false);
+
+        var data = new WinTrustData
+        {
+            StructSize      = (uint)Marshal.SizeOf<WinTrustData>(),
+            UIChoice        = 2,
+            RevocationChecks = 0,
+            UnionChoice     = 1,
+            FileInfoPtr     = fileInfoPtr,
+            StateAction     = 1,
+        };
+        var actionId = WintrustActionGenericVerifyV2;
+
+        uint result;
         try
         {
-            X509Certificate.CreateFromSignedFile(path);
-            return true;
+            result = WinVerifyTrust(IntPtr.Zero, ref actionId, ref data);
         }
-        catch (CryptographicException)
+        finally
         {
-            return false;
+            data.StateAction = 2;
+            WinVerifyTrust(IntPtr.Zero, ref actionId, ref data);
+            Marshal.FreeHGlobal(filePathPtr);
+            Marshal.FreeHGlobal(fileInfoPtr);
         }
-        catch
+
+        return result switch
         {
-            return null;
-        }
+            0          => SignatureStatus.Valid,
+            0x800B0100 => SignatureStatus.Unsigned, // TRUST_E_NOSIGNATURE
+            0x80092003 => SignatureStatus.Unsigned, // CRYPT_E_FILE_ERROR
+            0x800B0101 => SignatureStatus.Invalid,  // TRUST_E_EXPLICIT_DISTRUST
+            0x800B010C => SignatureStatus.Invalid,  // CERT_E_CHAINING
+            0x80096010 => SignatureStatus.Invalid,  // TRUST_E_BAD_DIGEST (file modified)
+            _          => SignatureStatus.Unknown,
+        };
     }
 
     private static string? ResolveSysPath(string imagePath)
@@ -321,7 +380,7 @@ public class DriverKernelModule : BaseModule
 
         var path = imagePath.Trim();
 
-        // Strip arguments (drivers with "-p param" notation)
+        // Strip arguments: "C:\path\drv.sys" -param → C:\path\drv.sys
         if (path.StartsWith('"') && path.Length > 1)
         {
             var end = path.IndexOf('"', 1);
@@ -347,10 +406,11 @@ public class DriverKernelModule : BaseModule
         _ => "?"
     };
 
-    private static string SignLabel(bool? signed) => signed switch
+    private static string SignLabel(SignatureStatus status) => status switch
     {
-        true  => "Sim",
-        false => "NÃO",
-        null  => "indeterminado"
+        SignatureStatus.Valid    => "Sim",
+        SignatureStatus.Unsigned => "NÃO",
+        SignatureStatus.Invalid  => "NÃO (inválido)",
+        _                       => "indeterminado"
     };
 }
