@@ -10,23 +10,16 @@
 
     Se nenhum certificado estiver configurado, emite um aviso e retorna 0 (nao falha o build).
 
-    -NoTimestamp: pula o timestamp RFC 3161 (util para QA com self-signed sem acesso a TSA).
-    -TsaTimeoutSeconds: timeout por TSA em segundos (default 30).
+    -NoTimestamp: pula o timestamp RFC 3161 (util para QA com self-signed).
+    -TsaTimeoutSeconds: timeout por TSA para signtool.exe (default 30).
+    Set-AuthenticodeSignature roda sempre no processo principal (nunca em Start-Job).
 
 .EXAMPLE
-    # Usando PFX
-    .\scripts\sign.ps1 -PfxPath "echo_codesign.pfx" -PfxPassword "secret"
-
-    # Usando thumbprint (cert no Windows store)
-    .\scripts\sign.ps1 -Thumbprint "AB12CD..."
-
-    # Via variaveis de ambiente (modo BUILD.bat)
     $env:SIGN_PFX_PATH = "echo_codesign.pfx"
     $env:SIGN_PFX_PASSWORD = "secret"
     .\scripts\sign.ps1
 
-    # QA / self-signed sem timestamp
-    .\scripts\sign.ps1 -NoTimestamp
+    .\scripts\sign.ps1 -NoTimestamp   # QA / self-signed
 #>
 [CmdletBinding()]
 param(
@@ -47,7 +40,7 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# ---- Locate signtool.exe ----------------------------------------------------
+# ---- Helpers ----------------------------------------------------------------
 
 function Find-SignTool {
     foreach ($base in @(
@@ -65,90 +58,70 @@ function Find-SignTool {
     return $null
 }
 
-# ---- Try one TSA with a background-job timeout ------------------------------
-# Returns $true if signing succeeded, $false otherwise.
-function Invoke-SignWithTimeout {
+# Sign with Set-AuthenticodeSignature directly in the main process.
+# Returns the SignatureStatus string, or $null on exception.
+function Invoke-PsSign {
     param(
-        [string]   $Tool,          # "signtool" | "ps"
-        [string]   $Target,
-        [string]   $ResolvedPfx,
-        [string]   $PfxPwd,
-        [string]   $Thumb,
-        [string]   $SignToolPath,
-        [string]   $Tsa,           # empty string = no timestamp
-        [int]      $TimeoutSec
+        [System.Security.Cryptography.X509Certificates.X509Certificate2] $Cert,
+        [string] $Target,
+        [string] $Tsa        # empty = no timestamp
     )
+    $splat = @{
+        FilePath      = $Target
+        Certificate   = $Cert
+        HashAlgorithm = "SHA256"
+        ErrorAction   = "SilentlyContinue"
+    }
+    if ($Tsa -ne "") { $splat["TimestampServer"] = $Tsa }
+    try {
+        $result = Set-AuthenticodeSignature @splat
+        return if ($result) { $result.Status.ToString() } else { "null" }
+    } catch {
+        Write-Host "   [WARN] Set-AuthenticodeSignature threw: $_" -ForegroundColor Yellow
+        return $null
+    }
+}
 
+# Sign with signtool.exe in a background job so we get TSA timeout control.
+# Returns $true on success, $false on failure or timeout.
+function Invoke-SigntoolJob {
+    param(
+        [string] $SignToolPath,
+        [string] $Target,
+        [string] $ResolvedPfx,
+        [string] $PfxPwd,
+        [string] $Thumb,
+        [string] $Tsa,
+        [int]    $TimeoutSec
+    )
     $job = Start-Job -ScriptBlock {
-        param($Tool, $Target, $ResolvedPfx, $PfxPwd, $Thumb, $SignToolPath, $Tsa)
-        $ErrorActionPreference = "Stop"
-
-        if ($Tool -eq "signtool") {
-            $args = @("sign", "/fd", "SHA256")
-            if ($Tsa -ne "") { $args += @("/td", "SHA256", "/tr", $Tsa) }
-            if ($ResolvedPfx -ne "") {
-                $args += @("/f", $ResolvedPfx)
-                if ($PfxPwd -ne "") { $args += @("/p", $PfxPwd) }
-            } elseif ($Thumb -ne "") {
-                $args += @("/sha1", $Thumb)
-            }
-            $args += $Target
-            $out = & $SignToolPath @args 2>&1
-            return @{ ExitCode = $LASTEXITCODE; Output = ($out -join "`n") }
-        } else {
-            # PowerShell Set-AuthenticodeSignature
-            $cert = $null
-            if ($ResolvedPfx -ne "") {
-                $sp = if ($PfxPwd -ne "") {
-                    ConvertTo-SecureString $PfxPwd -AsPlainText -Force
-                } else {
-                    [System.Security.SecureString]::new()
-                }
-                $cert = Get-PfxCertificate -FilePath $ResolvedPfx -Password $sp
-            } elseif ($Thumb -ne "") {
-                $cert = Get-ChildItem "Cert:\CurrentUser\My\$Thumb" -ErrorAction SilentlyContinue
-                if (-not $cert) {
-                    $cert = Get-ChildItem "Cert:\LocalMachine\My\$Thumb" -ErrorAction SilentlyContinue
-                }
-                if (-not $cert) { throw "Cert thumbprint '$Thumb' not found in store." }
-            }
-
-            $splat = @{
-                FilePath       = $Target
-                Certificate    = $cert
-                HashAlgorithm  = "SHA256"
-                ErrorAction    = "SilentlyContinue"
-            }
-            if ($Tsa -ne "") { $splat["TimestampServer"] = $Tsa }
-
-            $result = Set-AuthenticodeSignature @splat
-            $status = if ($result) { $result.Status.ToString() } else { "null" }
-            return @{ ExitCode = 0; Status = $status }
+        param($st, $target, $pfx, $pwd, $thumb, $tsa)
+        $stArgs = @("sign", "/fd", "SHA256")
+        if ($tsa -ne "") { $stArgs += @("/td", "SHA256", "/tr", $tsa) }
+        if ($pfx -ne "") {
+            $stArgs += @("/f", $pfx)
+            if ($pwd -ne "") { $stArgs += @("/p", $pwd) }
+        } elseif ($thumb -ne "") {
+            $stArgs += @("/sha1", $thumb)
         }
-    } -ArgumentList $Tool, $Target, $ResolvedPfx, $PfxPwd, $Thumb, $SignToolPath, $Tsa
+        $stArgs += $target
+        $out = & $st @stArgs 2>&1
+        return @{ ExitCode = $LASTEXITCODE; Output = ($out -join "`n") }
+    } -ArgumentList $SignToolPath, $Target, $ResolvedPfx, $PfxPwd, $Thumb, $Tsa
 
-    $completed = Wait-Job -Job $job -Timeout $TimeoutSec
-    if (-not $completed) {
-        Stop-Job  -Job $job
-        Remove-Job -Job $job -Force
+    $done = Wait-Job -Job $job -Timeout $TimeoutSec
+    if (-not $done) {
+        Stop-Job $job -PassThru | Remove-Job -Force
+        Write-Host "   [WARN] signtool timed out after ${TimeoutSec}s" -ForegroundColor Yellow
         return $false
     }
-
-    $result = Receive-Job -Job $job
-    Remove-Job -Job $job -Force
-
-    if ($Tool -eq "signtool") {
-        if ($result.ExitCode -ne 0) {
-            Write-Host "   [WARN] signtool exit $($result.ExitCode): $($result.Output)" -ForegroundColor Yellow
-            return $false
-        }
-        return $true
-    } else {
-        $status = $result.Status
-        if ($status -in @("Valid", "NotTrusted")) { return $true }
-        Write-Host "   [WARN] Set-AuthenticodeSignature status: $status" -ForegroundColor Yellow
+    $r = Receive-Job $job
+    Remove-Job $job -Force
+    if ($r.ExitCode -ne 0) {
+        Write-Host "   [WARN] signtool exit $($r.ExitCode): $($r.Output)" -ForegroundColor Yellow
         return $false
     }
+    return $true
 }
 
 # ============================================================================
@@ -160,19 +133,19 @@ Write-Host "=======================================================" -Foreground
 Write-Host " Echo Nerfados -- Authenticode Signing" -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 
-# Step 1 — Resolve target
-Write-Host " Step 1 : Resolving target path..." -ForegroundColor Gray
+# Step 1 — resolve target
+Write-Host " Step 1 : Resolving target..." -ForegroundColor Gray
 $resolvedTarget = $TargetPath
 if (-not [System.IO.Path]::IsPathRooted($resolvedTarget)) {
     $resolvedTarget = Join-Path (Get-Location) $resolvedTarget
 }
 if (-not (Test-Path $resolvedTarget)) {
-    Write-Error "Target file not found: $resolvedTarget"
+    Write-Error "Target not found: $resolvedTarget"
     exit 1
 }
 Write-Host "          $resolvedTarget" -ForegroundColor Gray
 
-# Step 2 — Check cert config
+# Step 2 — check cert config
 Write-Host " Step 2 : Checking certificate configuration..." -ForegroundColor Gray
 $hasPfx        = -not [string]::IsNullOrEmpty($PfxPath)
 $hasThumbprint = -not [string]::IsNullOrEmpty($Thumbprint)
@@ -180,26 +153,28 @@ $hasThumbprint = -not [string]::IsNullOrEmpty($Thumbprint)
 if (-not $hasPfx -and -not $hasThumbprint) {
     Write-Host ""
     Write-Host " [WARN] No certificate configured. EXE will NOT be signed." -ForegroundColor Yellow
-    Write-Host "        Set SIGN_PFX_PATH + SIGN_PFX_PASSWORD  (PFX file)" -ForegroundColor DarkYellow
-    Write-Host "        Set SIGN_CERT_THUMBPRINT               (cert in Windows Store)" -ForegroundColor DarkYellow
+    Write-Host "        SIGN_PFX_PATH + SIGN_PFX_PASSWORD  (PFX file)" -ForegroundColor DarkYellow
+    Write-Host "        SIGN_CERT_THUMBPRINT               (cert in Windows Store)" -ForegroundColor DarkYellow
     Write-Host ""
     exit 0
 }
 
-# Step 3 — Locate signtool
+# Step 3 — locate signtool
 Write-Host " Step 3 : Locating signtool.exe..." -ForegroundColor Gray
 $signTool = Find-SignTool
 if ($signTool) {
     Write-Host "          Found: $signTool" -ForegroundColor Gray
 } else {
-    Write-Host "          signtool.exe not found -- will use Set-AuthenticodeSignature (PowerShell)" -ForegroundColor Yellow
-    Write-Host "          To install: winget install Microsoft.WindowsSDK.Tools" -ForegroundColor DarkYellow
+    Write-Host "          Not found -- will use Set-AuthenticodeSignature (PowerShell)" -ForegroundColor Yellow
+    Write-Host "          Install: winget install Microsoft.WindowsSDK.Tools" -ForegroundColor DarkYellow
 }
-$toolMode = if ($signTool) { "signtool" } else { "ps" }
 
-# Step 4 — Resolve PFX path
+# Step 4 — resolve PFX path and load cert (PS native path: load in main process)
 Write-Host " Step 4 : Loading certificate..." -ForegroundColor Gray
 $resolvedPfx = ""
+$pfxPwdStr   = if ($PfxPassword)  { $PfxPassword } else { "" }
+$thumbStr    = if ($Thumbprint)   { $Thumbprint  } else { "" }
+
 if ($hasPfx) {
     $resolvedPfx = $PfxPath
     if (-not [System.IO.Path]::IsPathRooted($resolvedPfx)) {
@@ -211,72 +186,108 @@ if ($hasPfx) {
     }
     Write-Host "          PFX: $resolvedPfx" -ForegroundColor Gray
 } elseif ($hasThumbprint) {
-    Write-Host "          Thumbprint: $Thumbprint" -ForegroundColor Gray
+    Write-Host "          Thumbprint: $thumbStr" -ForegroundColor Gray
 }
 
-$pfxPwdStr = if ($PfxPassword) { $PfxPassword } else { "" }
-$thumbStr  = if ($Thumbprint)  { $Thumbprint  } else { "" }
+# Load cert in main process for Set-AuthenticodeSignature (cert object must not cross job boundary)
+$cert = $null
+if (-not $signTool) {
+    Write-Host "          Loading cert object in main process..." -ForegroundColor Gray
+    if ($hasPfx) {
+        $sp   = if ($pfxPwdStr -ne "") {
+            ConvertTo-SecureString $pfxPwdStr -AsPlainText -Force
+        } else {
+            [System.Security.SecureString]::new()
+        }
+        $cert = Get-PfxCertificate -FilePath $resolvedPfx -Password $sp
+    } elseif ($hasThumbprint) {
+        $cert = Get-ChildItem "Cert:\CurrentUser\My\$thumbStr" -ErrorAction SilentlyContinue
+        if (-not $cert) {
+            $cert = Get-ChildItem "Cert:\LocalMachine\My\$thumbStr" -ErrorAction SilentlyContinue
+        }
+        if (-not $cert) {
+            Write-Error "Certificate thumbprint '$thumbStr' not found in store."
+            exit 1
+        }
+    }
+    Write-Host "          Subject: $($cert.Subject)" -ForegroundColor Gray
+}
 
-# Step 5 — Sign (with or without timestamp)
+# Step 5 — sign
 Write-Host " Step 5 : Signing..." -ForegroundColor Gray
 $signed = $false
 
 if ($NoTimestamp) {
-    Write-Host "          -NoTimestamp: signing without RFC 3161 timestamp (QA mode)" -ForegroundColor Yellow
-    $ok = Invoke-SignWithTimeout `
-        -Tool $toolMode `
-        -Target $resolvedTarget `
-        -ResolvedPfx $resolvedPfx `
-        -PfxPwd $pfxPwdStr `
-        -Thumb $thumbStr `
-        -SignToolPath ($signTool ?? "") `
-        -Tsa "" `
-        -TimeoutSec $TsaTimeoutSeconds
+    Write-Host "          -NoTimestamp: signing without RFC 3161 timestamp" -ForegroundColor Yellow
 
-    if ($ok) {
-        Write-Host "          SIGNED (no timestamp)" -ForegroundColor Green
-        $signed = $true
+    if ($signTool) {
+        $stArgs = @("sign", "/fd", "SHA256")
+        if ($hasPfx) {
+            $stArgs += @("/f", $resolvedPfx)
+            if ($pfxPwdStr -ne "") { $stArgs += @("/p", $pfxPwdStr) }
+        } elseif ($hasThumbprint) {
+            $stArgs += @("/sha1", $thumbStr)
+        }
+        $stArgs += $resolvedTarget
+        Write-Host "          Running signtool sign /fd SHA256 (no timestamp)..." -ForegroundColor Gray
+        $out = & $signTool @stArgs 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            $signed = $true
+        } else {
+            Write-Host "   [WARN] signtool exit $LASTEXITCODE`: $($out -join ' ')" -ForegroundColor Yellow
+        }
     } else {
-        Write-Host "          Signing without timestamp failed." -ForegroundColor Red
+        # Set-AuthenticodeSignature directly in main process -- no Start-Job
+        Write-Host "          Set-AuthenticodeSignature (main process, no timestamp)..." -ForegroundColor Gray
+        $status = Invoke-PsSign -Cert $cert -Target $resolvedTarget -Tsa ""
+        Write-Host "          Status: $status" -ForegroundColor Gray
+        if ($status -in @("Valid", "NotTrusted")) {
+            $signed = $true
+        } else {
+            Write-Host "   [WARN] Unexpected status: $status" -ForegroundColor Yellow
+        }
     }
 } else {
+    # Try each TSA with timeout
     foreach ($tsa in $TsaUrls) {
-        Write-Host " Step 5 : Requesting timestamp from $tsa (timeout ${TsaTimeoutSeconds}s)..." -ForegroundColor Gray
-        $ok = Invoke-SignWithTimeout `
-            -Tool $toolMode `
-            -Target $resolvedTarget `
-            -ResolvedPfx $resolvedPfx `
-            -PfxPwd $pfxPwdStr `
-            -Thumb $thumbStr `
-            -SignToolPath ($signTool ?? "") `
-            -Tsa $tsa `
-            -TimeoutSec $TsaTimeoutSeconds
+        Write-Host " Step 5 : TSA $tsa (timeout ${TsaTimeoutSeconds}s)..." -ForegroundColor Gray
 
-        if ($ok) {
-            Write-Host "          SIGNED with timestamp from $tsa" -ForegroundColor Green
-            $signed = $true
-            break
+        if ($signTool) {
+            $ok = Invoke-SigntoolJob `
+                -SignToolPath $signTool `
+                -Target $resolvedTarget `
+                -ResolvedPfx $resolvedPfx `
+                -PfxPwd $pfxPwdStr `
+                -Thumb $thumbStr `
+                -Tsa $tsa `
+                -TimeoutSec $TsaTimeoutSeconds
+            if ($ok) { $signed = $true; break }
         } else {
-            Write-Host "          TSA $tsa failed or timed out, trying next..." -ForegroundColor Yellow
+            # Set-AuthenticodeSignature in main process -- no Start-Job
+            $status = Invoke-PsSign -Cert $cert -Target $resolvedTarget -Tsa $tsa
+            Write-Host "          Status: $status" -ForegroundColor Gray
+            if ($status -in @("Valid", "NotTrusted")) { $signed = $true; break }
+            Write-Host "          TSA $tsa failed, trying next..." -ForegroundColor Yellow
         }
     }
 
     # Last resort: sign without timestamp
     if (-not $signed) {
-        Write-Host " Step 5 : All TSA failed. Attempting sign without timestamp (last resort)..." -ForegroundColor Yellow
-        $ok = Invoke-SignWithTimeout `
-            -Tool $toolMode `
-            -Target $resolvedTarget `
-            -ResolvedPfx $resolvedPfx `
-            -PfxPwd $pfxPwdStr `
-            -Thumb $thumbStr `
-            -SignToolPath ($signTool ?? "") `
-            -Tsa "" `
-            -TimeoutSec $TsaTimeoutSeconds
-
-        if ($ok) {
-            Write-Host "          SIGNED (no timestamp -- all TSA unreachable)" -ForegroundColor Yellow
-            $signed = $true
+        Write-Host " Step 5 : All TSA failed. Signing without timestamp (last resort)..." -ForegroundColor Yellow
+        if ($signTool) {
+            $ok = Invoke-SigntoolJob `
+                -SignToolPath $signTool `
+                -Target $resolvedTarget `
+                -ResolvedPfx $resolvedPfx `
+                -PfxPwd $pfxPwdStr `
+                -Thumb $thumbStr `
+                -Tsa "" `
+                -TimeoutSec $TsaTimeoutSeconds
+            if ($ok) { $signed = $true }
+        } else {
+            $status = Invoke-PsSign -Cert $cert -Target $resolvedTarget -Tsa ""
+            Write-Host "          Status: $status" -ForegroundColor Gray
+            if ($status -in @("Valid", "NotTrusted")) { $signed = $true }
         }
     }
 }
@@ -284,7 +295,9 @@ if ($NoTimestamp) {
 Write-Host "=======================================================" -ForegroundColor Cyan
 Write-Host ""
 
-if (-not $signed) {
-    Write-Error "Signing failed. Check certificate configuration and target path."
+if ($signed) {
+    Write-Host " RESULT: SIGNED OK" -ForegroundColor Green
+} else {
+    Write-Error "Signing failed. Check certificate and target path."
     exit 1
 }

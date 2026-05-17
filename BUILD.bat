@@ -75,7 +75,7 @@ if "%BUILD_TOOLS%"=="1" (
     )
     echo [2/4] LicenseTool published OK.
 ) else (
-    echo [2/4] LicenseTool skipped (use --tools to include).
+    echo [2/4] LicenseTool skipped ^(use --tools to include^).
 )
 
 REM ---- Step 3: Sign -----------------------------------------------
@@ -100,7 +100,7 @@ if "%SIGN%"=="1" (
         )
     )
 ) else (
-    echo [3/4] Signing skipped (use --sign to enable).
+    echo [3/4] Signing skipped ^(use --sign to enable^).
     echo        Configure: set SIGN_PFX_PATH=... and set SIGN_PFX_PASSWORD=...
 )
 
@@ -114,15 +114,15 @@ set VERIFY_EXIT=%ERRORLEVEL%
 if "%SIGN%"=="1" (
     REM With --sign: any non-zero verify exit is a build failure
     if %VERIFY_EXIT% NEQ 0 (
-        echo [ERROR] Signature verification failed (exit %VERIFY_EXIT%). Build aborted.
+        echo [ERROR] Signature verification failed ^(exit %VERIFY_EXIT%^). Build aborted.
         exit /b 1
     )
     echo [4/4] Signature verified OK.
 ) else (
-    REM Without --sign: NotSigned (exit 2) is a warning, not a failure.
-    REM Exit 3+ (hash mismatch, error) is a failure even without --sign.
+    REM Without --sign: NotSigned exit=2 is a warning, not a failure.
+    REM Exit 3+ means hash mismatch or error -- fails even without --sign.
     if %VERIFY_EXIT% GEQ 3 (
-        echo [ERROR] Signature verification error (exit %VERIFY_EXIT%). Investigate.
+        echo [ERROR] Signature verification error ^(exit %VERIFY_EXIT%^). Investigate.
         exit /b 1
     )
     if %VERIFY_EXIT% EQU 2 (
@@ -153,7 +153,7 @@ if "%BUILD_TOOLS%"=="1" (
 if "%SIGN%"=="1" (
     echo  Signed: YES
 ) else (
-    echo  Signed: NO (unsigned artifact)
+    echo  Signed: NO ^(unsigned artifact^)
 )
 
 echo.
