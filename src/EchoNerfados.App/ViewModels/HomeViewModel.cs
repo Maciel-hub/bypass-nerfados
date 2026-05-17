@@ -9,21 +9,19 @@ public sealed partial class HomeViewModel : ObservableObject
 {
     private readonly Action<ScanConfig> _startScan;
 
-    // ── License (observable so RefreshLicense can update them) ────────────────
-
-    [ObservableProperty] private bool   _licenseValid    = false;
-    [ObservableProperty] private string _licenseStatus   = "";
+    // License — observable so RefreshLicense can update them
+    [ObservableProperty] private bool _licenseValid;
+    [ObservableProperty] private string _licenseStatus = "";
     [ObservableProperty] private string _licenseCustomer = "";
-    [ObservableProperty] private string _licenseExpiry   = "";
-    [ObservableProperty] private string _machineId       = "";
+    [ObservableProperty] private string _licenseExpiry = "";
+    [ObservableProperty] private string _machineId = "";
 
     private string[] _licenseFeatures = [];
 
-    // ── Scan config fields ────────────────────────────────────────────────────
-
+    // Scan config
     [ObservableProperty] private string _investigatorName = "";
-    [ObservableProperty] private string _suspectName      = "";
-    [ObservableProperty] private string _caseId           = "";
+    [ObservableProperty] private string _suspectName = "";
+    [ObservableProperty] private string _caseId = "";
     [ObservableProperty] private string _reportOutputPath = Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
 
     [ObservableProperty]
@@ -32,12 +30,10 @@ public sealed partial class HomeViewModel : ObservableObject
 
     public static IReadOnlyList<ScanProfileOption> Profiles => ScanProfileOption.Profiles;
 
-    // ── Constructor ───────────────────────────────────────────────────────────
-
     public HomeViewModel(Action<ScanConfig> startScan)
     {
         _startScan = startScan;
-        MachineId  = LicenseValidator.ComputeMachineId();
+        MachineId = LicenseValidator.ComputeMachineId();
         LoadLicense();
     }
 
@@ -49,22 +45,20 @@ public sealed partial class HomeViewModel : ObservableObject
         if (lic.Success)
         {
             _licenseFeatures = lic.License!.Features;
-            LicenseCustomer  = lic.License.CustomerId;
-            LicenseExpiry    = lic.License.ExpiresAt.LocalDateTime.ToString("dd/MM/yyyy");
-            LicenseStatus    = $"Válida até {LicenseExpiry}";
+            LicenseCustomer = lic.License.CustomerId;
+            LicenseExpiry = lic.License.ExpiresAt.LocalDateTime.ToString("dd/MM/yyyy");
+            LicenseStatus = $"Válida até {LicenseExpiry}";
         }
         else
         {
             _licenseFeatures = [];
-            LicenseCustomer  = "—";
-            LicenseExpiry    = "—";
-            LicenseStatus    = lic.ErrorMessage;
+            LicenseCustomer = "—";
+            LicenseExpiry = "—";
+            LicenseStatus = lic.ErrorMessage;
         }
 
         StartScanCommand.NotifyCanExecuteChanged();
     }
-
-    // ── Commands ──────────────────────────────────────────────────────────────
 
     [RelayCommand(CanExecute = nameof(CanStartScan))]
     private void StartScan()
@@ -72,16 +66,16 @@ public sealed partial class HomeViewModel : ObservableObject
         // Record timestamp for clock rollback detection — mirrors what CLI does in Program.cs
         LicenseValidator.RecordValidation(DateTimeOffset.UtcNow);
 
-        var rules  = RulesLoader.Load();
+        var rules = RulesLoader.Load();
         var config = new ScanConfig
         {
             InvestigatorName = string.IsNullOrWhiteSpace(InvestigatorName) ? null : InvestigatorName.Trim(),
-            SuspectName      = string.IsNullOrWhiteSpace(SuspectName)      ? null : SuspectName.Trim(),
-            CaseId           = string.IsNullOrWhiteSpace(CaseId)           ? null : CaseId.Trim(),
+            SuspectName = string.IsNullOrWhiteSpace(SuspectName) ? null : SuspectName.Trim(),
+            CaseId = string.IsNullOrWhiteSpace(CaseId) ? null : CaseId.Trim(),
             ReportOutputPath = ReportOutputPath,
-            Profile          = SelectedProfile.Profile,
-            Rules            = rules,
-            LicenseFeatures  = new HashSet<string>(_licenseFeatures, StringComparer.OrdinalIgnoreCase),
+            Profile = SelectedProfile.Profile,
+            Rules = rules,
+            LicenseFeatures = new HashSet<string>(_licenseFeatures, StringComparer.OrdinalIgnoreCase),
         };
 
         if (!config.LicenseFeatures.Contains("memory"))
@@ -95,10 +89,7 @@ public sealed partial class HomeViewModel : ObservableObject
     private bool CanStartScan() => LicenseValid;
 
     [RelayCommand]
-    private void RefreshLicense()
-    {
-        LoadLicense();
-    }
+    private void RefreshLicense() => LoadLicense();
 
     [RelayCommand]
     private void CopyMachineId()
@@ -112,9 +103,9 @@ public sealed partial class HomeViewModel : ObservableObject
     {
         var dlg = new Microsoft.Win32.OpenFolderDialog
         {
-            Title            = "Selecione a pasta de saída dos relatórios",
+            Title = "Selecione a pasta de saída dos relatórios",
             InitialDirectory = ReportOutputPath,
-            Multiselect      = false,
+            Multiselect = false,
         };
         if (dlg.ShowDialog() == true)
             ReportOutputPath = dlg.FolderName;
@@ -125,10 +116,10 @@ public sealed record ScanProfileOption(string Label, string Description, ScanPro
 {
     public static readonly IReadOnlyList<ScanProfileOption> Profiles =
     [
-        new("Default",   "Todos os módulos (~2-3 min)",              ScanProfile.Default),
-        new("Fast",      "16 módulos essenciais (~30s)",             ScanProfile.Fast),
-        new("Deep",      "Todos + USN + Memória",                    ScanProfile.Deep),
-        new("FiveM",     "Foco FiveM — timeline por sessão",         ScanProfile.FiveM),
-        new("Florence",  "Todos + validação de fonte dupla",         ScanProfile.Florence),
+        new("Default",  "Todos os módulos (~2-3 min)",       ScanProfile.Default),
+        new("Fast",     "16 módulos essenciais (~30s)",      ScanProfile.Fast),
+        new("Deep",     "Todos + USN + Memória",             ScanProfile.Deep),
+        new("FiveM",    "Foco FiveM — timeline por sessão",  ScanProfile.FiveM),
+        new("Florence", "Todos + validação de fonte dupla",  ScanProfile.Florence),
     ];
 }

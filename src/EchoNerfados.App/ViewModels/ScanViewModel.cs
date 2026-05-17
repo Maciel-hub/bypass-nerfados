@@ -17,34 +17,30 @@ public sealed partial class ScanViewModel : ObservableObject
     private ScanResult? _result;
     private string? _htmlReportPath;
 
-    // ── Progress properties ───────────────────────────────────────────────────
-
+    // Progress properties
     [ObservableProperty] private string _currentModule = "Iniciando...";
-    [ObservableProperty] private string _phase         = "";
-    [ObservableProperty] private int    _moduleIndex   = 0;
-    [ObservableProperty] private int    _moduleCount   = 1;
-    [ObservableProperty] private double _progressPercent = 0;
+    [ObservableProperty] private string _phase = "";
+    [ObservableProperty] private int _moduleIndex;
+    [ObservableProperty] private int _moduleCount = 1;
+    [ObservableProperty] private double _progressPercent;
 
-    [ObservableProperty] private int _criticalCount = 0;
-    [ObservableProperty] private int _highCount     = 0;
-    [ObservableProperty] private int _mediumCount   = 0;
-    [ObservableProperty] private int _lowCount      = 0;
+    [ObservableProperty] private int _criticalCount;
+    [ObservableProperty] private int _highCount;
+    [ObservableProperty] private int _mediumCount;
+    [ObservableProperty] private int _lowCount;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(CancelCommand))]
     private bool _isRunning = true;
 
-    // True after cancellation or fatal error — shows "Nova Varredura" button
-    [ObservableProperty] private bool _isAborted = false;
+    [ObservableProperty] private bool _isAborted;
 
     public ObservableCollection<ScanLogLine> LogLines { get; } = new();
 
-    // ── Constructor + auto-start ──────────────────────────────────────────────
-
     public ScanViewModel(ScanConfig config, Action<ScanResult, string?> onComplete, Action navigateHome)
     {
-        _config       = config;
-        _onComplete   = onComplete;
+        _config = config;
+        _onComplete = onComplete;
         _navigateHome = navigateHome;
         _ = RunAsync();
     }
@@ -61,7 +57,7 @@ public sealed partial class ScanViewModel : ObservableObject
         catch (OperationCanceledException)
         {
             AddLog("⊘", "Varredura cancelada.", isError: true);
-            Phase     = "Cancelado";
+            Phase = "Cancelado";
             IsRunning = false;
             IsAborted = true;
             return;
@@ -69,7 +65,7 @@ public sealed partial class ScanViewModel : ObservableObject
         catch (Exception ex)
         {
             AddLog("✕", $"Erro fatal: {ex.Message}", isError: true);
-            Phase     = "Erro";
+            Phase = "Erro";
             IsRunning = false;
             IsAborted = true;
             return;
@@ -81,7 +77,7 @@ public sealed partial class ScanViewModel : ObservableObject
 
     private void OnProgress(ScanProgressUpdate update)
     {
-        Application.Current.Dispatcher.Invoke(() =>
+        Application.Current.Dispatcher.BeginInvoke(() =>
         {
             switch (update.Kind)
             {
@@ -93,7 +89,7 @@ public sealed partial class ScanViewModel : ObservableObject
 
                 case ScanProgressKind.ModuleStarted:
                     CurrentModule = update.ModuleName ?? "";
-                    ModuleIndex   = update.ModuleIndex;
+                    ModuleIndex = update.ModuleIndex;
                     ProgressPercent = ModuleCount > 0
                         ? (update.ModuleIndex - 1) * 100.0 / ModuleCount
                         : 0;
@@ -105,7 +101,7 @@ public sealed partial class ScanViewModel : ObservableObject
                         ? update.ModuleIndex * 100.0 / ModuleCount
                         : 100;
                     var count = update.Findings?.Count ?? 0;
-                    var dur   = update.Duration?.TotalSeconds.ToString("F1") ?? "0.0";
+                    var dur = update.Duration?.TotalSeconds.ToString("F1") ?? "0.0";
                     AddLog("✓", $"{update.ModuleName} ({dur}s, {count} finding{(count != 1 ? "s" : "")})");
                     UpdateCounts(update.Findings);
                     break;
@@ -135,7 +131,7 @@ public sealed partial class ScanViewModel : ObservableObject
 
                 case ScanProgressKind.ReportGenerated:
                     _htmlReportPath = update.HtmlReportPath;
-                    AddLog("✓", $"Relatório exportado.");
+                    AddLog("✓", "Relatório exportado.");
                     break;
 
                 case ScanProgressKind.ReportFailed:
@@ -170,8 +166,6 @@ public sealed partial class ScanViewModel : ObservableObject
         LogLines.Add(new ScanLogLine(icon, text, isError, isWarning));
         if (LogLines.Count > 200) LogLines.RemoveAt(0);
     }
-
-    // ── Commands ──────────────────────────────────────────────────────────────
 
     [RelayCommand(CanExecute = nameof(IsRunning))]
     private void Cancel()

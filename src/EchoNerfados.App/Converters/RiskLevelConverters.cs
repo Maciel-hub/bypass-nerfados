@@ -5,23 +5,33 @@ using BypassNerfados.Scanner.Models;
 
 namespace EchoNerfados.App.Converters;
 
+// Shared frozen-brush cache — avoids allocating a new SolidColorBrush per binding call.
+internal static class RiskColors
+{
+    private static readonly Dictionary<RiskLevel, Brush> _brushes = new()
+    {
+        [RiskLevel.Critical] = Freeze(new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFFF4040"))),
+        [RiskLevel.High]     = Freeze(new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFFF8C00"))),
+        [RiskLevel.Medium]   = Freeze(new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FFFFD700"))),
+        [RiskLevel.Low]      = Freeze(new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF4CAF50"))),
+    };
+
+    private static readonly Brush _fallback =
+        Freeze(new SolidColorBrush((Color)ColorConverter.ConvertFromString("#FF808080")));
+
+    public static Brush Get(RiskLevel risk) =>
+        _brushes.TryGetValue(risk, out var b) ? b : _fallback;
+
+    private static Brush Freeze(Brush b) { b.Freeze(); return b; }
+}
+
 [ValueConversion(typeof(RiskLevel), typeof(Brush))]
 public sealed class RiskLevelToBrushConverter : IValueConverter
 {
     public static readonly RiskLevelToBrushConverter Instance = new();
 
-    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-    {
-        var color = (RiskLevel)value switch
-        {
-            RiskLevel.Critical => "#FFFF4040",
-            RiskLevel.High     => "#FFFF8C00",
-            RiskLevel.Medium   => "#FFFFD700",
-            RiskLevel.Low      => "#FF4CAF50",
-            _                  => "#FF808080"
-        };
-        return new SolidColorBrush((Color)ColorConverter.ConvertFromString(color));
-    }
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) =>
+        RiskColors.Get((RiskLevel)value);
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) =>
         throw new NotSupportedException();
