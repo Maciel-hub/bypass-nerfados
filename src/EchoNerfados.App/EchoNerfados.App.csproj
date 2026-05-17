@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>EchoNerfados.App</AssemblyName>
+    <RootNamespace>EchoNerfados.App</RootNamespace>
+    <AssemblyTitle>Echo Nerfados Shield XDR</AssemblyTitle>
+    <Product>Echo Nerfados Shield XDR</Product>
+    <Description>Echo Nerfados Shield XDR — GUI</Description>
+    <Version>1.0.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <StartupObject>EchoNerfados.App.App</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Scanner.Core\Scanner.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+  </ItemGroup>
+
+  <!-- Detection rules — same source tree as Scanner CLI -->
+  <ItemGroup>
+    <Content Include="..\Scanner\rules\**"
+             Link="rules\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Embed git commit hash in InformationalVersion at build time -->
+  <Target Name="SetGitVersion" BeforeTargets="CoreCompile;GetAssemblyVersion">
+    <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitShortHash" />
+    </Exec>
+    <PropertyGroup>
+      <GitShortHash>$(GitShortHash.Trim())</GitShortHash>
+      <InformationalVersion Condition="'$(GitShortHash)' != ''">$(Version)+$(GitShortHash)</InformationalVersion>
+      <InformationalVersion Condition="'$(GitShortHash)' == ''">$(Version)+unknown</InformationalVersion>
+    </PropertyGroup>
+  </Target>
+
+</Project>

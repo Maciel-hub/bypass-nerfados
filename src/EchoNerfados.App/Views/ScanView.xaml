@@ -1,0 +1,151 @@
+<UserControl x:Class="EchoNerfados.App.Views.ScanView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:EchoNerfados.App.ViewModels"
+             Background="{StaticResource BackgroundBrush}">
+
+  <Grid Margin="32,24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />  <!-- title -->
+      <RowDefinition Height="20" />
+      <RowDefinition Height="Auto" />  <!-- progress -->
+      <RowDefinition Height="20" />
+      <RowDefinition Height="Auto" />  <!-- counters -->
+      <RowDefinition Height="20" />
+      <RowDefinition Height="*" />     <!-- log -->
+      <RowDefinition Height="20" />
+      <RowDefinition Height="Auto" />  <!-- cancel -->
+    </Grid.RowDefinitions>
+
+    <!-- ── Title + Phase ─────────────────────────────────────────────────── -->
+    <StackPanel Grid.Row="0">
+      <TextBlock Text="VARRENDO..." Style="{StaticResource HeadingStyle}" FontSize="18" />
+      <TextBlock Text="{Binding Phase}" Style="{StaticResource SecondaryTextStyle}" Margin="0,4,0,0" />
+    </StackPanel>
+
+    <!-- ── Progress bar + module counter ─────────────────────────────────── -->
+    <Border Grid.Row="2" Style="{StaticResource CardStyle}">
+      <StackPanel>
+        <Grid Margin="0,0,0,10">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <TextBlock Grid.Column="0"
+                     Text="{Binding CurrentModule}"
+                     Style="{StaticResource BaseTextStyle}" />
+          <TextBlock Grid.Column="1"
+                     Style="{StaticResource SecondaryTextStyle}">
+            <TextBlock.Text>
+              <MultiBinding StringFormat="{}{0} / {1} módulos">
+                <Binding Path="ModuleIndex" />
+                <Binding Path="ModuleCount" />
+              </MultiBinding>
+            </TextBlock.Text>
+          </TextBlock>
+        </Grid>
+
+        <ProgressBar Value="{Binding ProgressPercent}"
+                     Minimum="0" Maximum="100"
+                     Style="{StaticResource DarkProgressBarStyle}" />
+      </StackPanel>
+    </Border>
+
+    <!-- ── Severity counters ─────────────────────────────────────────────── -->
+    <Border Grid.Row="4" Style="{StaticResource CardStyle}">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0" HorizontalAlignment="Center">
+          <TextBlock Text="{Binding CriticalCount}" FontSize="28" FontWeight="Bold"
+                     Foreground="{StaticResource CriticalBrush}" HorizontalAlignment="Center" />
+          <TextBlock Text="CRITICAL" Style="{StaticResource SecondaryTextStyle}" HorizontalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" HorizontalAlignment="Center">
+          <TextBlock Text="{Binding HighCount}" FontSize="28" FontWeight="Bold"
+                     Foreground="{StaticResource HighBrush}" HorizontalAlignment="Center" />
+          <TextBlock Text="HIGH" Style="{StaticResource SecondaryTextStyle}" HorizontalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Grid.Column="2" HorizontalAlignment="Center">
+          <TextBlock Text="{Binding MediumCount}" FontSize="28" FontWeight="Bold"
+                     Foreground="{StaticResource MediumBrush}" HorizontalAlignment="Center" />
+          <TextBlock Text="MEDIUM" Style="{StaticResource SecondaryTextStyle}" HorizontalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Grid.Column="3" HorizontalAlignment="Center">
+          <TextBlock Text="{Binding LowCount}" FontSize="28" FontWeight="Bold"
+                     Foreground="{StaticResource LowBrush}" HorizontalAlignment="Center" />
+          <TextBlock Text="LOW" Style="{StaticResource SecondaryTextStyle}" HorizontalAlignment="Center" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- ── Module log ─────────────────────────────────────────────────────── -->
+    <Border Grid.Row="6" Style="{StaticResource CardStyle}" Padding="12">
+      <ScrollViewer x:Name="LogScroller"
+                    Style="{StaticResource MinimalScrollViewerStyle}"
+                    VirtualizingPanel.IsVirtualizing="True">
+        <ItemsControl ItemsSource="{Binding LogLines}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="{x:Type vm:ScanLogLine}">
+              <Grid Margin="0,1">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="18" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="{Binding Icon}"
+                           FontFamily="Segoe UI Symbol"
+                           FontSize="12">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource BaseTextStyle}">
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsError}" Value="True">
+                          <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsWarning}" Value="True">
+                          <Setter Property="Foreground" Value="{StaticResource MediumBrush}" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Text}"
+                           FontFamily="Consolas"
+                           FontSize="11"
+                           TextWrapping="NoWrap">
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock" BasedOn="{StaticResource BaseTextStyle}">
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsError}" Value="True">
+                          <Setter Property="Foreground" Value="{StaticResource CriticalBrush}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding IsWarning}" Value="True">
+                          <Setter Property="Foreground" Value="{StaticResource MediumBrush}" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Border>
+
+    <!-- ── Cancel button ─────────────────────────────────────────────────── -->
+    <Grid Grid.Row="8">
+      <Button Content="✕  CANCELAR"
+              Style="{StaticResource DangerButtonStyle}"
+              HorizontalAlignment="Right"
+              Command="{Binding CancelCommand}" />
+    </Grid>
+
+  </Grid>
+</UserControl>

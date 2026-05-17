@@ -1,0 +1,101 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>false</AllowUnsafeBlocks>
+    <AssemblyName>EchoNerfados.Core</AssemblyName>
+    <RootNamespace>BypassNerfados.Scanner</RootNamespace>
+    <AssemblyTitle>Echo Nerfados Core</AssemblyTitle>
+    <Product>Echo Nerfados Shield XDR</Product>
+    <Description>Echo Nerfados core scanner engine — shared by CLI and GUI hosts</Description>
+    <Version>1.0.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <!-- Files live in the sibling Scanner folder; disable the default glob -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <!-- Core engine — all files except ConsoleUI / LiveDashboard (Spectre.Console-only) -->
+  <ItemGroup>
+    <Compile Include="..\Scanner\Core\Correlator.cs" />
+    <Compile Include="..\Scanner\Core\EvidenceEnricher.cs" />
+    <Compile Include="..\Scanner\Core\FindingDeduplicator.cs" />
+    <Compile Include="..\Scanner\Core\LicenseValidator.cs" />
+    <Compile Include="..\Scanner\Core\RulesLoader.cs" />
+    <Compile Include="..\Scanner\Core\ScanConfig.cs" />
+    <Compile Include="..\Scanner\Core\ScanOrchestrator.cs" />
+    <Compile Include="..\Scanner\Core\ScanProgressUpdate.cs" />
+    <Compile Include="..\Scanner\Data\CheatDatabase.cs" />
+    <Compile Include="..\Scanner\Models\EvidenceBundle.cs" />
+    <Compile Include="..\Scanner\Models\Finding.cs" />
+    <Compile Include="..\Scanner\Models\ModuleCoverageEntry.cs" />
+    <Compile Include="..\Scanner\Models\ScanResult.cs" />
+    <Compile Include="..\Scanner\Modules\AmcacheModule.cs" />
+    <Compile Include="..\Scanner\Modules\BamDamModule.cs" />
+    <Compile Include="..\Scanner\Modules\BaseModule.cs" />
+    <Compile Include="..\Scanner\Modules\BrowserDownloadsModule.cs" />
+    <Compile Include="..\Scanner\Modules\DefenderModule.cs" />
+    <Compile Include="..\Scanner\Modules\EventViewerModule.cs" />
+    <Compile Include="..\Scanner\Modules\ExternalToolResidueModule.cs" />
+    <Compile Include="..\Scanner\Modules\FileSystemModule.cs" />
+    <Compile Include="..\Scanner\Modules\JumpListsModule.cs" />
+    <Compile Include="..\Scanner\Modules\KnownCheatsModule.cs" />
+    <Compile Include="..\Scanner\Modules\LnkRecentModule.cs" />
+    <Compile Include="..\Scanner\Modules\MemoryDllTraceModule.cs" />
+    <Compile Include="..\Scanner\Modules\MemoryStringScanModule.cs" />
+    <Compile Include="..\Scanner\Modules\NetworkModule.cs" />
+    <Compile Include="..\Scanner\Modules\NvidiaArtifactsModule.cs" />
+    <Compile Include="..\Scanner\Modules\PrefetchModule.cs" />
+    <Compile Include="..\Scanner\Modules\ProcessMemoryModule.cs" />
+    <Compile Include="..\Scanner\Modules\RecycleBinModule.cs" />
+    <Compile Include="..\Scanner\Modules\RedEngineArtifactsModule.cs" />
+    <Compile Include="..\Scanner\Modules\RegistryArtifactsModule.cs" />
+    <Compile Include="..\Scanner\Modules\RegistryPersistenceModule.cs" />
+    <Compile Include="..\Scanner\Modules\ServiceCheckModule.cs" />
+    <Compile Include="..\Scanner\Modules\ShellBagsModule.cs" />
+    <Compile Include="..\Scanner\Modules\ShimCacheModule.cs" />
+    <Compile Include="..\Scanner\Modules\SrumModule.cs" />
+    <Compile Include="..\Scanner\Modules\SystemInfoModule.cs" />
+    <Compile Include="..\Scanner\Modules\SystemResetRestoreModule.cs" />
+    <Compile Include="..\Scanner\Modules\SystemTamperingModule.cs" />
+    <Compile Include="..\Scanner\Modules\TimelineInvestigationModule.cs" />
+    <Compile Include="..\Scanner\Modules\UserAssistModule.cs" />
+    <Compile Include="..\Scanner\Modules\UsnJournalModule.cs" />
+    <Compile Include="..\Scanner\Reports\EvidenceExporter.cs" />
+    <Compile Include="..\Scanner\Reports\ExecutiveTemplate.cs" />
+    <Compile Include="..\Scanner\Reports\HtmlTemplate.cs" />
+    <Compile Include="..\Scanner\Reports\ManifestSigner.cs" />
+    <Compile Include="..\Scanner\Reports\ManifestWriter.cs" />
+    <Compile Include="..\Scanner\Reports\ReportGenerator.cs" />
+  </ItemGroup>
+
+  <!-- Detection rules: copied to output directory of every consumer -->
+  <ItemGroup>
+    <Content Include="..\Scanner\rules\**"
+             Link="rules\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
+    <PackageReference Include="ManagedEsent" Version="1.9.4" />
+  </ItemGroup>
+
+  <!-- Embed git commit hash in InformationalVersion at build time -->
+  <Target Name="SetGitVersion" BeforeTargets="CoreCompile;GetAssemblyVersion">
+    <Exec Command="git rev-parse --short HEAD" ConsoleToMSBuild="true" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitShortHash" />
+    </Exec>
+    <PropertyGroup>
+      <GitShortHash>$(GitShortHash.Trim())</GitShortHash>
+      <InformationalVersion Condition="'$(GitShortHash)' != ''">$(Version)+$(GitShortHash)</InformationalVersion>
+      <InformationalVersion Condition="'$(GitShortHash)' == ''">$(Version)+unknown</InformationalVersion>
+    </PropertyGroup>
+  </Target>
+
+</Project>

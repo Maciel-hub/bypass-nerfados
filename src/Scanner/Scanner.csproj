@@ -16,15 +16,37 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
+  <!--
+    Console host keeps only: Program.cs, Core/ConsoleUI.cs, Core/LiveDashboard.cs.
+    Everything else is compiled in Scanner.Core and referenced via ProjectReference.
+  -->
   <ItemGroup>
-    <PackageReference Include="Spectre.Console" Version="0.49.1" />
-    <PackageReference Include="System.Management" Version="8.0.0" />
-    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
-    <PackageReference Include="System.ServiceProcess.ServiceController" Version="8.0.0" />
-    <PackageReference Include="ManagedEsent" Version="1.9.4" />
+    <Compile Remove="Core\Correlator.cs" />
+    <Compile Remove="Core\EvidenceEnricher.cs" />
+    <Compile Remove="Core\FindingDeduplicator.cs" />
+    <Compile Remove="Core\LicenseValidator.cs" />
+    <Compile Remove="Core\RulesLoader.cs" />
+    <Compile Remove="Core\ScanConfig.cs" />
+    <Compile Remove="Core\ScanOrchestrator.cs" />
+    <Compile Remove="Core\ScanProgressUpdate.cs" />
+    <Compile Remove="Data\**" />
+    <Compile Remove="Models\**" />
+    <Compile Remove="Modules\**" />
+    <Compile Remove="Reports\**" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Scanner.Core\Scanner.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Only Spectre.Console stays here; all other NuGet deps live in Scanner.Core -->
+    <PackageReference Include="Spectre.Console" Version="0.49.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- rules\ is already included via Scanner.Core Content items (CopyToOutputDirectory) -->
+    <!-- Keep this entry for the publish profile which copies from the Scanner project tree -->
     <Content Include="rules\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 

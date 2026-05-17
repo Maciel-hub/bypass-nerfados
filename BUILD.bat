@@ -9,7 +9,8 @@ REM USAGE:
 REM   BUILD.bat                publish only (no signing)
 REM   BUILD.bat --sign         sign after publish if cert configured
 REM   BUILD.bat --tools        also publish LicenseTool
-REM   BUILD.bat --sign --tools all of the above
+REM   BUILD.bat --gui          also publish EchoNerfados.App (WPF GUI)
+REM   BUILD.bat --sign --tools --gui  all of the above
 REM
 REM CERTIFICATE (set before running with --sign):
 REM   Via PFX:
@@ -27,10 +28,12 @@ REM ============================================================
 
 set "SIGN=0"
 set "BUILD_TOOLS=0"
+set "BUILD_GUI=0"
 
 :parse_args
 if "%~1"=="--sign"  ( set "SIGN=1"        & shift & goto parse_args )
 if "%~1"=="--tools" ( set "BUILD_TOOLS=1" & shift & goto parse_args )
+if "%~1"=="--gui"   ( set "BUILD_GUI=1"   & shift & goto parse_args )
 if "%~1" NEQ "" (
     echo [ERROR] Unknown argument: %~1
     exit /b 1
@@ -58,6 +61,26 @@ if errorlevel 1 (
     exit /b 1
 )
 echo [1/4] Scanner published OK.
+
+REM ---- Step 1b: Publish GUI (optional) ----------------------------
+if "%BUILD_GUI%"=="1" (
+    echo.
+    echo [1b] Publishing EchoNerfados.App ^(WPF GUI^)...
+    dotnet publish src\EchoNerfados.App\EchoNerfados.App.csproj ^
+        -c Release ^
+        -r win-x64 ^
+        --self-contained true ^
+        -p:PublishSingleFile=true ^
+        -p:PublishReadyToRun=true ^
+        -o publish\win-x64-gui
+    if errorlevel 1 (
+        echo [ERROR] GUI publish failed.
+        exit /b 1
+    )
+    echo [1b] GUI published OK.
+) else (
+    echo [1b] GUI skipped ^(use --gui to include^).
+)
 
 REM ---- Step 2: Publish LicenseTool (optional) ---------------------
 if "%BUILD_TOOLS%"=="1" (
@@ -87,6 +110,17 @@ if "%SIGN%"=="1" (
     if errorlevel 1 (
         echo [ERROR] Signing failed.
         exit /b 1
+    )
+
+    if "%BUILD_GUI%"=="1" (
+        echo.
+        echo [3/4] Signing EchoNerfados.App.exe...
+        pwsh -NoProfile -NonInteractive -File scripts\sign.ps1 ^
+            -TargetPath "publish\win-x64-gui\EchoNerfados.App.exe"
+        if errorlevel 1 (
+            echo [ERROR] GUI signing failed.
+            exit /b 1
+        )
     )
 
     if "%BUILD_TOOLS%"=="1" (
@@ -146,6 +180,9 @@ for /f "delims=" %%v in ('publish\win-x64\EchoNerfados.exe --machine-id') do (
 echo  Artifacts:
 echo    publish\win-x64\EchoNerfados.exe
 
+if "%BUILD_GUI%"=="1" (
+    echo    publish\win-x64-gui\EchoNerfados.App.exe
+)
 if "%BUILD_TOOLS%"=="1" (
     echo    publish\tools\LicenseTool.exe
 )

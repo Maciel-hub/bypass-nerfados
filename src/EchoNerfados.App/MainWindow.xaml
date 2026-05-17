@@ -1,0 +1,56 @@
+<Window x:Class="EchoNerfados.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Echo Nerfados Shield XDR"
+        Width="820" Height="640"
+        MinWidth="720" MinHeight="560"
+        Background="{StaticResource BackgroundBrush}"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanResize">
+
+  <Grid>
+    <!-- Header bar -->
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <!-- Top header -->
+    <Border Grid.Row="0"
+            Background="{StaticResource SurfaceBrush}"
+            BorderBrush="{StaticResource DividerBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="20,12">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Column="0" Orientation="Vertical" VerticalAlignment="Center">
+          <TextBlock Text="ECHO NERFADOS"
+                     Style="{StaticResource HeadingStyle}"
+                     FontSize="16" />
+          <TextBlock Text="SHIELD XDR — ANTI-CHEAT INVESTIGATION PLATFORM"
+                     Style="{StaticResource SubHeadingStyle}" />
+        </StackPanel>
+
+        <StackPanel Grid.Column="1" Orientation="Vertical" HorizontalAlignment="Right" VerticalAlignment="Center">
+          <TextBlock Text="{Binding Source={x:Static sys:Environment.MachineName}, StringFormat='Máquina: {0}'}"
+                     xmlns:sys="clr-namespace:System;assembly=mscorlib"
+                     Style="{StaticResource SecondaryTextStyle}"
+                     HorizontalAlignment="Right" />
+          <TextBlock Text="{Binding Source={x:Static sys:DateTime.Now}, StringFormat='dd/MM/yyyy HH:mm', Mode=OneTime}"
+                     xmlns:sys="clr-namespace:System;assembly=mscorlib"
+                     Style="{StaticResource SecondaryTextStyle}"
+                     HorizontalAlignment="Right" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <!-- Main content area — bound to CurrentView, DataTemplates do the routing -->
+    <ContentControl Grid.Row="1"
+                    Content="{Binding CurrentView}"
+                    Focusable="False" />
+  </Grid>
+</Window>
