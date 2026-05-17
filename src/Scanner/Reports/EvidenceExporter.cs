@@ -127,6 +127,9 @@ public static class EvidenceExporter
         "Registry Artifacts", "RegistryPersistence", "SystemTampering",
         "System Reset/Restore", "System Info", "Services",
         "Process Memory", "Memory DLL Trace", "Memory String Scan", "Network Usage",
+        // USN Journal and Driver & Kernel cover system-wide state, not a bounded event-log window.
+        // Their findings' timestamps reflect artifact age, not scan depth — report full lookback.
+        "USN Journal", "Driver & Kernel",
     };
 
     // Maps each module export to the Windows logs that back it, then reads coverage days
