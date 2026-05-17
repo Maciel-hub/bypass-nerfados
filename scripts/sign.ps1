@@ -21,6 +21,8 @@
 
     .\scripts\sign.ps1 -NoTimestamp   # QA / self-signed
 #>
+# PfxPassword is read from env var (plain text is unavoidable in a build script context).
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'PfxPassword')]
 [CmdletBinding()]
 param(
     [string]   $TargetPath        = "publish\win-x64\EchoNerfados.exe",
@@ -75,7 +77,8 @@ function Invoke-PsSign {
     if ($Tsa -ne "") { $splat["TimestampServer"] = $Tsa }
     try {
         $result = Set-AuthenticodeSignature @splat
-        return if ($result) { $result.Status.ToString() } else { "null" }
+        if ($result) { return $result.Status.ToString() }
+        return "null"
     } catch {
         Write-Host "   [WARN] Set-AuthenticodeSignature threw: $_" -ForegroundColor Yellow
         return $null
@@ -95,12 +98,12 @@ function Invoke-SigntoolJob {
         [int]    $TimeoutSec
     )
     $job = Start-Job -ScriptBlock {
-        param($st, $target, $pfx, $pwd, $thumb, $tsa)
+        param($st, $target, $pfx, $pfxpwd, $thumb, $tsa)
         $stArgs = @("sign", "/fd", "SHA256")
         if ($tsa -ne "") { $stArgs += @("/td", "SHA256", "/tr", $tsa) }
         if ($pfx -ne "") {
             $stArgs += @("/f", $pfx)
-            if ($pwd -ne "") { $stArgs += @("/p", $pwd) }
+            if ($pfxpwd -ne "") { $stArgs += @("/p", $pfxpwd) }
         } elseif ($thumb -ne "") {
             $stArgs += @("/sha1", $thumb)
         }
@@ -108,6 +111,7 @@ function Invoke-SigntoolJob {
         $out = & $st @stArgs 2>&1
         return @{ ExitCode = $LASTEXITCODE; Output = ($out -join "`n") }
     } -ArgumentList $SignToolPath, $Target, $ResolvedPfx, $PfxPwd, $Thumb, $Tsa
+
 
     $done = Wait-Job -Job $job -Timeout $TimeoutSec
     if (-not $done) {
