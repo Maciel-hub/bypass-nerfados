@@ -1,0 +1,105 @@
+; Echo Nerfados Shield XDR — Inno Setup 6 Installer Script
+; Build: scripts\package.ps1
+; Version override: iscc.exe /DAppVersion=1.0.0 installer\EchoNerfados.iss
+
+#ifndef AppVersion
+  #define AppVersion "1.0.0"
+#endif
+
+#define AppName      "Echo Nerfados Shield XDR"
+#define AppShortName "EchoNerfados"
+#define AppPublisher "Nerfados"
+#define AppURL       "https://nerfados.gg"
+#define AppExeName   "EchoNerfados.exe"
+
+[Setup]
+; Stable GUID — do NOT change between versions (upgrade detection depends on this)
+AppId={{5E8D7F2A-9C3B-4E1D-8F6A-2D7C1E4B9F3A}
+AppName={#AppName}
+AppVersion={#AppVersion}
+AppVerName={#AppName} {#AppVersion}
+AppPublisher={#AppPublisher}
+AppPublisherURL={#AppURL}
+AppSupportURL={#AppURL}
+AppUpdatesURL={#AppURL}
+DefaultDirName={autopf}\{#AppShortName}
+DefaultGroupName={#AppName}
+DisableProgramGroupPage=yes
+OutputDir=..\dist
+OutputBaseFilename={#AppShortName}Setup-{#AppVersion}
+Compression=lzma2/ultra64
+SolidCompression=yes
+WizardStyle=modern
+PrivilegesRequired=admin
+; Windows 10 version 2004 (19041) minimum — required for .NET 8 and modern APIs
+MinVersion=10.0.19041
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+UninstallDisplayName={#AppName}
+UninstallDisplayIcon={app}\{#AppExeName}
+CloseApplications=force
+; Signing: if signing installer externally, set SignTool in package.ps1 instead
+; SetupSignedUninstaller=yes
+
+[Languages]
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
+
+[Dirs]
+; ProgramData dir — writable by any user so license.nerf and last_check can be placed/updated
+Name: "{commonappdata}\{#AppShortName}"; Permissions: users-modify
+
+[Files]
+; Main executable
+Source: "..\publish\win-x64\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+
+; Detection rules (loaded from AppContext.BaseDirectory\rules\)
+Source: "..\publish\win-x64\rules\*"; DestDir: "{app}\rules"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; Verification scripts
+Source: "..\scripts\verify-report.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
+Source: "verify-report-shortcut.bat";  DestDir: "{app}";         Flags: ignoreversion
+
+[Icons]
+; Start Menu
+Name: "{group}\{#AppName}";         Filename: "{app}\{#AppExeName}";           Comment: "Launch Echo Nerfados Shield XDR"
+Name: "{group}\Verify Report";      Filename: "{app}\verify-report-shortcut.bat"; Comment: "Verify integrity of a scan report"
+Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
+
+; Desktop (optional task)
+Name: "{commondesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon; Comment: "Launch Echo Nerfados Shield XDR"
+
+[Run]
+; Post-install: offer to show Machine ID so user can request a license
+Filename: "cmd.exe"; \
+  Parameters: "/k ""{app}\{#AppExeName}"" --machine-id & echo. & echo  Copy the Machine ID above to request your license. & echo  Place license.nerf in: {commonappdata}\{#AppShortName}\ & echo. & pause"; \
+  Description: "Show Machine ID (needed to request a license)"; \
+  Flags: postinstall skipifsilent nowait
+
+[Code]
+
+// ── Uninstall: ask whether to remove ProgramData ──────────────────────────────
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  DataDir   : String;
+  MsgResult : Integer;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    DataDir := ExpandConstant('{commonappdata}\{#AppShortName}');
+    if DirExists(DataDir) then
+    begin
+      MsgResult := MsgBox(
+        'Do you want to remove application data?' + #13#10 + #13#10 +
+        DataDir + #13#10 + #13#10 +
+        'This folder contains your license.nerf, scan state and logs.' + #13#10 +
+        'Select No to keep it (recommended).',
+        mbConfirmation, MB_YESNO or MB_DEFBUTTON2);
+      if MsgResult = IDYES then
+        DelTree(DataDir, True, True, True);
+    end;
+  end;
+end;

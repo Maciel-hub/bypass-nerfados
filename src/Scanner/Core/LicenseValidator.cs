@@ -60,12 +60,19 @@ public static class LicenseValidator
         "INVALID", "Base Board Serial Number"
     };
 
-    // Clock rollback state (DPAPI-protected, LocalMachine scope)
+    // %ProgramData%\EchoNerfados\ — shared state directory (DPAPI clock state + installed license)
     private static readonly string s_stateDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EchoNerfados");
     private static readonly string s_statePath =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EchoNerfados", "last_check");
     private const int ClockToleranceMinutes = 5;
+
+    // License search: ProgramData first (installed layout), then beside EXE (dev/portable).
+    private static readonly string[] s_licenseSearchPaths =
+    [
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EchoNerfados", "license.nerf"),
+        Path.Combine(AppContext.BaseDirectory, "license.nerf")
+    ];
 
     // ── Public API ────────────────────────────────────────────────────────────
 
@@ -99,16 +106,19 @@ public static class LicenseValidator
     }
 
     /// <summary>
-    /// Validates license.nerf beside the EXE. Returns Success=true if all checks pass.
+    /// Validates license.nerf. Searches %ProgramData%\EchoNerfados\ first (installed layout),
+    /// then beside the EXE (dev/portable layout).
     /// </summary>
     public static LicenseResult Validate()
     {
         var utcNow      = DateTimeOffset.UtcNow;
-        var licensePath = Path.Combine(AppContext.BaseDirectory, "license.nerf");
+        var licensePath = s_licenseSearchPaths.FirstOrDefault(File.Exists);
 
-        if (!File.Exists(licensePath))
+        if (licensePath is null)
             return Fail(LicenseErrorCode.NotFound,
-                "Arquivo de licença não encontrado. Coloque license.nerf ao lado do EXE.");
+                $"Arquivo de licença não encontrado. Coloque license.nerf em:{Environment.NewLine}" +
+                $"  {s_licenseSearchPaths[0]}{Environment.NewLine}" +
+                $"  {s_licenseSearchPaths[1]}");
 
         // Clock rollback check — before anything else
         if (IsClockRolledBack(utcNow))
