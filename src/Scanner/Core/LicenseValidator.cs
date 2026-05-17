@@ -60,11 +60,15 @@ public static class LicenseValidator
         "INVALID", "Base Board Serial Number"
     };
 
-    // %ProgramData%\EchoNerfados\ — shared state directory (DPAPI clock state + installed license)
+    // Per-user clock rollback state in %LOCALAPPDATA%\EchoNerfados\.
+    // Per-user (not shared) because the scanner runs as asInvoker — any user may run it.
+    // Users can delete their own last_check (resetting the check) but cannot forge a past timestamp
+    // because the file content is DPAPI-protected with DataProtectionScope.LocalMachine.
+    // Moving to LOCALAPPDATA also means one user cannot tamper with another user's clock state.
     private static readonly string s_stateDir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EchoNerfados");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EchoNerfados");
     private static readonly string s_statePath =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "EchoNerfados", "last_check");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EchoNerfados", "last_check");
     private const int ClockToleranceMinutes = 5;
 
     // License search: ProgramData first (installed layout), then beside EXE (dev/portable).

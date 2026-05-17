@@ -48,8 +48,11 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
 
 [Dirs]
-; ProgramData dir — writable by any user so license.nerf and last_check can be placed/updated
-Name: "{commonappdata}\{#AppShortName}"; Permissions: users-modify
+; ProgramData: license.nerf is placed here by the operator (admin).
+; Users get read/execute only — they can read the license but cannot delete or replace it.
+; Administrators get full control for deployment and updates.
+; last_check (clock rollback state) lives in %LOCALAPPDATA%\EchoNerfados\ (per-user, created at runtime).
+Name: "{commonappdata}\{#AppShortName}"; Permissions: users-readexec admins-full
 
 [Files]
 ; Main executable
