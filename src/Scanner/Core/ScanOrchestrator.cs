@@ -24,7 +24,9 @@ public class ScanOrchestrator
                 ScanProfile.FiveM   => "FiveM",
                 ScanProfile.Florence => "Florence",
                 _                   => "Completo"
-            }
+            },
+            MachineId = config.MachineId,
+            License   = config.ScanLicense,
         };
     }
 

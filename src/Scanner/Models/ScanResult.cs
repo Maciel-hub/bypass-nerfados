@@ -1,9 +1,20 @@
 namespace BypassNerfados.Scanner.Models;
 
+/// <summary>License identity attached to every scan for chain-of-custody purposes.</summary>
+public record ScanLicenseMetadata(
+    string CustomerId,
+    string LicenseMachineId,
+    string EffectiveMachineId,
+    bool IsWildcard,
+    DateTimeOffset ExpiresAt,
+    string[] Features);
+
 public class ScanResult
 {
     public string MachineName { get; init; } = Environment.MachineName;
     public string CurrentUser { get; init; } = Environment.UserName;
+    public string MachineId   { get; set; }  = "";
+    public ScanLicenseMetadata? License { get; set; }
     public string ScanMode { get; set; } = "Completo";
     public DateTime ScanTime { get; init; } = DateTime.Now;
     public DateTime? ScanCompleted { get; set; }

@@ -32,6 +32,13 @@ public static class ReportGenerator
         sb.AppendLine($"  Máquina    : {result.MachineName}");
         sb.AppendLine($"  Usuário    : {result.CurrentUser}");
         sb.AppendLine($"  Data/Hora  : {result.ScanTime:dd/MM/yyyy HH:mm:ss}");
+        if (!string.IsNullOrEmpty(result.MachineId))
+            sb.AppendLine($"  Machine ID : {result.MachineId}");
+        if (result.License != null)
+        {
+            var licType = result.License.IsWildcard ? "Wildcard QA" : "Machine-bound";
+            sb.AppendLine($"  Licença    : {result.License.CustomerId} ({licType}) · Expira: {result.License.ExpiresAt.LocalDateTime:dd/MM/yyyy}");
+        }
         if (config.SuspectName != null)
             sb.AppendLine($"  Suspeito   : {config.SuspectName}");
         if (config.InvestigatorName != null)

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using BypassNerfados.Scanner.Models;
 
 namespace BypassNerfados.Scanner.Core;
 
@@ -42,6 +43,11 @@ public class ScanConfig
     // Set from LicenseInfo.Features after validation in Program.cs.
     public HashSet<string> LicenseFeatures { get; set; } =
         new(["deep", "memory", "br_pack", "forensic"], StringComparer.OrdinalIgnoreCase);
+
+    // Machine identity and license metadata — set in Program.cs after license validation.
+    // Propagated to ScanResult by ScanOrchestrator and embedded in all report outputs.
+    public string MachineId { get; set; } = "";
+    public ScanLicenseMetadata? ScanLicense { get; set; }
 
     public string ReportFileName =>
         $"Echo_Nerfados_{Environment.MachineName}_{DateTime.Now:yyyyMMdd_HHmmss}";

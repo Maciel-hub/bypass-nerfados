@@ -93,6 +93,8 @@ body { background:#fff;color:#111;font-family:'Segoe UI',system-ui,sans-serif;fo
   <div class="hdr-meta">
     <div><strong>Máquina:</strong> {{Esc(result.MachineName)}}</div>
     <div><strong>Data:</strong> {{result.ScanTime:dd/MM/yyyy HH:mm:ss}}</div>
+    {{(!string.IsNullOrEmpty(result.MachineId) ? $"<div><strong>Machine ID:</strong> {Esc(result.MachineId)}</div>" : "")}}
+    {{(result.License != null ? $"<div><strong>Licença:</strong> {Esc(result.License.CustomerId)} ({(result.License.IsWildcard ? "Wildcard QA" : "Machine-bound")}) · Expira: {result.License.ExpiresAt.LocalDateTime:dd/MM/yyyy}</div>" : "")}}
     {{(config.SuspectName != null ? $"<div><strong>Suspeito:</strong> {Esc(config.SuspectName)}</div>" : "")}}
     {{(config.InvestigatorName != null ? $"<div><strong>Investigador:</strong> {Esc(config.InvestigatorName)}</div>" : "")}}
     {{(config.CaseId != null ? $"<div><strong>Caso:</strong> {Esc(config.CaseId)}</div>" : "")}}

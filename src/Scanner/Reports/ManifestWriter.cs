@@ -51,6 +51,7 @@ public static class ManifestWriter
             ScanCompleted = result.ScanCompleted ?? DateTime.Now,
             Machine       = result.MachineName,
             User          = result.CurrentUser,
+            MachineId     = result.MachineId,
             IsElevated    = result.IsAdministrator,
             ProcessId     = Environment.ProcessId,
             CommandLine   = Environment.CommandLine,
@@ -61,6 +62,15 @@ public static class ManifestWriter
             LookbackDays  = (int)config.EventWindowLookback.TotalDays,
             TotalScore    = result.TotalScore,
             OverallRisk   = result.OverallRiskLabel,
+            License       = result.License is { } lic ? new LicenseManifestEntry
+            {
+                CustomerId        = lic.CustomerId,
+                LicenseMachineId  = lic.LicenseMachineId,
+                EffectiveMachineId = lic.EffectiveMachineId,
+                IsWildcard        = lic.IsWildcard,
+                ExpiresAt         = lic.ExpiresAt,
+                Features          = lic.Features,
+            } : null,
             Files         = files,
             ScannerExecutable = new ExecutableManifestEntry
             {
@@ -104,6 +114,7 @@ file sealed class ManifestDto
     public DateTime ScanCompleted    { get; init; }
     public string   Machine          { get; init; } = "";
     public string   User             { get; init; } = "";
+    public string   MachineId        { get; init; } = "";
     public bool     IsElevated       { get; init; }
     public int      ProcessId        { get; init; }
     public string   CommandLine      { get; init; } = "";
@@ -114,8 +125,19 @@ file sealed class ManifestDto
     public int      LookbackDays     { get; init; }
     public int      TotalScore       { get; init; }
     public string   OverallRisk      { get; init; } = "";
+    public LicenseManifestEntry? License { get; init; }
     public Dictionary<string, FileManifestEntry> Files { get; init; } = new();
     public ExecutableManifestEntry ScannerExecutable   { get; init; } = new();
+}
+
+file sealed class LicenseManifestEntry
+{
+    public string          CustomerId         { get; init; } = "";
+    public string          LicenseMachineId   { get; init; } = "";
+    public string          EffectiveMachineId { get; init; } = "";
+    public bool            IsWildcard         { get; init; }
+    public DateTimeOffset  ExpiresAt          { get; init; }
+    public string[]        Features           { get; init; } = [];
 }
 
 file sealed class FileManifestEntry

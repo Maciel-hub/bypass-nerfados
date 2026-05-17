@@ -23,8 +23,18 @@ public static class EvidenceExporter
         {
             Machine               = result.MachineName,
             User                  = result.CurrentUser,
+            MachineId             = result.MachineId,
             ScanTime              = result.ScanTime,
             LookbackDays          = lookback,
+            License               = result.License is { } lic ? new LicenseExportEntry
+            {
+                CustomerId         = lic.CustomerId,
+                LicenseMachineId   = lic.LicenseMachineId,
+                EffectiveMachineId = lic.EffectiveMachineId,
+                IsWildcard         = lic.IsWildcard,
+                ExpiresAt          = lic.ExpiresAt,
+                Features           = lic.Features,
+            } : null,
             TotalScore            = result.TotalScore,
             RawScore              = result.RawScore,
             UncappedRawScore      = result.UncappedRawScore,
@@ -39,6 +49,25 @@ public static class EvidenceExporter
             ModuleCoverage        = result.ModuleCoverage.Select(ModuleCoverageDto.From).ToList()
         };
         WriteJson(Path.Combine(runFolder, "evidence.json"), dto);
+
+        // machine_id.txt — human-readable identity record for chain-of-custody
+        var idLines = new List<string>
+        {
+            $"machineId={result.MachineId}",
+            $"machineName={result.MachineName}",
+            $"user={result.CurrentUser}",
+            $"scanStarted={result.ScanTime:yyyy-MM-ddTHH:mm:ss}",
+        };
+        if (result.License is { } mid)
+        {
+            idLines.Add($"licenseCustomerId={mid.CustomerId}");
+            idLines.Add($"licenseMachineId={mid.LicenseMachineId}");
+            idLines.Add($"licenseWildcard={mid.IsWildcard.ToString().ToLowerInvariant()}");
+            idLines.Add($"licenseExpiresAt={mid.ExpiresAt:yyyy-MM-ddTHH:mm:ssZ}");
+        }
+        File.WriteAllText(Path.Combine(runFolder, "machine_id.txt"),
+            string.Join(Environment.NewLine, idLines) + Environment.NewLine,
+            System.Text.Encoding.UTF8);
 
         var d = $"{lookback}d";
 
@@ -187,8 +216,10 @@ file sealed class EvidenceExportDto
 {
     public string   Machine               { get; init; } = "";
     public string   User                  { get; init; } = "";
+    public string   MachineId             { get; init; } = "";
     public DateTime ScanTime              { get; init; }
     public int      LookbackDays          { get; init; }
+    public LicenseExportEntry? License    { get; init; }
     public int      TotalScore            { get; init; }
     public int      RawScore              { get; init; }
     public double   UncappedRawScore      { get; init; }
@@ -265,6 +296,16 @@ file sealed class ModuleCoverageDto
         Reason = e.Reason,
         Impact = e.ForensicImpact
     };
+}
+
+file sealed class LicenseExportEntry
+{
+    public string         CustomerId         { get; init; } = "";
+    public string         LicenseMachineId   { get; init; } = "";
+    public string         EffectiveMachineId { get; init; } = "";
+    public bool           IsWildcard         { get; init; }
+    public DateTimeOffset ExpiresAt          { get; init; }
+    public string[]       Features           { get; init; } = [];
 }
 
 file sealed class BundleDto

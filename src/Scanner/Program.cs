@@ -103,7 +103,19 @@ AnsiConsole.MarkupLine($"[green]✓[/] [grey]Cliente: [white]{Markup.Escape(_lic
 AnsiConsole.WriteLine();
 LicenseValidator.RecordValidation(DateTimeOffset.UtcNow);
 
-var config        = new ScanConfig { Rules = RulesLoader.Load() };
+var _machineId = LicenseValidator.ComputeMachineId();
+var config     = new ScanConfig
+{
+    Rules      = RulesLoader.Load(),
+    MachineId  = _machineId,
+    ScanLicense = new ScanLicenseMetadata(
+        CustomerId:        _lic.CustomerId,
+        LicenseMachineId:  _lic.MachineId,
+        EffectiveMachineId: _machineId,
+        IsWildcard:        _lic.MachineId == "*",
+        ExpiresAt:         _lic.ExpiresAt,
+        Features:          _lic.Features),
+};
 var noFinalPrompt = false;
 
 // Apply license feature gates — set before arg parsing so --profile deep below can be re-blocked

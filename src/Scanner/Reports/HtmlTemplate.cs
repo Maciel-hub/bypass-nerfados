@@ -54,6 +54,12 @@ public static class HtmlTemplate
         var caseIdHtml = config.CaseId != null
             ? $"""<div class="meta-item"><span class="meta-label">Caso</span><span class="meta-val">{Esc(config.CaseId)}</span></div>"""
             : "";
+        var machineIdHtml = !string.IsNullOrEmpty(result.MachineId)
+            ? $"""<div class="meta-item"><span class="meta-label">Machine ID</span><span class="meta-val">{Esc(result.MachineId)}</span></div>"""
+            : "";
+        var licenseHtml = result.License != null
+            ? $"""<div class="meta-item"><span class="meta-label">Licença</span><span class="meta-val">{Esc(result.License.CustomerId)} ({(result.License.IsWildcard ? "Wildcard QA" : "Machine-bound")}) · Expira: {result.License.ExpiresAt.LocalDateTime:dd/MM/yyyy}</span></div>"""
+            : "";
 
         // Pre-compute tabs
         var byTab    = result.Findings.GroupBy(GetTabId).ToDictionary(g => g.Key, g => g.OrderByDescending(f => f.Risk).ToList());
@@ -357,7 +363,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="meta-item"><span class="meta-label">Máquina</span><span class="meta-val">{{machineName}}</span></div>
     <div class="meta-item"><span class="meta-label">Usuário</span><span class="meta-val">{{currentUser}}</span></div>
     <div class="meta-item"><span class="meta-label">Data/Hora</span><span class="meta-val">{{scanTime}}</span></div>
-    {{suspectHtml}}{{investigatorHtml}}{{caseIdHtml}}
+    {{machineIdHtml}}{{suspectHtml}}{{investigatorHtml}}{{caseIdHtml}}{{licenseHtml}}
   </div>
 </div>
 """);
