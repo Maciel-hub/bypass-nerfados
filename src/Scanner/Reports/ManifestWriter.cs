@@ -82,6 +82,10 @@ public static class ManifestWriter
             Path.Combine(runFolder, "manifest.sha256"),
             $"{manifestHash}  manifest.json{Environment.NewLine}",
             System.Text.Encoding.UTF8);
+
+        // manifest.sig — ECDSA P-256 signature of SHA256(manifest.json).
+        // Written only if echo_manifest_priv.pem is found beside the EXE.
+        ManifestSigner.TrySign(manifestPath);
     }
 
     private static string Sha256Of(string filePath)

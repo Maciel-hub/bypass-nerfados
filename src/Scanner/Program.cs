@@ -1,6 +1,7 @@
 using Spectre.Console;
 using BypassNerfados.Scanner.Core;
 using BypassNerfados.Scanner.Models;
+using BypassNerfados.Scanner.Reports;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 Console.Title = "Echo Nerfados Shield XDR v1.0";
@@ -27,6 +28,31 @@ if (args.Any(a => a is "--test-license"))
         ? $"OK|{r.License!.CustomerId}|{r.License.ExpiresAt:yyyy-MM-dd}|{r.License.MachineId}"
         : $"FAIL|{r.ErrorCode}|{r.ErrorMessage}");
     return r.Success ? 0 : 3;
+}
+
+// --verify-report: verify integrity and signature of a report folder.
+// Works without a license and without an interactive terminal.
+// Exit 0 = verified (signed or unsigned); exit 5 = tampered or invalid signature.
+if (args.Any(a => a is "--verify-report"))
+{
+    var idx       = Array.FindIndex(args, a => a is "--verify-report");
+    var reportDir = idx + 1 < args.Length && !args[idx + 1].StartsWith("--")
+        ? args[idx + 1]
+        : Directory.GetCurrentDirectory();
+
+    var vr = ManifestSigner.Verify(reportDir);
+    if (vr.Ok)
+    {
+        Console.WriteLine(vr.Message);
+        if (vr.Signed)
+            Console.WriteLine($"Manifest SHA256 : {vr.ManifestHash}");
+        return 0;
+    }
+    else
+    {
+        Console.Error.WriteLine($"[FAIL] {vr.Message}");
+        return 5;
+    }
 }
 
 // Require interactive terminal — AnsiConsole rendering crashes otherwise
@@ -354,6 +380,7 @@ static void PrintHelp()
     Console.WriteLine("  --no-final-prompt       Nao exibir menu apos conclusao (automacao)");
     Console.WriteLine("  --verbose               Mostrar todos os findings (incluindo INFO)");
     Console.WriteLine("  --machine-id            Exibir Machine ID desta máquina (para solicitar licença)");
+    Console.WriteLine("  --verify-report <pasta> Verificar integridade e assinatura de um relatorio gerado");
     Console.WriteLine("  --help                  Exibir esta ajuda");
     Console.WriteLine();
     Console.WriteLine("EXEMPLOS:");

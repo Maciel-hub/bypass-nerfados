@@ -33,12 +33,14 @@ var cmd = args[0].ToLowerInvariant();
 
 return cmd switch
 {
-    "--generate-keys" => CmdGenerateKeys(args),
-    "--machine-id"    => CmdMachineId(),
-    "--issue"         => CmdIssue(args),
-    "--verify"        => CmdVerify(args),
-    "--help" or "-h"  => Help(),
-    _                 => Unknown(args[0])
+    "--generate-keys"          => CmdGenerateKeys(args),
+    "--generate-manifest-keys" => CmdGenerateManifestKeys(args),
+    "--machine-id"             => CmdMachineId(),
+    "--issue"                  => CmdIssue(args),
+    "--verify"                 => CmdVerify(args),
+    "--sign-manifest"          => CmdSignManifest(args),
+    "--help" or "-h"           => Help(),
+    _                          => Unknown(args[0])
 };
 
 static int Help()    { PrintUsage(); return 0; }
@@ -72,6 +74,85 @@ static int CmdGenerateKeys(string[] args)
     Console.WriteLine("=== echo_pub.pem ===");
     Console.WriteLine(pubPem);
     return 0;
+}
+
+// ── --generate-manifest-keys ──────────────────────────────────────────────────
+
+static int CmdGenerateManifestKeys(string[] args)
+{
+    var outputDir = ".";
+    for (int i = 1; i < args.Length - 1; i++)
+        if (args[i] == "--output") outputDir = args[i + 1];
+
+    using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+    var pubPem  = BuildPem("PUBLIC KEY",  ecdsa.ExportSubjectPublicKeyInfo());
+    var privPem = BuildPem("PRIVATE KEY", ecdsa.ExportPkcs8PrivateKey());
+
+    Directory.CreateDirectory(outputDir);
+    var pubPath  = Path.Combine(outputDir, "echo_manifest_pub.pem");
+    var privPath = Path.Combine(outputDir, "echo_manifest_priv.pem");
+    File.WriteAllText(pubPath,  pubPem,  Encoding.ASCII);
+    File.WriteAllText(privPath, privPem, Encoding.ASCII);
+
+    Console.WriteLine("Manifest signing keypair saved:");
+    Console.WriteLine($"  Public  : {Path.GetFullPath(pubPath)}");
+    Console.WriteLine($"  Private : {Path.GetFullPath(privPath)}");
+    Console.WriteLine();
+    Console.WriteLine("ATENÇÃO: mantenha echo_manifest_priv.pem em segurança.");
+    Console.WriteLine("  - Para assinar automaticamente no scan: coloque ao lado de EchoNerfados.exe");
+    Console.WriteLine("  - Para assinar manualmente pos-scan:   LicenseTool.exe --sign-manifest <pasta> --key echo_manifest_priv.pem");
+    Console.WriteLine("  - Atualize ManifestSigner.EmbeddedPublicKeyPem com o conteudo abaixo e recompile.");
+    Console.WriteLine();
+    Console.WriteLine("=== echo_manifest_pub.pem ===");
+    Console.WriteLine(pubPem);
+    return 0;
+}
+
+// ── --sign-manifest ───────────────────────────────────────────────────────────
+
+static int CmdSignManifest(string[] args)
+{
+    string? reportDir = null;
+    string? keyPath   = null;
+
+    for (int i = 1; i < args.Length; i++)
+        switch (args[i])
+        {
+            case "--key"    when i + 1 < args.Length: keyPath   = args[++i]; break;
+            case "--output" when i + 1 < args.Length: reportDir = args[++i]; break;
+            default:
+                if (!args[i].StartsWith("--") && reportDir is null) reportDir = args[i];
+                break;
+        }
+
+    reportDir ??= ".";
+    var manifestPath = Path.Combine(reportDir, "manifest.json");
+
+    if (keyPath is null)    { Console.Error.WriteLine("--sign-manifest requer --key <echo_manifest_priv.pem>"); return 1; }
+    if (!File.Exists(keyPath))     { Console.Error.WriteLine($"Chave privada nao encontrada: {keyPath}"); return 1; }
+    if (!File.Exists(manifestPath)){ Console.Error.WriteLine($"manifest.json nao encontrado em: {reportDir}"); return 1; }
+
+    try
+    {
+        var manifestBytes = File.ReadAllBytes(manifestPath);
+        var hash          = System.Security.Cryptography.SHA256.HashData(manifestBytes);
+
+        using var ecdsa = ECDsa.Create();
+        ecdsa.ImportFromPem(File.ReadAllText(keyPath, Encoding.ASCII));
+
+        var sig     = ecdsa.SignHash(hash, System.Security.Cryptography.DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        var sigPath = Path.Combine(reportDir, "manifest.sig");
+        File.WriteAllText(sigPath, Convert.ToBase64String(sig), Encoding.ASCII);
+
+        Console.WriteLine($"manifest.sig gerado: {Path.GetFullPath(sigPath)}");
+        Console.WriteLine($"  Manifest SHA256: {Convert.ToHexString(hash).ToLowerInvariant()}");
+        return 0;
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine($"Erro ao assinar manifesto: {ex.Message}");
+        return 1;
+    }
 }
 
 // ── --machine-id ──────────────────────────────────────────────────────────────
@@ -296,10 +377,14 @@ static void PrintUsage()
     Console.WriteLine();
     Console.WriteLine("COMANDOS:");
     Console.WriteLine("  --generate-keys [--output <dir>]");
-    Console.WriteLine("      Gera par de chaves ECDSA P-256 (echo_pub.pem + echo_priv.pem)");
+    Console.WriteLine("      Gera par de chaves ECDSA P-256 para licencas (echo_pub.pem + echo_priv.pem)");
+    Console.WriteLine();
+    Console.WriteLine("  --generate-manifest-keys [--output <dir>]");
+    Console.WriteLine("      Gera par de chaves ECDSA P-256 para assinar manifestos de relatorio");
+    Console.WriteLine("      (echo_manifest_pub.pem + echo_manifest_priv.pem)");
     Console.WriteLine();
     Console.WriteLine("  --machine-id");
-    Console.WriteLine("      Exibe Machine ID desta máquina");
+    Console.WriteLine("      Exibe Machine ID desta maquina");
     Console.WriteLine();
     Console.WriteLine("  --issue --customer <id> --expires <YYYY-MM-DD> --machine <id|*> --key <priv.pem>");
     Console.WriteLine("      [--features <a,b>] [--max-version <X.Y.Z>] [--output <license.nerf>]");
@@ -307,6 +392,10 @@ static void PrintUsage()
     Console.WriteLine();
     Console.WriteLine("  --verify --pub-key <pub.pem> [--license <license.nerf>]");
     Console.WriteLine("      Verifica assinatura de license.nerf");
+    Console.WriteLine();
+    Console.WriteLine("  --sign-manifest <pasta> --key <echo_manifest_priv.pem>");
+    Console.WriteLine("      Assina manifest.json de um relatorio, gerando manifest.sig");
+    Console.WriteLine("      (alternativa ao TrySign automatico do scan, para fluxos offline)");
 }
 
 // ── DTOs ──────────────────────────────────────────────────────────────────────
