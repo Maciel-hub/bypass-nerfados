@@ -33,6 +33,7 @@ if (args.Any(a => a is "--test-license"))
 // --verify-report: verify integrity and signature of a report folder.
 // Works without a license and without an interactive terminal.
 // Exit 0 = verified (signed or unsigned); exit 5 = tampered or invalid signature.
+// --pub-key <path>: use external PEM instead of the embedded key (for freshly-generated keypairs).
 if (args.Any(a => a is "--verify-report"))
 {
     var idx       = Array.FindIndex(args, a => a is "--verify-report");
@@ -40,7 +41,20 @@ if (args.Any(a => a is "--verify-report"))
         ? args[idx + 1]
         : Directory.GetCurrentDirectory();
 
-    var vr = ManifestSigner.Verify(reportDir);
+    string? pubKeyPem = null;
+    var pkIdx = Array.FindIndex(args, a => a is "--pub-key");
+    if (pkIdx >= 0 && pkIdx + 1 < args.Length)
+    {
+        var pkPath = args[pkIdx + 1];
+        if (!File.Exists(pkPath))
+        {
+            Console.Error.WriteLine($"[ERROR] --pub-key file not found: {pkPath}");
+            return 1;
+        }
+        pubKeyPem = File.ReadAllText(pkPath, System.Text.Encoding.ASCII);
+    }
+
+    var vr = ManifestSigner.Verify(reportDir, pubKeyPem);
     if (vr.Ok)
     {
         Console.WriteLine(vr.Message);
@@ -381,6 +395,7 @@ static void PrintHelp()
     Console.WriteLine("  --verbose               Mostrar todos os findings (incluindo INFO)");
     Console.WriteLine("  --machine-id            Exibir Machine ID desta máquina (para solicitar licença)");
     Console.WriteLine("  --verify-report <pasta> Verificar integridade e assinatura de um relatorio gerado");
+    Console.WriteLine("    [--pub-key <pem>]     Usar chave publica externa em vez da embutida no EXE");
     Console.WriteLine("  --help                  Exibir esta ajuda");
     Console.WriteLine();
     Console.WriteLine("EXEMPLOS:");

@@ -71,8 +71,14 @@ public static class ManifestSigner
         }
     }
 
-    public static ManifestVerifyResult Verify(string reportDir)
+    // pubKeyPem: if null or empty, the embedded key is used.
+    // Pass an explicit PEM to verify against a freshly-generated keypair without recompiling.
+    public static ManifestVerifyResult Verify(string reportDir, string? pubKeyPem = null)
     {
+        var effectivePubKey = string.IsNullOrWhiteSpace(pubKeyPem)
+            ? EmbeddedPublicKeyPem
+            : pubKeyPem;
+
         var manifestPath = Path.Combine(reportDir, "manifest.json");
         var sha256Path   = Path.Combine(reportDir, "manifest.sha256");
         var sigPath      = Path.Combine(reportDir, "manifest.sig");
@@ -101,7 +107,7 @@ public static class ManifestSigner
                 var sig  = Convert.FromBase64String(File.ReadAllText(sigPath, Encoding.ASCII).Trim());
 
                 using var ecdsa = ECDsa.Create();
-                ecdsa.ImportFromPem(EmbeddedPublicKeyPem);
+                ecdsa.ImportFromPem(effectivePubKey);
                 sigValid = ecdsa.VerifyHash(hash, sig, DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
             }
             catch
