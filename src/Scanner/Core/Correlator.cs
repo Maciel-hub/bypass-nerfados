@@ -11,6 +11,7 @@ public static class Correlator
         DetectCheatWithHiddenLogs(result);
         CorrelateTemporalBurst(result);
         DetectSystemServiceTampering(result);
+        CorrelateDriverWithCheat(result);
         CorrelateFiveMSession(result);
     }
 
@@ -199,7 +200,9 @@ public static class Correlator
         var suspiciousFindings = result.Findings
             .Where(f => f.Timestamp.HasValue &&
                         f.Risk >= RiskLevel.Medium &&
-                        f.Category is FindingCategory.Cheat or FindingCategory.SuspiciousExecution)
+                        f.Category is FindingCategory.Cheat
+                                   or FindingCategory.SuspiciousExecution
+                                   or FindingCategory.KernelArtifact)
             .ToList();
 
         if (suspiciousFindings.Count == 0) return;
@@ -238,6 +241,43 @@ public static class Correlator
             ));
             break; // uma correlação por run é suficiente
         }
+    }
+
+    // Kernel-level cheat: driver artifact (USN or DriverKernel module) co-existing
+    // with any cheat/suspicious-execution finding is the strongest possible signal —
+    // it means the cheat ran its own kernel driver to bypass AC or read process memory.
+    private static void CorrelateDriverWithCheat(ScanResult result)
+    {
+        var kernelFindings = result.Findings
+            .Where(f => f.Category == FindingCategory.KernelArtifact && f.Risk >= RiskLevel.Medium)
+            .ToList();
+
+        if (kernelFindings.Count == 0) return;
+
+        var hasCheat = result.Findings.Any(f =>
+            f.Category == FindingCategory.Cheat && f.Confidence >= Confidence.Medium);
+
+        var hasSuspiciousExecution = result.Findings.Any(f =>
+            f.Category == FindingCategory.SuspiciousExecution && f.Risk >= RiskLevel.High);
+
+        if (!hasCheat && !hasSuspiciousExecution) return;
+
+        var driverList = string.Join(", ",
+            kernelFindings.Take(3).Select(f => f.Entity ?? f.Title).Distinct());
+
+        result.Findings.Add(new Finding(
+            RiskLevel.Critical,
+            FindingCategory.KernelArtifact,
+            "Correlação",
+            $"CHEAT COM DRIVER DE KERNEL ({kernelFindings.Count} artefato(s))",
+            "Artefatos de cheat encontrados em conjunto com driver de kernel suspeito. " +
+            "Este padrão indica cheat operando em nível de kernel (kernel-mode cheat), " +
+            "capaz de bypassar anti-cheats que operam apenas em user-mode.",
+            driverList,
+            confidence: Confidence.High,
+            ruleId: "CORR_KERNEL_CHEAT",
+            entity: "kernel-cheat"
+        ));
     }
 
     private static void DetectSystemServiceTampering(ScanResult result)

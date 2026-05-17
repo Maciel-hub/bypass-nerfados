@@ -37,6 +37,7 @@
     <Compile Include="..\Scanner\Modules\BaseModule.cs" />
     <Compile Include="..\Scanner\Modules\BrowserDownloadsModule.cs" />
     <Compile Include="..\Scanner\Modules\DefenderModule.cs" />
+    <Compile Include="..\Scanner\Modules\DriverKernelModule.cs" />
     <Compile Include="..\Scanner\Modules\EventViewerModule.cs" />
     <Compile Include="..\Scanner\Modules\ExternalToolResidueModule.cs" />
     <Compile Include="..\Scanner\Modules\FileSystemModule.cs" />

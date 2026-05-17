@@ -272,23 +272,25 @@ public class ScanOrchestrator
         // ── Deep-only modules — skipped in fast profile ───────────────────────
         if (isFast)
         {
-            Skip("ShimCache",          "Perfil rápido (--profile fast)", "Indício de execução histórico via AppCompatCache");
-            Skip("ShellBags",          "Perfil rápido (--profile fast)", "Navegação de pastas suspeitas");
-            Skip("Jump Lists",         "Perfil rápido (--profile fast)", "Histórico de acesso recente por aplicação");
-            Skip("NVIDIA Artifacts",   "Perfil rápido (--profile fast)", "Timestamps de uso de GPU/sessão FiveM");
+            Skip("Driver & Kernel",       "Perfil rápido (--profile fast)", "Análise de drivers de kernel não realizada");
+            Skip("ShimCache",             "Perfil rápido (--profile fast)", "Indício de execução histórico via AppCompatCache");
+            Skip("ShellBags",             "Perfil rápido (--profile fast)", "Navegação de pastas suspeitas");
+            Skip("Jump Lists",            "Perfil rápido (--profile fast)", "Histórico de acesso recente por aplicação");
+            Skip("NVIDIA Artifacts",      "Perfil rápido (--profile fast)", "Timestamps de uso de GPU/sessão FiveM");
             Skip("External Tool Residue", "Perfil rápido (--profile fast)", "Ferramentas de análise/tampering");
-            Skip("Recycle Bin",        "Perfil rápido (--profile fast)", "Caminhos originais de arquivos deletados");
-            Skip("SRUM",               "Perfil rápido (--profile fast)", "Uso de rede por processo via SRUDB.dat");
+            Skip("Recycle Bin",           "Perfil rápido (--profile fast)", "Caminhos originais de arquivos deletados");
+            Skip("SRUM",                  "Perfil rápido (--profile fast)", "Uso de rede por processo via SRUDB.dat");
         }
         else
         {
-            Queue(new ShimCacheModule(),           "Indício de carregamento de executáveis (AppCompatCache)");
-            Queue(new ShellBagsModule(),           "Histórico de navegação de pastas — acesso a diretórios suspeitos mesmo após deleção");
-            Queue(new JumpListsModule(),           "Histórico de acesso recente por aplicação — executáveis e caminhos suspeitos");
-            Queue(new NvidiaArtifactsModule(),     "Timestamps de uso de GPU — confirma execução de app na sessão FiveM");
-            Queue(new ExternalToolResidueModule(), "Ferramentas de análise/tampering — Process Hacker, CheatEngine, Everything, x64dbg");
-            Queue(new RecycleBinModule(),          "Lixeira — caminho original e data de deleção de arquivos suspeitos");
-            Queue(new SrumModule(),                "Uso de rede por processo via SRUDB.dat (~30-60 dias)");
+            Queue(new DriverKernelModule(),        "Drivers de kernel — não assinados, caminhos suspeitos, instalados recentemente");
+            Queue(new ShimCacheModule(),            "Indício de carregamento de executáveis (AppCompatCache)");
+            Queue(new ShellBagsModule(),            "Histórico de navegação de pastas — acesso a diretórios suspeitos mesmo após deleção");
+            Queue(new JumpListsModule(),            "Histórico de acesso recente por aplicação — executáveis e caminhos suspeitos");
+            Queue(new NvidiaArtifactsModule(),      "Timestamps de uso de GPU — confirma execução de app na sessão FiveM");
+            Queue(new ExternalToolResidueModule(),  "Ferramentas de análise/tampering — Process Hacker, CheatEngine, Everything, x64dbg");
+            Queue(new RecycleBinModule(),           "Lixeira — caminho original e data de deleção de arquivos suspeitos");
+            Queue(new SrumModule(),                 "Uso de rede por processo via SRUDB.dat (~30-60 dias)");
         }
 
         // ── Admin-gated modules ───────────────────────────────────────────────

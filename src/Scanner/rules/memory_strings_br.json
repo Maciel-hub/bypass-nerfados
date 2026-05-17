@@ -12,7 +12,11 @@
     "fiveguard", "mqcu", "likizao", "thn_ac",
     "fusiongroup", "lotusgroup", "spacegroup", "santagroup",
     "bypass anticheat", "disable anticheat", "patch anticheat",
-    "hook anticheat", "anticheatkick", "burlar antichat", "burlar anticheat"
+    "hook anticheat", "anticheatkick", "burlar antichat", "burlar anticheat",
+    "kdmapper", "physmem", "manual map", "manualmap",
+    "kernel bypass", "driver bypass", "bypass kernel",
+    "NtReadVirtualMemory", "NtWriteVirtualMemory", "MmCopyMemory",
+    "disable dse", "testsigning", "bcdedit", "PatchGuard"
   ],
   "sharedAbuseTokens": [
     "puxar armas", "puxar veículos", "puxar veiculo",
@@ -158,6 +162,56 @@
       "abuseTokens": ["crash 027", "kick 027"],
       "licenseTokens": ["027_license", "027_auth", "menu027_key"],
       "menuTokens": ["027 Menu", "MENU_027", "027Menu v"]
+    },
+    {
+      "name": "Nova Menu",
+      "priority": "p1",
+      "familyTokens": ["NovaMenu", "Nova Menu", "nova-fivem", "novamenu", "nova_executor"],
+      "behaviorTokens": ["nova_inject", "nova_lua", "nova_exec"],
+      "evasionTokens": ["nova_bypass", "nova_antichat", "nova_anticheat"],
+      "abuseTokens": ["crash nova", "kick nova", "dropar nova"],
+      "licenseTokens": ["nova_license", "nova_auth", "novamenu_key"],
+      "menuTokens": ["Nova Menu", "NOVA_MENU", "NovaMenu v"]
+    },
+    {
+      "name": "Titan Menu",
+      "priority": "p1",
+      "familyTokens": ["TitanMenu", "Titan Menu", "titan-fivem", "titanmenu", "titan_executor"],
+      "behaviorTokens": ["titan_inject", "titan_lua", "titan_exec"],
+      "evasionTokens": ["titan_bypass", "titan_antichat"],
+      "abuseTokens": ["crash titan", "kick titan", "dropar titan"],
+      "licenseTokens": ["titan_license", "titan_auth", "titanmenu_key"],
+      "menuTokens": ["Titan Menu", "TITAN_MENU", "TitanMenu v"]
+    },
+    {
+      "name": "Zeus Menu",
+      "priority": "p1",
+      "familyTokens": ["ZeusMenu", "Zeus Menu", "zeus-fivem", "zeusmenu", "zeus_executor"],
+      "behaviorTokens": ["zeus_inject", "zeus_lua", "zeus_exec"],
+      "evasionTokens": ["zeus_bypass", "zeus_antichat"],
+      "abuseTokens": ["crash zeus", "kick zeus"],
+      "licenseTokens": ["zeus_license", "zeus_auth", "zeusmenu_key"],
+      "menuTokens": ["Zeus Menu", "ZEUS_MENU", "ZeusMenu v"]
+    },
+    {
+      "name": "Reborn Menu",
+      "priority": "p1",
+      "familyTokens": ["RebornMenu", "Reborn Menu", "reborn-fivem", "rebornmenu", "reborn_executor"],
+      "behaviorTokens": ["reborn_inject", "reborn_lua", "reborn_exec"],
+      "evasionTokens": ["reborn_bypass", "reborn_antichat"],
+      "abuseTokens": ["crash reborn", "kick reborn"],
+      "licenseTokens": ["reborn_license", "reborn_auth", "rebornmenu_key"],
+      "menuTokens": ["Reborn Menu", "REBORN_MENU", "RebornMenu v"]
+    },
+    {
+      "name": "Venom Menu",
+      "priority": "p1",
+      "familyTokens": ["VenomMenu", "Venom Menu", "venom-fivem", "venommenu", "venom_executor"],
+      "behaviorTokens": ["venom_inject", "venom_lua", "venom_exec"],
+      "evasionTokens": ["venom_bypass", "venom_antichat"],
+      "abuseTokens": ["crash venom", "kick venom"],
+      "licenseTokens": ["venom_license", "venom_auth", "venommenu_key"],
+      "menuTokens": ["Venom Menu", "VENOM_MENU", "VenomMenu v"]
     }
   ]
 }

@@ -29,7 +29,8 @@ public enum FindingCategory
     FileSystem,
     DeviceAnomaly,
     ServiceTampering,
-    LogCoverage   // log coverage warnings and module partial-collection errors
+    KernelArtifact,
+    LogCoverage
 }
 
 public class Finding
@@ -127,6 +128,7 @@ public class Finding
         FindingCategory.FileSystem          => "Sistema de Arquivos",
         FindingCategory.DeviceAnomaly       => "Dispositivo Suspeito",
         FindingCategory.ServiceTampering    => "Serviço Adulterado",
+        FindingCategory.KernelArtifact      => "Artefato de Kernel",
         _                                   => Category.ToString()
     };
 }
