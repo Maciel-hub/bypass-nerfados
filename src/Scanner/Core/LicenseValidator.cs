@@ -60,6 +60,20 @@ public static class LicenseValidator
         "INVALID", "Base Board Serial Number"
     };
 
+    // Set to false during test/QA phase so the scanner runs without license.nerf.
+    // Revert to true before commercial release to re-enable all validation.
+    internal const bool EnforceLicense = false;
+
+    // Synthetic license returned when EnforceLicense = false.
+    // Carries TEST-BUILD metadata so reports remain traceable.
+    private static readonly LicenseInfo s_testLicense = new(
+        CustomerId:  "TEST-BUILD",
+        IssuedAt:    DateTimeOffset.UnixEpoch,
+        ExpiresAt:   new DateTimeOffset(2099, 12, 31, 0, 0, 0, TimeSpan.Zero),
+        MachineId:   "*",
+        Features:    ["deep", "memory", "br_pack", "forensic"],
+        MaxVersion:  "99.0.0");
+
     // Per-user clock rollback state in %LOCALAPPDATA%\EchoNerfados\.
     // Per-user (not shared) because the scanner runs as asInvoker — any user may run it.
     // Users can delete their own last_check (resetting the check) but cannot forge a past timestamp
@@ -115,6 +129,9 @@ public static class LicenseValidator
     /// </summary>
     public static LicenseResult Validate()
     {
+        if (!EnforceLicense)
+            return new LicenseResult(true, License: s_testLicense);
+
         var utcNow      = DateTimeOffset.UtcNow;
         var licensePath = s_licenseSearchPaths.FirstOrDefault(File.Exists);
 
@@ -194,6 +211,7 @@ public static class LicenseValidator
     /// </summary>
     public static void RecordValidation(DateTimeOffset utcNow)
     {
+        if (!EnforceLicense) return;
         try
         {
             Directory.CreateDirectory(s_stateDir);

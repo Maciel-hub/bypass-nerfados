@@ -2,6 +2,7 @@ using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using BypassNerfados.Scanner.Core;
+using BypassNerfados.Scanner.Models;
 
 namespace EchoNerfados.App.ViewModels;
 
@@ -17,6 +18,7 @@ public sealed partial class HomeViewModel : ObservableObject
     [ObservableProperty] private string _machineId = "";
 
     private string[] _licenseFeatures = [];
+    private LicenseInfo? _licInfo;
 
     // Scan config
     [ObservableProperty] private string _investigatorName = "";
@@ -41,6 +43,7 @@ public sealed partial class HomeViewModel : ObservableObject
     {
         var lic = LicenseValidator.Validate();
         LicenseValid = lic.Success;
+        _licInfo = lic.License;
 
         if (lic.Success)
         {
@@ -67,6 +70,7 @@ public sealed partial class HomeViewModel : ObservableObject
         LicenseValidator.RecordValidation(DateTimeOffset.UtcNow);
 
         var rules = RulesLoader.Load();
+        var machineId = MachineId; // computed in constructor via LicenseValidator.ComputeMachineId()
         var config = new ScanConfig
         {
             InvestigatorName = string.IsNullOrWhiteSpace(InvestigatorName) ? null : InvestigatorName.Trim(),
@@ -76,6 +80,14 @@ public sealed partial class HomeViewModel : ObservableObject
             Profile = SelectedProfile.Profile,
             Rules = rules,
             LicenseFeatures = new HashSet<string>(_licenseFeatures, StringComparer.OrdinalIgnoreCase),
+            MachineId = machineId,
+            ScanLicense = _licInfo is { } lic ? new ScanLicenseMetadata(
+                CustomerId:         lic.CustomerId,
+                LicenseMachineId:   lic.MachineId,
+                EffectiveMachineId: machineId,
+                IsWildcard:         lic.MachineId == "*",
+                ExpiresAt:          lic.ExpiresAt,
+                Features:           lic.Features) : null,
         };
 
         if (!config.LicenseFeatures.Contains("memory"))
