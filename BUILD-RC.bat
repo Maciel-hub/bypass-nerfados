@@ -21,6 +21,7 @@ set "SIGN=0"
 
 :parse_args
 if "%~1"=="--sign" ( set "SIGN=1" & shift & goto parse_args )
+if "%~1"=="--gui"  ( shift & goto parse_args )
 if "%~1" NEQ "" (
     echo [ERROR] Unknown argument: %~1
     exit /b 1

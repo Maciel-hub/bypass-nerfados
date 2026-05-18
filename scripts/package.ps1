@@ -127,9 +127,16 @@ if ($IsccPath -eq "" -or -not (Test-Path $IsccPath)) {
 }
 Write-Host "          Found: $IsccPath" -ForegroundColor Gray
 
-# ---- Step 4: Create dist\ if needed ----------------------------------------
+# ---- Step 4: Prepare dist\ folder ----------------------------------------
 Write-Host " Step 4 : Preparing dist\ folder..." -ForegroundColor Gray
 if (-not (Test-Path "dist")) { New-Item -ItemType Directory -Path "dist" | Out-Null }
+
+# Remove stale installers for this variant so dist\ never has an ambiguous "old" file
+Get-ChildItem "dist" -Filter "EchoNerfadosSetup-$Variant-*.exe" -ErrorAction SilentlyContinue |
+    Remove-Item -Force
+# Remove legacy files from the old pipeline (no variant in the name)
+Get-ChildItem "dist" -Filter "EchoNerfadosSetup-[0-9]*.exe" -ErrorAction SilentlyContinue |
+    Remove-Item -Force
 
 # ---- Step 5: Compile installer ---------------------------------------------
 Write-Host " Step 5 : Compiling installer..." -ForegroundColor Gray

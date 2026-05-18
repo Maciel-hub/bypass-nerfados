@@ -195,3 +195,4 @@ if "%SIGN%"=="1" (
 
 echo.
 endlocal
+exit /b 0
