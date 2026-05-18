@@ -16,6 +16,13 @@
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
 
+  <!-- Release: no debug symbols, no PDB companion files, no R2R symbol files -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <PublishReadyToRunEmitSymbols>false</PublishReadyToRunEmitSymbols>
+  </PropertyGroup>
+
   <!--
     Console host keeps only: Program.cs, Core/ConsoleUI.cs, Core/LiveDashboard.cs.
     Everything else is compiled in Scanner.Core and referenced via ProjectReference.

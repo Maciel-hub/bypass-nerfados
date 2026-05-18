@@ -18,6 +18,13 @@
     <StartupObject>EchoNerfados.App.App</StartupObject>
   </PropertyGroup>
 
+  <!-- Release: no debug symbols, no PDB companion files, no R2R symbol files -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <PublishReadyToRunEmitSymbols>false</PublishReadyToRunEmitSymbols>
+  </PropertyGroup>
+
   <ItemGroup>
     <ProjectReference Include="..\Scanner.Core\Scanner.Core.csproj" />
   </ItemGroup>

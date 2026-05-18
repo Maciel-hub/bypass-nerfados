@@ -17,6 +17,13 @@
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
+  <!-- Release: no debug symbols, no PDB companion files, no R2R symbol files -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <PublishReadyToRunEmitSymbols>false</PublishReadyToRunEmitSymbols>
+  </PropertyGroup>
+
   <!-- Core engine — all files except ConsoleUI / LiveDashboard (Spectre.Console-only) -->
   <ItemGroup>
     <Compile Include="..\Scanner\Core\Correlator.cs" />

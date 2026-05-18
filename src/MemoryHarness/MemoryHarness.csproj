@@ -14,4 +14,10 @@
     <Version>1.0.0</Version>
   </PropertyGroup>
 
+  <!-- Release: no debug symbols, no PDB companion files -->
+  <PropertyGroup Condition="'$(Configuration)'=='Release'">
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
 </Project>

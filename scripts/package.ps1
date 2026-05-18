@@ -140,6 +140,52 @@ Get-ChildItem "dist" -Filter "EchoNerfadosSetup-*.exe" -ErrorAction SilentlyCont
     Where-Object { $_.Name -match '^EchoNerfadosSetup-\d' } |
     Remove-Item -Force
 
+# ---- Step 4b: Security audit — no forbidden files in publish output --------
+Write-Host " Step 4b: Auditing publish output for forbidden content..." -ForegroundColor Gray
+
+$auditPaths = @("publish\win-x64", "publish\win-x64-gui")
+
+$forbiddenExtensions = @('.cs', '.csproj', '.sln', '.pdb', '.pem', '.pfx', '.p12')
+$forbiddenFileNames  = @('LicenseTool.exe', 'EchoHarness.exe', 'MemoryHarness.exe',
+                         'echo_priv.pem', 'echo_manifest_priv.pem')
+$forbiddenDirNames   = @('src', 'scripts', 'installer')
+
+$violations = [System.Collections.Generic.List[string]]::new()
+
+foreach ($auditPath in $auditPaths) {
+    if (-not (Test-Path $auditPath)) { continue }
+
+    Get-ChildItem $auditPath -Recurse -File -ErrorAction SilentlyContinue | ForEach-Object {
+        $ext  = $_.Extension.ToLower()
+        $name = $_.Name
+        if ($forbiddenExtensions -contains $ext) {
+            $violations.Add("  [EXT]  $($_.FullName)")
+        } elseif ($forbiddenFileNames -contains $name) {
+            $violations.Add("  [FILE] $($_.FullName)")
+        }
+    }
+
+    Get-ChildItem $auditPath -Recurse -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+        if ($forbiddenDirNames -contains $_.Name.ToLower()) {
+            $violations.Add("  [DIR]  $($_.FullName)")
+        }
+    }
+}
+
+if ($violations.Count -gt 0) {
+    Write-Host ""
+    Write-Host " SECURITY AUDIT FAILED" -ForegroundColor Red
+    Write-Host " Forbidden files found in publish output:" -ForegroundColor Red
+    $violations | ForEach-Object { Write-Host $_ -ForegroundColor Red }
+    Write-Host ""
+    Write-Host " Remove these files before packaging." -ForegroundColor Yellow
+    Write-Host " Tip: delete publish\ folders and re-run BUILD.bat to get a clean output." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Error "Security audit failed — $($violations.Count) violation(s) found."
+    exit 1
+}
+Write-Host "          Audit passed — no forbidden files found." -ForegroundColor Green
+
 # ---- Step 5: Compile installer ---------------------------------------------
 Write-Host " Step 5 : Compiling installer..." -ForegroundColor Gray
 $issScript = "installer\EchoNerfados.iss"
