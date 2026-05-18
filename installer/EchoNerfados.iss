@@ -101,11 +101,10 @@ Filename: "{app}\{#AppExeName}"; \
   Description: "Launch Echo Nerfados Shield XDR"; \
   Flags: postinstall skipifsilent nowait shellexec
 #else
-; RC: no license bundled — show Machine ID so the user can request one
-Filename: "cmd.exe"; \
-  Parameters: "/k ""{app}\{#AppCliName}"" --machine-id & echo. & echo  Copy the Machine ID above to request your license. & echo  Place license.nerf in: {commonappdata}\{#AppShortName}\ & echo. & pause"; \
-  Description: "Show Machine ID (needed to request a license)"; \
-  Flags: postinstall skipifsilent nowait
+; RC (test build): license enforcement disabled — open GUI directly after setup
+Filename: "{app}\{#AppExeName}"; \
+  Description: "Launch Echo Nerfados Shield XDR"; \
+  Flags: postinstall skipifsilent nowait shellexec
 #endif
 
 [Code]

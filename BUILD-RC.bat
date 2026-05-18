@@ -72,13 +72,12 @@ echo  RC BUILD COMPLETO
 echo ============================================
 echo  Arquivo  : !ARTIFACT!
 echo  SHA256   : !SHA!
-echo  Licenca  : NAO incluida ^(enviar license.nerf separadamente^)
+echo  Licenca  : desabilitada para build de teste
 echo.
 echo  Fluxo do tester:
 echo    1. Instalar o .exe
-echo    2. GUI abre, mostra Machine ID
-echo    3. Enviar Machine ID para o dev
-echo    4. Dev gera license.nerf e envia de volta
-echo    5. Tester clica "Atualizar licenca" na GUI
+echo    2. Abrir a GUI
+echo    3. Rodar a varredura
+echo    4. Enviar a pasta do relatorio gerado
 echo.
 endlocal
