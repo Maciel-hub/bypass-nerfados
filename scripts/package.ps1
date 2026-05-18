@@ -134,8 +134,10 @@ if (-not (Test-Path "dist")) { New-Item -ItemType Directory -Path "dist" | Out-N
 # Remove stale installers for this variant so dist\ never has an ambiguous "old" file
 Get-ChildItem "dist" -Filter "EchoNerfadosSetup-$Variant-*.exe" -ErrorAction SilentlyContinue |
     Remove-Item -Force
-# Remove legacy files from the old pipeline (no variant in the name)
-Get-ChildItem "dist" -Filter "EchoNerfadosSetup-[0-9]*.exe" -ErrorAction SilentlyContinue |
+# Remove legacy files from the old pipeline (no variant in the name, e.g. EchoNerfadosSetup-1.0.0.exe)
+# -Filter glob doesn't support character classes on the Windows FS API; use Where-Object regex instead
+Get-ChildItem "dist" -Filter "EchoNerfadosSetup-*.exe" -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -match '^EchoNerfadosSetup-\d' } |
     Remove-Item -Force
 
 # ---- Step 5: Compile installer ---------------------------------------------
