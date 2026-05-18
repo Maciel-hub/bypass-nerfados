@@ -5,121 +5,126 @@ REM ============================================================
 REM Echo Nerfados Shield XDR - Build QA/Teste Interno
 REM ============================================================
 REM
-REM Gera um pacote QA com licença wildcard de curta validade.
+REM Gera um installer QA com licença wildcard embutida.
+REM O tester recebe apenas EchoNerfadosSetup-QA-<ver>+<commit>.exe
+REM e pode instalar + usar o scanner sem nenhuma configuração extra.
 REM
 REM USAGE:
 REM   BUILD-QA.bat
-REM   BUILD-QA.bat --sign          assina os EXEs antes de empacotar
-REM   BUILD-QA.bat --days 7        validade da licença QA (padrão: 15)
-REM   BUILD-QA.bat --customer QA-2026-05
+REM   BUILD-QA.bat --sign                 assina o installer
+REM   BUILD-QA.bat --key echo_priv.pem    chave de licença explícita
+REM   BUILD-QA.bat --days 7               validade da licença (padrão: 15)
+REM   BUILD-QA.bat --customer QA-2026-05  identificador do build
 REM
 REM REQUER:
-REM   echo_priv.pem  (ao lado deste script ou em scripts\)
+REM   echo_priv.pem  (--key, ou ECHO_LICENSE_PRIV_KEY, ou ./echo_priv.pem)
+REM   Inno Setup 6   (https://jrsoftware.org/isinfo.php)
 REM
 REM OUTPUT:
-REM   dist\EchoNerfadosSetup-QA-<versão>+<commit>.zip
+REM   dist\EchoNerfadosSetup-QA-<versão>+<commit>.exe
 REM ============================================================
 
 set "SIGN=0"
 set "DAYS=15"
 set "CUSTOMER=QA-INTERNAL"
+set "KEY_PATH="
 
 :parse_args
-if "%~1"=="--sign"     ( set "SIGN=1"    & shift & goto parse_args )
-if "%~1"=="--days"     ( set "DAYS=%~2"  & shift & shift & goto parse_args )
-if "%~1"=="--customer" ( set "CUSTOMER=%~2" & shift & shift & goto parse_args )
+if "%~1"=="--sign"     ( set "SIGN=1"            & shift & goto parse_args )
+if "%~1"=="--days"     ( set "DAYS=%~2"           & shift & shift & goto parse_args )
+if "%~1"=="--customer" ( set "CUSTOMER=%~2"        & shift & shift & goto parse_args )
+if "%~1"=="--key"      ( set "KEY_PATH=%~2"        & shift & shift & goto parse_args )
 if "%~1" NEQ "" (
     echo [ERROR] Unknown argument: %~1
     exit /b 1
 )
 
-REM ---- Step 1: Build Scanner + LicenseTool -------------------------
-echo.
-echo [1/5] Building Scanner + LicenseTool...
-call BUILD.bat --tools %SIGN_FLAG%
-if errorlevel 1 (
-    echo [ERROR] BUILD.bat failed.
+REM ---- Resolve chave de licença ----------------------------------------
+if "!KEY_PATH!"=="" (
+    if defined ECHO_LICENSE_PRIV_KEY set "KEY_PATH=!ECHO_LICENSE_PRIV_KEY!"
+)
+if "!KEY_PATH!"=="" (
+    if exist "echo_priv.pem"         set "KEY_PATH=echo_priv.pem"
+    if exist "scripts\echo_priv.pem" set "KEY_PATH=scripts\echo_priv.pem"
+)
+if "!KEY_PATH!"=="" (
+    echo [ERROR] echo_priv.pem nao encontrado.
+    echo         Opcoes:
+    echo           BUILD-QA.bat --key ^<caminho^>
+    echo           set ECHO_LICENSE_PRIV_KEY=^<caminho^>
+    echo           Copie echo_priv.pem para a raiz do projeto
     exit /b 1
 )
-echo [1/5] Build OK.
+if not exist "!KEY_PATH!" (
+    echo [ERROR] Chave nao encontrada: !KEY_PATH!
+    exit /b 1
+)
 
-REM ---- Step 2: Generate QA license ---------------------------------
 echo.
-echo [2/5] Generating QA wildcard license...
+echo ============================================
+echo  Echo Nerfados -- Build QA
+echo  Key     : !KEY_PATH!
+echo  Customer: !CUSTOMER!
+echo  Days    : !DAYS!
+echo  Sign    : !SIGN!
+echo ============================================
+
+REM ---- Step 1: Build Scanner + LicenseTool + GUI -----------------------
+echo.
+echo [1/4] Build ^(Scanner + LicenseTool + GUI^)...
+call BUILD.bat --tools --gui
+if errorlevel 1 (
+    echo [ERROR] Build falhou.
+    exit /b 1
+)
+echo [1/4] Build OK.
+
+REM ---- Step 2: Gerar licença QA wildcard -------------------------------
+echo.
+echo [2/4] Gerando licenca QA wildcard ^(%DAYS% dias^)...
 pwsh -NoProfile -NonInteractive -File scripts\make-qa-license.ps1 ^
-    -CustomerId "%CUSTOMER%" ^
-    -DaysValid %DAYS% ^
+    -CustomerId "!CUSTOMER!" ^
+    -DaysValid !DAYS! ^
+    -KeyPath "!KEY_PATH!" ^
     -OutputPath "publish\win-x64\license.nerf"
 if errorlevel 1 (
-    echo [ERROR] License generation failed.
+    echo [ERROR] Geracao de licenca falhou.
     exit /b 1
 )
-echo [2/5] License generated: publish\win-x64\license.nerf
+echo [2/4] Licenca gerada: publish\win-x64\license.nerf
 
-REM ---- Step 3: Extract version + commit ----------------------------
+REM ---- Step 3: Criar installer (Inno Setup) ----------------------------
 echo.
-echo [3/5] Resolving version...
-set "VERSION=1.0.0"
-for /f "delims=" %%v in ('pwsh -NoProfile -NonInteractive -Command "[System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path 'publish\win-x64\EchoNerfados.exe').Path).ProductVersion"') do (
-    set "FULL_VER=%%v"
-)
-for /f "tokens=1 delims=+" %%v in ("!FULL_VER!") do set "VERSION=%%v"
-for /f "tokens=2 delims=+" %%v in ("!FULL_VER!") do set "COMMIT=%%v"
-if "!COMMIT!"=="" (
-    for /f "delims=" %%c in ('git rev-parse --short HEAD 2^>nul') do set "COMMIT=%%c"
-)
-set "PKG_NAME=EchoNerfadosSetup-QA-!VERSION!+!COMMIT!"
-echo [3/5] Package: !PKG_NAME!
-
-REM ---- Step 4: Assemble package folder -----------------------------
-echo.
-echo [4/5] Assembling package...
-set "PKG_DIR=dist\!PKG_NAME!"
-if exist "!PKG_DIR!" rmdir /s /q "!PKG_DIR!"
-mkdir "!PKG_DIR!"
-
-copy "publish\win-x64\EchoNerfados.exe"    "!PKG_DIR!\EchoNerfados.exe"    >nul
-copy "publish\win-x64\license.nerf"        "!PKG_DIR!\license.nerf"        >nul
-
-REM Copy rules if present
-if exist "publish\win-x64\rules\" (
-    xcopy /e /i /q "publish\win-x64\rules" "!PKG_DIR!\rules" >nul
-)
-
-REM README
-echo Echo Nerfados Shield XDR - QA / Teste Interno > "!PKG_DIR!\LEIA-ME-QA.txt"
-echo. >> "!PKG_DIR!\LEIA-ME-QA.txt"
-echo Build   : !PKG_NAME! >> "!PKG_DIR!\LEIA-ME-QA.txt"
-echo Licença : Wildcard QA ^(expira em %DAYS% dias^) >> "!PKG_DIR!\LEIA-ME-QA.txt"
-echo Uso     : EchoNerfados.exe --help >> "!PKG_DIR!\LEIA-ME-QA.txt"
-echo. >> "!PKG_DIR!\LEIA-ME-QA.txt"
-echo NÃO DISTRIBUIR — uso interno de QA apenas. >> "!PKG_DIR!\LEIA-ME-QA.txt"
-
-REM ---- Step 5: Zip -------------------------------------------------
-echo.
-echo [5/5] Creating ZIP...
-if not exist dist mkdir dist
-pwsh -NoProfile -NonInteractive -Command ^
-    "Compress-Archive -Path '!PKG_DIR!\*' -DestinationPath 'dist\!PKG_NAME!.zip' -Force"
+echo [3/4] Criando installer QA...
+set "SIGN_FLAG="
+if "!SIGN!"=="1" set "SIGN_FLAG=-Sign"
+pwsh -NoProfile -NonInteractive -File scripts\package.ps1 -Variant QA !SIGN_FLAG!
 if errorlevel 1 (
-    echo [ERROR] ZIP creation failed.
+    echo [ERROR] Packaging falhou.
+    exit /b 1
+)
+echo [3/4] Installer criado.
+
+REM ---- Step 4: Verificar artefato --------------------------------------
+echo.
+echo [4/4] Verificando artefato em dist\...
+for /f "delims=" %%f in ('dir /b "dist\EchoNerfadosSetup-QA-*.exe" 2^>nul') do set "ARTIFACT=dist\%%f"
+if "!ARTIFACT!"=="" (
+    echo [ERROR] Nenhum installer QA encontrado em dist\.
     exit /b 1
 )
 
-REM SHA256 of ZIP
-for /f "delims=" %%h in ('pwsh -NoProfile -NonInteractive -Command "(Get-FileHash 'dist\!PKG_NAME!.zip' -Algorithm SHA256).Hash.ToLower()"') do set "ZIP_SHA=%%h"
+for /f "delims=" %%h in ('pwsh -NoProfile -NonInteractive -Command "(Get-FileHash '!ARTIFACT!' -Algorithm SHA256).Hash.ToLower()"') do set "SHA=%%h"
 
-REM Cleanup staging folder
-rmdir /s /q "!PKG_DIR!"
-
-REM ---- Summary -----------------------------------------------------
 echo.
 echo ============================================
-echo  QA PACKAGE COMPLETE
+echo  QA BUILD COMPLETO
 echo ============================================
-echo  File   : dist\!PKG_NAME!.zip
-echo  SHA256 : !ZIP_SHA!
-echo  License: Wildcard QA, %DAYS% dias, customer=%CUSTOMER%
-echo  Signed : %SIGN%
+echo  Arquivo  : !ARTIFACT!
+echo  SHA256   : !SHA!
+echo  Licenca  : Wildcard QA, !DAYS! dias, customer=!CUSTOMER!
+echo.
+echo  Entregue apenas esse .exe para o tester.
+echo  Ele instala e usa sem nenhuma configuracao extra.
 echo.
 endlocal

@@ -44,7 +44,9 @@ param(
     [switch] $Publish,
     [switch] $Sign,
     [string] $IsccPath = "",
-    [string] $Version  = ""
+    [string] $Version  = "",
+    [ValidateSet("QA","RC")] [string] $Variant      = "RC",
+    [string] $LicensePath = ""
 )
 
 Set-StrictMode -Version Latest
@@ -52,7 +54,7 @@ $ErrorActionPreference = "Stop"
 
 Write-Host ""
 Write-Host "=======================================================" -ForegroundColor Cyan
-Write-Host " Echo Nerfados -- Packaging (Inno Setup)" -ForegroundColor Cyan
+Write-Host " Echo Nerfados -- Packaging (Inno Setup) [$Variant]" -ForegroundColor Cyan
 Write-Host "=======================================================" -ForegroundColor Cyan
 
 # ---- Step 0: Publish (optional) -------------------------------------------
@@ -84,6 +86,16 @@ if (-not (Test-Path $guiExePath)) {
     exit 1
 }
 Write-Host "          Found: $guiExePath" -ForegroundColor Gray
+
+# QA: verify license.nerf is present at the expected source path
+if ($Variant -eq "QA") {
+    $licSrc = if ($LicensePath -ne "") { $LicensePath } else { "publish\win-x64\license.nerf" }
+    if (-not (Test-Path $licSrc)) {
+        Write-Error "QA build requires license.nerf at '$licSrc'.`nRun: pwsh -File scripts\make-qa-license.ps1"
+        exit 1
+    }
+    Write-Host "          License: $licSrc" -ForegroundColor Gray
+}
 
 # ---- Step 2: Extract version from EXE -------------------------------------
 Write-Host " Step 2 : Resolving version..." -ForegroundColor Gray
@@ -121,10 +133,20 @@ if (-not (Test-Path "dist")) { New-Item -ItemType Directory -Path "dist" | Out-N
 
 # ---- Step 5: Compile installer ---------------------------------------------
 Write-Host " Step 5 : Compiling installer..." -ForegroundColor Gray
-$issScript    = "installer\EchoNerfados.iss"
-$installerOut = "dist\EchoNerfadosSetup-$Version.exe"
+$issScript = "installer\EchoNerfados.iss"
 
-& $IsccPath "/DAppVersion=$Version" $issScript
+# Build tag from git commit hash (appended to filename as +abc1234)
+$commit   = git rev-parse --short HEAD 2>$null
+$buildTag = if ($commit) { "+$commit" } else { "" }
+
+$isccArgs = @("/DAppVersion=$Version", "/DAppVariant=$Variant", "/DBuildTag=$buildTag")
+if ($Variant -eq "QA") {
+    $isccArgs += "/DIncludeLicense=1"
+}
+
+$installerOut = "dist\EchoNerfadosSetup-$Variant-$Version$buildTag.exe"
+
+& $IsccPath @isccArgs $issScript
 if ($LASTEXITCODE -ne 0) {
     Write-Error "ISCC.exe failed (exit $LASTEXITCODE)."
     exit 1
@@ -173,7 +195,13 @@ Write-Host "=======================================================" -Foreground
 
 $sha256 = (Get-FileHash $installerOut -Algorithm SHA256).Hash
 Write-Host " Installer : $installerOut" -ForegroundColor White
+Write-Host " Variant   : $Variant"      -ForegroundColor White
 Write-Host " Version   : $Version"      -ForegroundColor White
 Write-Host " SHA256    : $sha256"        -ForegroundColor White
 Write-Host " Signed    : $(if ($Sign -and $verifyExit -eq 0) { 'YES' } else { 'NO (unsigned)' })" -ForegroundColor White
+if ($Variant -eq "QA") {
+    Write-Host " License   : Wildcard QA — embedded in installer" -ForegroundColor Yellow
+} else {
+    Write-Host " License   : NOT included — distribute license.nerf separately" -ForegroundColor Yellow
+}
 Write-Host ""

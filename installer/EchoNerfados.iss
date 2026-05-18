@@ -6,6 +6,14 @@
   #define AppVersion "1.0.0"
 #endif
 
+#ifndef AppVariant
+  #define AppVariant "RC"
+#endif
+
+#ifndef BuildTag
+  #define BuildTag ""
+#endif
+
 #define AppName      "Echo Nerfados Shield XDR"
 #define AppShortName "EchoNerfados"
 #define AppPublisher "Nerfados"
@@ -27,7 +35,7 @@ DefaultDirName={autopf}\{#AppShortName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir=..\dist
-OutputBaseFilename={#AppShortName}Setup-{#AppVersion}
+OutputBaseFilename={#AppShortName}Setup-{#AppVariant}-{#AppVersion}{#BuildTag}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -69,6 +77,12 @@ Source: "..\publish\win-x64-gui\rules\*"; DestDir: "{app}\rules"; Flags: ignorev
 Source: "..\scripts\verify-report.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "verify-report-shortcut.bat";  DestDir: "{app}";         Flags: ignoreversion
 
+#ifdef IncludeLicense
+; QA wildcard license — installed to ProgramData so the scanner finds it without any manual step
+Source: "..\publish\win-x64\license.nerf"; DestDir: "{commonappdata}\{#AppShortName}"; \
+  DestName: "license.nerf"; Flags: ignoreversion uninsneveruninstall
+#endif
+
 [Icons]
 ; Start Menu — main entry opens GUI
 Name: "{group}\{#AppName}";           Filename: "{app}\{#AppExeName}";             Comment: "Launch Echo Nerfados Shield XDR"
@@ -81,11 +95,18 @@ Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 Name: "{commondesktop}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Tasks: desktopicon; Comment: "Launch Echo Nerfados Shield XDR"
 
 [Run]
-; Post-install: show Machine ID via CLI (works headless, stdout-only)
+#ifdef IncludeLicense
+; QA: license is pre-installed — open GUI directly after setup
+Filename: "{app}\{#AppExeName}"; \
+  Description: "Launch Echo Nerfados Shield XDR"; \
+  Flags: postinstall skipifsilent nowait shellexec
+#else
+; RC: no license bundled — show Machine ID so the user can request one
 Filename: "cmd.exe"; \
   Parameters: "/k ""{app}\{#AppCliName}"" --machine-id & echo. & echo  Copy the Machine ID above to request your license. & echo  Place license.nerf in: {commonappdata}\{#AppShortName}\ & echo. & pause"; \
   Description: "Show Machine ID (needed to request a license)"; \
   Flags: postinstall skipifsilent nowait
+#endif
 
 [Code]
 

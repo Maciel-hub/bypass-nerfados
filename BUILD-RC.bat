@@ -5,108 +5,79 @@ REM ============================================================
 REM Echo Nerfados Shield XDR - Build RC (Release Candidate)
 REM ============================================================
 REM
-REM Gera um pacote RC sem licença embutida.
-REM O cliente precisa receber uma license.nerf separadamente.
+REM Gera um installer RC sem licença embutida.
+REM O tester instala, vê o Machine ID, e depois recebe
+REM license.nerf separado para copiar para ProgramData.
 REM
 REM USAGE:
 REM   BUILD-RC.bat
-REM   BUILD-RC.bat --sign          assina os EXEs antes de empacotar
-REM   BUILD-RC.bat --gui           inclui GUI (EchoNerfados.App.exe)
+REM   BUILD-RC.bat --sign     assina o installer
 REM
 REM OUTPUT:
-REM   dist\EchoNerfadosSetup-RC-<versão>+<commit>.zip
+REM   dist\EchoNerfadosSetup-RC-<versão>+<commit>.exe
 REM ============================================================
 
 set "SIGN=0"
-set "BUILD_GUI=0"
 
 :parse_args
-if "%~1"=="--sign" ( set "SIGN=1"       & shift & goto parse_args )
-if "%~1"=="--gui"  ( set "BUILD_GUI=1"  & shift & goto parse_args )
+if "%~1"=="--sign" ( set "SIGN=1" & shift & goto parse_args )
 if "%~1" NEQ "" (
     echo [ERROR] Unknown argument: %~1
     exit /b 1
 )
 
-REM ---- Step 1: Build -------------------------------------------
 echo.
-set "GUI_FLAG="
-if "%BUILD_GUI%"=="1" set "GUI_FLAG=--gui"
-echo [1/4] Building Scanner%GUI_FLAG: %GUI_FLAG%...
-call BUILD.bat %GUI_FLAG%
+echo ============================================
+echo  Echo Nerfados -- Build RC
+echo  Sign: !SIGN!
+echo ============================================
+
+REM ---- Step 1: Build Scanner + GUI -------------------------------------
+echo.
+echo [1/3] Build ^(Scanner + GUI^)...
+call BUILD.bat --gui
 if errorlevel 1 (
-    echo [ERROR] BUILD.bat failed.
+    echo [ERROR] Build falhou.
     exit /b 1
 )
-echo [1/4] Build OK.
+echo [1/3] Build OK.
 
-REM ---- Step 2: Extract version + commit ------------------------
+REM ---- Step 2: Criar installer RC (Inno Setup) -------------------------
 echo.
-echo [2/4] Resolving version...
-set "VERSION=1.0.0"
-for /f "delims=" %%v in ('pwsh -NoProfile -NonInteractive -Command "[System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path 'publish\win-x64\EchoNerfados.exe').Path).ProductVersion"') do (
-    set "FULL_VER=%%v"
-)
-for /f "tokens=1 delims=+" %%v in ("!FULL_VER!") do set "VERSION=%%v"
-for /f "tokens=2 delims=+" %%v in ("!FULL_VER!") do set "COMMIT=%%v"
-if "!COMMIT!"=="" (
-    for /f "delims=" %%c in ('git rev-parse --short HEAD 2^>nul') do set "COMMIT=%%c"
-)
-set "PKG_NAME=EchoNerfadosSetup-RC-!VERSION!+!COMMIT!"
-echo [2/4] Package: !PKG_NAME!
-
-REM ---- Step 3: Assemble package --------------------------------
-echo.
-echo [3/4] Assembling package...
-set "PKG_DIR=dist\!PKG_NAME!"
-if exist "!PKG_DIR!" rmdir /s /q "!PKG_DIR!"
-mkdir "!PKG_DIR!"
-
-copy "publish\win-x64\EchoNerfados.exe" "!PKG_DIR!\EchoNerfados.exe" >nul
-
-if "%BUILD_GUI%"=="1" (
-    if exist "publish\win-x64-gui\EchoNerfados.App.exe" (
-        copy "publish\win-x64-gui\EchoNerfados.App.exe" "!PKG_DIR!\EchoNerfados.App.exe" >nul
-    )
-)
-
-REM Copy rules if present
-if exist "publish\win-x64\rules\" (
-    xcopy /e /i /q "publish\win-x64\rules" "!PKG_DIR!\rules" >nul
-)
-
-REM README
-echo Echo Nerfados Shield XDR - Release Candidate > "!PKG_DIR!\LEIA-ME.txt"
-echo. >> "!PKG_DIR!\LEIA-ME.txt"
-echo Build : !PKG_NAME! >> "!PKG_DIR!\LEIA-ME.txt"
-echo Licença: não incluída — necessária para uso. >> "!PKG_DIR!\LEIA-ME.txt"
-echo Coloque license.nerf ao lado de EchoNerfados.exe antes de executar. >> "!PKG_DIR!\LEIA-ME.txt"
-echo. >> "!PKG_DIR!\LEIA-ME.txt"
-echo Uso: EchoNerfados.exe --help >> "!PKG_DIR!\LEIA-ME.txt"
-
-REM ---- Step 4: Zip ---------------------------------------------
-echo.
-echo [4/4] Creating ZIP...
-if not exist dist mkdir dist
-pwsh -NoProfile -NonInteractive -Command ^
-    "Compress-Archive -Path '!PKG_DIR!\*' -DestinationPath 'dist\!PKG_NAME!.zip' -Force"
+echo [2/3] Criando installer RC...
+set "SIGN_FLAG="
+if "!SIGN!"=="1" set "SIGN_FLAG=-Sign"
+pwsh -NoProfile -NonInteractive -File scripts\package.ps1 -Variant RC !SIGN_FLAG!
 if errorlevel 1 (
-    echo [ERROR] ZIP creation failed.
+    echo [ERROR] Packaging falhou.
+    exit /b 1
+)
+echo [2/3] Installer criado.
+
+REM ---- Step 3: Verificar artefato --------------------------------------
+echo.
+echo [3/3] Verificando artefato em dist\...
+for /f "delims=" %%f in ('dir /b "dist\EchoNerfadosSetup-RC-*.exe" 2^>nul') do set "ARTIFACT=dist\%%f"
+if "!ARTIFACT!"=="" (
+    echo [ERROR] Nenhum installer RC encontrado em dist\.
     exit /b 1
 )
 
-for /f "delims=" %%h in ('pwsh -NoProfile -NonInteractive -Command "(Get-FileHash 'dist\!PKG_NAME!.zip' -Algorithm SHA256).Hash.ToLower()"') do set "ZIP_SHA=%%h"
+for /f "delims=" %%h in ('pwsh -NoProfile -NonInteractive -Command "(Get-FileHash '!ARTIFACT!' -Algorithm SHA256).Hash.ToLower()"') do set "SHA=%%h"
 
-rmdir /s /q "!PKG_DIR!"
-
-REM ---- Summary -------------------------------------------------
 echo.
 echo ============================================
-echo  RC PACKAGE COMPLETE
+echo  RC BUILD COMPLETO
 echo ============================================
-echo  File   : dist\!PKG_NAME!.zip
-echo  SHA256 : !ZIP_SHA!
-echo  License: NOT included (distribuir separadamente)
-echo  GUI    : %BUILD_GUI%
+echo  Arquivo  : !ARTIFACT!
+echo  SHA256   : !SHA!
+echo  Licenca  : NAO incluida ^(enviar license.nerf separadamente^)
+echo.
+echo  Fluxo do tester:
+echo    1. Instalar o .exe
+echo    2. GUI abre, mostra Machine ID
+echo    3. Enviar Machine ID para o dev
+echo    4. Dev gera license.nerf e envia de volta
+echo    5. Tester clica "Atualizar licenca" na GUI
 echo.
 endlocal
