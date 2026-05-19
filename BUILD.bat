@@ -49,6 +49,7 @@ if errorlevel 1 (
 REM ---- Step 1: Publish Scanner ------------------------------------
 echo.
 echo [1/4] Publishing EchoNerfados...
+if exist "publish\win-x64" rmdir /s /q "publish\win-x64"
 dotnet publish src\Scanner\Scanner.csproj ^
     -c Release ^
     -r win-x64 ^
@@ -66,6 +67,7 @@ REM ---- Step 1b: Publish GUI (optional) ----------------------------
 if "%BUILD_GUI%"=="1" (
     echo.
     echo [1b] Publishing EchoNerfados.App ^(WPF GUI^)...
+    if exist "publish\win-x64-gui" rmdir /s /q "publish\win-x64-gui"
     dotnet publish src\EchoNerfados.App\EchoNerfados.App.csproj ^
         -c Release ^
         -r win-x64 ^
@@ -86,6 +88,7 @@ REM ---- Step 2: Publish LicenseTool (optional) ---------------------
 if "%BUILD_TOOLS%"=="1" (
     echo.
     echo [2/4] Publishing LicenseTool...
+    if exist "publish\tools" rmdir /s /q "publish\tools"
     dotnet publish src\LicenseTool\LicenseTool.csproj ^
         -c Release ^
         -r win-x64 ^
