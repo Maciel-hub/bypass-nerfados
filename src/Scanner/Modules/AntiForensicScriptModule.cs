@@ -14,6 +14,34 @@ public class AntiForensicScriptModule : BaseModule
 
     private static readonly string[] ScriptExtensions = [".py", ".bat", ".cmd", ".ps1", ".vbs", ".wsf", ".js", ".cfg"];
 
+    // Executable script types — C2 domain in these = Critical; in .js/.cfg = High only
+    private static readonly HashSet<string> ExecutableExts = new(StringComparer.OrdinalIgnoreCase)
+        { ".py", ".bat", ".cmd", ".ps1", ".vbs", ".wsf" };
+
+    // Max file size to avoid reading large transpiled bundles / log dumps
+    private const long MaxFileSizeBytes = 1 * 1024 * 1024; // 1 MB
+
+    // Directory name segments that disqualify a file from scanning
+    private static readonly HashSet<string> SkippedDirSegments = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "node_modules", ".nuget", "npm", "pip", "pip-cache",
+        "Packages",         // UWP sandbox
+        "INetCache",
+    };
+
+    // Path substrings that disqualify a file (handles versioned browser user-data dirs)
+    private static readonly string[] SkippedPathSubstrings =
+    [
+        @"\Microsoft\Edge\User Data\",
+        @"\Google\Chrome\User Data\",
+        @"\BraveSoftware\Brave-Browser\User Data\",
+        @"\Microsoft\Windows\INetCache\",
+        @"\Microsoft\Windows\Temporary Internet Files\",
+        @"\AppData\Local\Packages\",
+        @"\npm-cache\",
+        @"\pip\http\",
+    ];
+
     private static IEnumerable<string> GetScanRoots()
     {
         yield return Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
@@ -25,24 +53,26 @@ public class AntiForensicScriptModule : BaseModule
 
     // Token groups for anti-echo cleanup script scoring.
     // 3+ groups → Critical, 2 → High, 1 → Medium (not score-eligible).
-    // Each group represents an independent evidence category — multiple groups = coordinated cleanup.
+    // Each group is an independent evidence category — multiple groups = coordinated cleanup.
     private static readonly string[][] AntiEchoTokenGroups =
     [
-        // Group 0: Event log manipulation
+        // Group 0: Event log manipulation (all terms are highly specific to admin log ops)
         ["wevtutil", ".evtx", "clear-log", "cl security", "cl system", "cl application"],
-        // Group 1: Prefetch / Recent / JumpList artifacts
-        ["prefetch", "recent", "automaticdestinations", "customdestinations", "appdata\\roaming\\microsoft\\windows\\recent"],
-        // Group 2: Registry history wipe (BAM, UserAssist, AppCompat, ShimCache)
-        ["reg delete", "bam", "userassist", "appcompatcache", "shimcache", "runmru", "recentdocs"],
-        // Group 3: Browser track clearing
-        ["clearmytracksbyprocess", "inetcpl.cpl", "rundll32", "clearmytracks"],
-        // Group 4: DriverBooster / loader artifact references
+        // Group 1: Prefetch / JumpList path references (specific file extensions/paths)
+        ["automaticdestinations-ms", "customdestinations-ms", "appdata\\roaming\\microsoft\\windows\\recent",
+         "c:\\windows\\prefetch", "\\prefetch\\"],
+        // Group 2: Registry history wipe commands
+        ["reg delete", "remove-item hklm", "remove-item hkcu", "userassist",
+         "appcompatcache", "shimcache", "runmru", "recentdocs"],
+        // Group 3: Track clearing via rundll32 (requires the specific API name)
+        ["clearmytracksbyprocess", "clearmytracks", "inetcpl.cpl"],
+        // Group 4: DriverBooster loader artifacts
         ["driverbooster", "driver booster", "loader.dll", "loader.cfg"],
-        // Group 5: Python anti-echo / brembo references
+        // Group 5: Anti-echo / brembo identity strings (very specific)
         ["anti-echo", "antiecho", "brembo", "echo_nerfados", "echonerfados", "bypass_echo"],
     ];
 
-    // BatchGotAdmin UAC stub indicators
+    // BatchGotAdmin UAC stub indicators (require 2+ to reduce noise from vbs snippets)
     private static readonly string[] BatchGotAdminTokens =
     [
         "getadmin.vbs",
@@ -62,12 +92,9 @@ public class AntiForensicScriptModule : BaseModule
         "ovix.one",
     ];
 
-    // DriverBooster loader artifact paths (Steam common path + known filenames)
-    private static readonly string[] DriverBoosterArtifacts =
+    // DriverBooster loader-specific filenames (must appear in the script to flag)
+    private static readonly string[] DriverBoosterLoaderTokens =
     [
-        "driverbooster",
-        "driver booster",
-        @"steamapps\common\driverbooster",
         "loader.dll",
         "loader.cfg",
         "driverbooster.dll",
@@ -85,6 +112,8 @@ public class AntiForensicScriptModule : BaseModule
                 ct.ThrowIfCancellationRequested();
                 if (!Directory.Exists(root)) continue;
 
+                int readFailures = 0;
+
                 try
                 {
                     var opts = new EnumerationOptions
@@ -97,39 +126,53 @@ public class AntiForensicScriptModule : BaseModule
                     foreach (var file in Directory.EnumerateFiles(root, "*", opts))
                     {
                         ct.ThrowIfCancellationRequested();
+
                         var ext = Path.GetExtension(file).ToLowerInvariant();
                         if (!ScriptExtensions.Contains(ext)) continue;
                         if (IsOwnProcess(file)) continue;
+                        if (IsInSkippedDirectory(file)) continue;
 
-                        AnalyzeFile(file, findings);
+                        try
+                        {
+                            var size = new FileInfo(file).Length;
+                            if (size > MaxFileSizeBytes) continue;
+                        }
+                        catch { continue; }
+
+                        if (!AnalyzeFile(file, ext, findings))
+                            readFailures++;
                     }
                 }
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex) { LogPartialError($"AntiForensicScriptModule — raiz '{root}' inacessível", ex); }
+
+                if (readFailures > 0)
+                    LogPartialError($"AntiForensicScriptModule — {readFailures} arquivo(s) em '{root}' não puderam ser lidos (acesso negado ou lock)", null!);
             }
         }, ct);
 
         return findings;
     }
 
-    private void AnalyzeFile(string filePath, List<Finding> findings)
+    // Returns false if the file could not be read
+    private bool AnalyzeFile(string filePath, string ext, List<Finding> findings)
     {
         string content;
         try
         {
             content = File.ReadAllText(filePath);
         }
-        catch (IOException)                 { return; }
-        catch (UnauthorizedAccessException) { return; }
+        catch (IOException)                 { return false; }
+        catch (UnauthorizedAccessException) { return false; }
         catch (Exception ex)
         {
-            LogPartialError($"AntiForensicScriptModule — leitura de '{filePath}' falhou", ex);
-            return;
+            LogPartialError($"AntiForensicScriptModule — leitura de '{Path.GetFileName(filePath)}' falhou", ex);
+            return true; // not a simple read failure — still counted as processed
         }
 
-        var lower   = content.ToLowerInvariant();
-        var info    = new FileInfo(filePath);
-        var sha256  = GetFileHash(filePath) ?? "N/A";
+        var lower    = content.ToLowerInvariant();
+        var info     = new FileInfo(filePath);
+        var sha256   = GetFileHash(filePath) ?? "N/A";
         var baseName = Path.GetFileName(filePath);
 
         // ── Anti-echo cleanup script (token group scoring) ─────────────────────
@@ -167,7 +210,7 @@ public class AntiForensicScriptModule : BaseModule
             var groupNames = matchedGroups.Select(g => g switch
             {
                 0 => "event-log-wipe",
-                1 => "prefetch-recent-jumplists",
+                1 => "prefetch-jumplists",
                 2 => "registry-history",
                 3 => "browser-tracks",
                 4 => "driverbooster-loader",
@@ -181,7 +224,7 @@ public class AntiForensicScriptModule : BaseModule
                 Name,
                 $"SCRIPT ANTI-FORENSE DETECTADO: {baseName}",
                 $"Script contém padrões de limpeza anti-forense ({groupLabel}).\n" +
-                $"Grupos atingidos: {string.Join(", ", groupNames)}\n" +
+                $"Grupos: {string.Join(", ", groupNames)}\n" +
                 $"Arquivo: {filePath}\nSHA256: {sha256}",
                 $"SHA256: {sha256} | Tamanho: {info.Length} bytes | Modificado: {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}",
                 timestamp: info.LastWriteTime,
@@ -203,8 +246,7 @@ public class AntiForensicScriptModule : BaseModule
                 Name,
                 $"SCRIPT UAC BATCHGOTADMIN: {baseName}",
                 $"Script contém padrão de autoelevação UAC (BatchGotAdmin).\n" +
-                $"Tokens encontrados: {string.Join(", ", uacMatches)}\n" +
-                $"Arquivo: {filePath}\nSHA256: {sha256}",
+                $"Tokens: {string.Join(", ", uacMatches)}\nArquivo: {filePath}\nSHA256: {sha256}",
                 $"SHA256: {sha256} | Tamanho: {info.Length} bytes | Modificado: {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}",
                 timestamp: info.LastWriteTime,
                 confidence: Confidence.Medium,
@@ -214,12 +256,14 @@ public class AntiForensicScriptModule : BaseModule
         }
 
         // ── Known C2 domains ───────────────────────────────────────────────────
+        // Critical only for executable script types; High+hint for .js/.cfg
         foreach (var domain in KnownC2Domains)
         {
             if (!lower.Contains(domain)) continue;
 
+            bool isExecScript = ExecutableExts.Contains(ext);
             findings.Add(new Finding(
-                RiskLevel.Critical,
+                isExecScript ? RiskLevel.Critical : RiskLevel.High,
                 FindingCategory.AntiForensics,
                 Name,
                 $"DOMÍNIO C2 CONHECIDO EM SCRIPT: {domain}",
@@ -227,23 +271,28 @@ public class AntiForensicScriptModule : BaseModule
                 $"Domínio: {domain}\nArquivo: {filePath}\nSHA256: {sha256}",
                 $"Domínio: {domain} | SHA256: {sha256} | Modificado: {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}",
                 timestamp: info.LastWriteTime,
-                confidence: Confidence.High,
+                confidence: isExecScript ? Confidence.High : Confidence.Medium,
                 ruleId: "ANTI_ECHO_KNOWN_C2_DOMAIN",
-                entity: domain
+                entity: domain,
+                validationHint: isExecScript ? null
+                    : $"Domínio encontrado em {ext} — confirmar contexto de execução antes de concluir"
             ));
         }
 
         // ── DriverBooster loader artifact references ───────────────────────────
-        var dbMatches = DriverBoosterArtifacts.Where(t => lower.Contains(t)).ToList();
-        if (dbMatches.Count >= 2)
+        // Require specific loader artifact filenames, not just "driverbooster" generically
+        var loaderMatches = DriverBoosterLoaderTokens.Where(t => lower.Contains(t)).ToList();
+        bool hasDriverBoosterName = lower.Contains("driverbooster") || lower.Contains("driver booster");
+
+        if (loaderMatches.Count >= 1)
         {
             findings.Add(new Finding(
                 RiskLevel.High,
                 FindingCategory.AntiForensics,
                 Name,
                 $"ARTEFATO DRIVERBOOSTER LOADER EM SCRIPT: {baseName}",
-                $"Script referencia artefatos de DriverBooster loader — padrão de bypass via driver vulnerável.\n" +
-                $"Tokens: {string.Join(", ", dbMatches)}\nArquivo: {filePath}\nSHA256: {sha256}",
+                $"Script referencia artefato de loader de driver vulnerável.\n" +
+                $"Tokens: {string.Join(", ", loaderMatches)}\nArquivo: {filePath}\nSHA256: {sha256}",
                 $"SHA256: {sha256} | Tamanho: {info.Length} bytes | Modificado: {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}",
                 timestamp: info.LastWriteTime,
                 confidence: Confidence.Medium,
@@ -251,5 +300,39 @@ public class AntiForensicScriptModule : BaseModule
                 entity: filePath
             ));
         }
+        else if (hasDriverBoosterName)
+        {
+            // Generic DriverBooster mention without specific loader artifacts — low signal
+            findings.Add(new Finding(
+                RiskLevel.Low,
+                FindingCategory.AntiForensics,
+                Name,
+                $"Referência a DriverBooster em script: {baseName}",
+                $"Script menciona DriverBooster sem artefato de loader específico — pode ser uninstall/update legítimo.\n" +
+                $"Arquivo: {filePath}\nSHA256: {sha256}",
+                $"SHA256: {sha256} | Modificado: {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}",
+                timestamp: info.LastWriteTime,
+                confidence: Confidence.Low,
+                ruleId: "ANTIECHO_DRIVERBOOSTER_LOADER_ARTIFACT",
+                entity: filePath,
+                validationHint: "Confirmar ausência de loader.dll/loader.cfg e correlacionar com Driver & Kernel module"
+            ));
+        }
+
+        return true;
+    }
+
+    private static bool IsInSkippedDirectory(string filePath)
+    {
+        var dir = Path.GetDirectoryName(filePath) ?? "";
+        foreach (var segment in dir.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (SkippedDirSegments.Contains(segment)) return true;
+        }
+        foreach (var sub in SkippedPathSubstrings)
+        {
+            if (filePath.Contains(sub, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+        return false;
     }
 }

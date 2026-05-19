@@ -170,20 +170,38 @@ public class UsnJournalModule : BaseModule
             return;
         }
 
-        // DriverBooster loader artifacts deleted
-        if (lower.Contains("driverbooster") || lower.Contains("driver booster"))
+        // DriverBooster loader artifacts deleted — require specific loader filename, not just any DriverBooster file.
+        // Generic driverbooster.exe deletions (uninstall/update) are not a signal on their own.
+        if (lower is "loader.dll" or "loader.cfg" or "driverbooster.dll" or "driverbooster.cfg")
         {
             findings.Add(new Finding(
                 RiskLevel.High,
                 FindingCategory.AntiForensics,
                 Name,
-                $"ARTEFATO DRIVERBOOSTER DELETADO (USN): {rec.FileName}",
-                "Arquivo referenciado a DriverBooster removido — possível limpeza de loader de driver vulnerável.",
+                $"ARTEFATO DRIVERBOOSTER LOADER DELETADO (USN): {rec.FileName}",
+                "Arquivo de loader de driver vulnerável removido — padrão de limpeza pós-bypass BYOVD.",
                 rec.FileName,
                 rec.Timestamp,
                 confidence: Confidence.Medium,
                 ruleId: "ANTIECHO_DRIVERBOOSTER_USN",
-                entity: lower
+                entity: lower,
+                validationHint: "Correlacionar com Driver & Kernel module para .sys não assinado e USN Journal para criação recente do mesmo arquivo"
+            ));
+        }
+        else if (lower.Contains("driverbooster") || lower.Contains("driver booster"))
+        {
+            findings.Add(new Finding(
+                RiskLevel.Low,
+                FindingCategory.AntiForensics,
+                Name,
+                $"Arquivo DriverBooster deletado (USN): {rec.FileName}",
+                "Arquivo com nome DriverBooster removido — pode ser uninstall/update legítimo.\nCorrelacionar com Driver & Kernel module antes de concluir.",
+                rec.FileName,
+                rec.Timestamp,
+                confidence: Confidence.Low,
+                ruleId: "ANTIECHO_DRIVERBOOSTER_USN",
+                entity: lower,
+                validationHint: "Baixo sinal isolado — correlacionar com .sys não assinado ou sessão de cheat"
             ));
         }
     }
