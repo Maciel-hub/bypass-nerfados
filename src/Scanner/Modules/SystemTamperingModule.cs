@@ -58,6 +58,9 @@ public class SystemTamperingModule : BaseModule
         CheckMoSetupKeys(findings);
         cancellationToken.ThrowIfCancellationRequested();
 
+        CheckVulnerableDriverBlocklist(findings);
+        cancellationToken.ThrowIfCancellationRequested();
+
         CheckGetAdminVbs(findings);
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -147,7 +150,48 @@ public class SystemTamperingModule : BaseModule
         catch (Exception ex) { LogPartialError("CheckMoSetupKeys falhou", ex); }
     }
 
-    // ── Check 3: getadmin.vbs in Temp ─────────────────────────────────────────
+    // ── Check 3: Vulnerable Driver Blocklist disabled ─────────────────────────
+
+    /// <summary>
+    /// Checks HKLM\SYSTEM\CurrentControlSet\Control\CI\Config for VulnerableDriverBlocklistEnable.
+    /// A value of 0 (or missing key treated as 0 on some builds) indicates the Windows
+    /// Vulnerable Driver Blocklist is disabled — a prerequisite for driver-based bypass cheats.
+    /// </summary>
+    private void CheckVulnerableDriverBlocklist(List<Finding> findings)
+    {
+        try
+        {
+            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\CI\Config");
+            if (key == null) return;
+
+            var raw = key.GetValue("VulnerableDriverBlocklistEnable");
+            if (raw == null) return;
+
+            int value;
+            try { value = Convert.ToInt32(raw); }
+            catch { return; }
+
+            if (value == 0)
+            {
+                findings.Add(new Finding(
+                    RiskLevel.High,
+                    FindingCategory.SystemTampering,
+                    Name,
+                    "Lista de Drivers Vulneráveis desabilitada (VulnerableDriverBlocklistEnable=0)",
+                    "A blocklist de drivers vulneráveis do Windows está desabilitada. " +
+                    "Esse é pré-requisito para cheats baseados em driver (BYOVD — Bring Your Own Vulnerable Driver). " +
+                    "Correlacionar com Driver & Kernel module e USN Journal para carregamentos de .sys recentes.",
+                    "HKLM\\SYSTEM\\CurrentControlSet\\Control\\CI\\Config\\VulnerableDriverBlocklistEnable = 0",
+                    confidence: Confidence.High,
+                    ruleId: "WINDOWS_VULNERABLE_DRIVER_BLOCKLIST_DISABLED",
+                    validationHint: "Correlacionar com drivers não assinados no Driver & Kernel module e com USN Journal para .sys recentes"
+                ));
+            }
+        }
+        catch (Exception ex) { LogPartialError("CheckVulnerableDriverBlocklist falhou", ex); }
+    }
+
+    // ── Check 4: getadmin.vbs in Temp ─────────────────────────────────────────
 
     /// <summary>
     /// Checks for the BatchGotAdmin VBScript artifact in the system Temp directory.

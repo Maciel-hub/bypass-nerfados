@@ -40,6 +40,7 @@
     <Compile Include="..\Scanner\Models\ModuleCoverageEntry.cs" />
     <Compile Include="..\Scanner\Models\ScanResult.cs" />
     <Compile Include="..\Scanner\Modules\AmcacheModule.cs" />
+    <Compile Include="..\Scanner\Modules\AntiForensicScriptModule.cs" />
     <Compile Include="..\Scanner\Modules\BamDamModule.cs" />
     <Compile Include="..\Scanner\Modules\BaseModule.cs" />
     <Compile Include="..\Scanner\Modules\BrowserDownloadsModule.cs" />

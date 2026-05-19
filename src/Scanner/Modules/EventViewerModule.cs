@@ -223,7 +223,9 @@ public class EventViewerModule : BaseModule
                             "PowerShell encodado/bypass detectado (4688)",
                             "Execução de PowerShell com parâmetros de evasão detectada.",
                             $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
-                            record.TimeCreated
+                            record.TimeCreated,
+                            ruleId: $"EVENT_4688_PSENC@{record.TimeCreated:yyyyMMddHH}",
+                            entity: "powershell-enc"
                         ));
                     }
 
@@ -237,7 +239,9 @@ public class EventViewerModule : BaseModule
                             "wevtutil LIMPEZA DE LOGS detectada (4688)",
                             "Comando wevtutil usado para limpar logs de eventos.",
                             $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
-                            record.TimeCreated
+                            record.TimeCreated,
+                            ruleId: $"EVENT_4688_WEVTUTIL@{record.TimeCreated:yyyyMMddHH}",
+                            entity: "wevtutil-clear"
                         ));
                     }
 
@@ -251,7 +255,78 @@ public class EventViewerModule : BaseModule
                             "Deleção do USN Journal detectada (4688)",
                             "Comando fsutil usn deletejournal detectado — apagamento do diário NTFS.",
                             $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
-                            record.TimeCreated
+                            record.TimeCreated,
+                            ruleId: $"EVENT_4688_FSUTIL_USN@{record.TimeCreated:yyyyMMddHH}",
+                            entity: "fsutil-usn-delete"
+                        ));
+                    }
+
+                    // Detect rundll32 ClearMyTracksByProcess — clears IE/Edge history and tracks
+                    if (lower.Contains("rundll32") && lower.Contains("clearmytracksbyprocess"))
+                    {
+                        findings.Add(new Finding(
+                            RiskLevel.High,
+                            FindingCategory.AntiForensics,
+                            Name,
+                            "rundll32 ClearMyTracksByProcess detectado (4688)",
+                            "Limpeza de histórico via rundll32 InetCpl.cpl,ClearMyTracksByProcess — apaga cookies, histórico do browser e cache.",
+                            $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
+                            record.TimeCreated,
+                            ruleId: $"EVENT_4688_CLEARTRACK@{record.TimeCreated:yyyyMMddHH}",
+                            entity: "rundll32-cleartrack"
+                        ));
+                    }
+
+                    // Detect reg.exe delete on forensic registry keys (BAM, UserAssist, AppCompatCache)
+                    if (lower.Contains("reg") && lower.Contains("delete") &&
+                        (lower.Contains("bam") || lower.Contains("userassist") ||
+                         lower.Contains("appcompatcache") || lower.Contains("shimcache")))
+                    {
+                        findings.Add(new Finding(
+                            RiskLevel.Critical,
+                            FindingCategory.AntiForensics,
+                            Name,
+                            "Deleção de chave de histórico de registro detectada (4688)",
+                            "reg.exe delete em chaves forenses (BAM/UserAssist/AppCompatCache/ShimCache) — apaga histórico de execução de processos.",
+                            $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
+                            record.TimeCreated,
+                            ruleId: $"EVENT_4688_REG_HISTORY_CLEAR@{record.TimeCreated:yyyyMMddHH}",
+                            entity: "reg-delete-forensic"
+                        ));
+                    }
+
+                    // Detect python executing anti-echo/brembo scripts
+                    if (lower.Contains("python") &&
+                        (lower.Contains("anti-echo") || lower.Contains("antiecho") ||
+                         lower.Contains("brembo") || lower.Contains("bypass_echo")))
+                    {
+                        findings.Add(new Finding(
+                            RiskLevel.Critical,
+                            FindingCategory.AntiForensics,
+                            Name,
+                            "Script anti-echo Python executado (4688)",
+                            "python.exe executando script com nome/args relacionados a limpeza anti-Echo Nerfados.",
+                            $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
+                            record.TimeCreated,
+                            ruleId: $"EVENT_4688_ANTIECHO_SCRIPT@{record.TimeCreated:yyyyMMddHH}",
+                            entity: "python-antiecho"
+                        ));
+                    }
+
+                    // Detect wscript/cscript running getadmin.vbs (BatchGotAdmin UAC stub)
+                    if ((lower.Contains("wscript") || lower.Contains("cscript")) &&
+                        lower.Contains("getadmin.vbs"))
+                    {
+                        findings.Add(new Finding(
+                            RiskLevel.High,
+                            FindingCategory.SystemTampering,
+                            Name,
+                            "Execução do script BatchGotAdmin (4688)",
+                            "wscript.exe/cscript.exe executando getadmin.vbs — autoelevação UAC via BatchGotAdmin.",
+                            $"Data: {record.TimeCreated:dd/MM/yyyy HH:mm:ss}",
+                            record.TimeCreated,
+                            ruleId: $"EVENT_4688_BATCHGOTADMIN@{record.TimeCreated:yyyyMMddHH}",
+                            entity: "batchgotadmin-vbs"
                         ));
                     }
                 }

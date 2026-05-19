@@ -266,7 +266,8 @@ public class ScanOrchestrator
         Queue(new LnkRecentModule(),           "Atalhos recentes — evidência de acesso a arquivos");
         Queue(new RegistryPersistenceModule(), "Persistência via IFEO, AppInit, Winlogon, BootExecute");
         Queue(new SystemResetRestoreModule(),  "Reinstalação, reset e restauração do Windows — perda de cobertura forense");
-        Queue(new SystemTamperingModule(),     "LabConfig/MoSetup bypass, BatchGotAdmin, scripts de elevação UAC");
+        Queue(new SystemTamperingModule(),     "LabConfig/MoSetup bypass, BatchGotAdmin, scripts de elevação UAC, driver blocklist");
+        Queue(new AntiForensicScriptModule(),  "Scripts anti-forense — limpeza de eventos, JumpLists, registro e domains C2");
         Queue(new BrowserDownloadsModule(),    "Downloads do Chrome/Edge/Brave/Opera/Firefox — executáveis e URLs suspeitos");
         Queue(new TimelineInvestigationModule(), "Linha do tempo unificada — Prefetch, BAM, LNK, Downloads, Temp");
         Queue(new RedEngineArtifactsModule(),  "Artefatos do executor FiveM RedENGINE (settings.cock, menus .lua, imgui.ini, WinRAR)");

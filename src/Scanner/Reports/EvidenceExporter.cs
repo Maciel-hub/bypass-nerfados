@@ -92,7 +92,8 @@ public static class EvidenceExporter
 
         // Extended modules
         WriteModuleJson(result, runFolder, "System Reset/Restore",  $"systemreset_{d}.json",         lookback);
-        WriteModuleJson(result, runFolder, "System Tampering",      $"systemtampering_{d}.json",     lookback);
+        WriteModuleJson(result, runFolder, "System Tampering",       $"systemtampering_{d}.json",      lookback);
+        WriteModuleJson(result, runFolder, "Anti-Forensic Scripts", $"antiforensicscripts_{d}.json",  lookback);
         WriteModuleJson(result, runFolder, "Browser Downloads",     $"browserdownloads_{d}.json",    lookback);
         WriteModuleJson(result, runFolder, "ShellBags",             $"shellbags_{d}.json",           lookback);
         WriteModuleJson(result, runFolder, "Jump Lists",            $"jumplists_{d}.json",           lookback);
@@ -156,6 +157,7 @@ public static class EvidenceExporter
         "Registry Artifacts", "RegistryPersistence", "SystemTampering",
         "System Reset/Restore", "System Info", "Services",
         "Process Memory", "Memory DLL Trace", "Memory String Scan", "Network Usage",
+        "Anti-Forensic Scripts",
         // USN Journal and Driver & Kernel cover system-wide state, not a bounded event-log window.
         // Their findings' timestamps reflect artifact age, not scan depth — report full lookback.
         "USN Journal", "Driver & Kernel",

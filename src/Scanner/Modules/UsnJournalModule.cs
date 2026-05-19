@@ -131,6 +131,60 @@ public class UsnJournalModule : BaseModule
                 ruleId: $"USN_ARCHIVE_DEL_{lower}",
                 entity: lower
             ));
+            return;
+        }
+
+        // Event log file deleted — strongest anti-forensic signal
+        if (ext == ".evtx")
+        {
+            findings.Add(new Finding(
+                RiskLevel.Critical,
+                FindingCategory.AntiForensics,
+                Name,
+                $"LOG DE EVENTOS DELETADO (USN): {rec.FileName}",
+                "Arquivo .evtx removido do diário NTFS — deleção manual de log de eventos Windows.",
+                rec.FileName,
+                rec.Timestamp,
+                confidence: Confidence.High,
+                ruleId: "ANTI_ECHO_EVTX_DELETE",
+                entity: lower
+            ));
+            return;
+        }
+
+        // JumpList files deleted — hides per-application access history
+        if (ext is ".automaticDestinations-ms" or ".customDestinations-ms")
+        {
+            findings.Add(new Finding(
+                RiskLevel.High,
+                FindingCategory.AntiForensics,
+                Name,
+                $"JUMPLIST DELETADA (USN): {rec.FileName}",
+                "Arquivo de JumpList removido — oculta histórico de acesso recente por aplicação.",
+                rec.FileName,
+                rec.Timestamp,
+                confidence: Confidence.High,
+                ruleId: "ANTI_ECHO_JUMPLIST_DELETE",
+                entity: lower
+            ));
+            return;
+        }
+
+        // DriverBooster loader artifacts deleted
+        if (lower.Contains("driverbooster") || lower.Contains("driver booster"))
+        {
+            findings.Add(new Finding(
+                RiskLevel.High,
+                FindingCategory.AntiForensics,
+                Name,
+                $"ARTEFATO DRIVERBOOSTER DELETADO (USN): {rec.FileName}",
+                "Arquivo referenciado a DriverBooster removido — possível limpeza de loader de driver vulnerável.",
+                rec.FileName,
+                rec.Timestamp,
+                confidence: Confidence.Medium,
+                ruleId: "ANTIECHO_DRIVERBOOSTER_USN",
+                entity: lower
+            ));
         }
     }
 
@@ -271,6 +325,27 @@ public class UsnJournalModule : BaseModule
                 entity: "archive-cleanup"
             ));
         }
+
+        // Bulk JumpList deletion — 3+ JumpList files in one session = coordinated history wipe
+        var jumpListDeletes = deletes
+            .Where(r => r.FileNameLower.EndsWith(".automaticDestinations-ms", StringComparison.OrdinalIgnoreCase) ||
+                        r.FileNameLower.EndsWith(".customDestinations-ms",    StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        if (jumpListDeletes.Count >= 3)
+        {
+            findings.Add(new Finding(
+                RiskLevel.Critical,
+                FindingCategory.AntiForensics,
+                "USN Journal",
+                $"LIMPEZA EM MASSA DE JUMPLISTS: {jumpListDeletes.Count} arquivo(s)",
+                "Múltiplos arquivos de JumpList deletados em sessão — padrão de limpeza coordenada de histórico de acesso.",
+                string.Join(", ", jumpListDeletes.Take(5).Select(r => r.FileName)),
+                confidence: Confidence.High,
+                ruleId: "ANTI_ECHO_JUMPLIST_CLEAR",
+                entity: "jumplist-bulk-clear"
+            ));
+        }
     }
 
     private async Task<List<UsnRecord>> ReadJournalAsync(string drive, CancellationToken ct)
@@ -281,7 +356,8 @@ public class UsnJournalModule : BaseModule
             // Single pass — findstr /c: applies OR logic across multiple flags
             var output = await RunCmdAsync("cmd.exe",
                 "/c fsutil usn readjournal " + drive + " csv" +
-                " | findstr /i /c:.exe /c:.dll /c:.sys /c:.zip /c:.rar /c:.7z /c:.pf /c:.ps1 /c:.bat",
+                " | findstr /i /c:.exe /c:.dll /c:.sys /c:.zip /c:.rar /c:.7z /c:.pf /c:.ps1 /c:.bat" +
+                " /c:.evtx /c:.lnk /c:.automaticDestinations-ms /c:.customDestinations-ms /c:.py /c:.cfg",
                 90000, ct);
 
             foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
@@ -374,7 +450,9 @@ public class UsnJournalModule : BaseModule
 
     private static bool IsTargetExtension(string ext) => ext is
         ".exe" or ".dll" or ".sys" or ".zip" or ".rar" or ".7z"
-        or ".ps1" or ".bat" or ".vbs" or ".pf";
+        or ".ps1" or ".bat" or ".vbs" or ".pf"
+        or ".evtx" or ".lnk" or ".automaticDestinations-ms" or ".customDestinations-ms"
+        or ".py" or ".cfg";
 
     // FullPath intentionally omitted — USN Journal provides filename only.
     // Path-based analysis requires MFT parent-chain reconstruction (out of scope).
