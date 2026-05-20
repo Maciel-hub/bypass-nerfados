@@ -223,6 +223,11 @@ public static class CheatDatabase
         // .NET SDK / runtime / global tools in user profile hidden folder
         // Path: C:\Users\<user>\.dotnet\...
         @"\.dotnet\",
+
+        // Echo Kilo Studios — legitimate FiveM script developer (EKS resources, not cheats)
+        "echo kilo", "echo kilo studios",
+        "eks_seatbelt", "eks_respawn", "eks_hat",
+        "echo-notify", "echonotify",
     };
 
     // Publisher name fragments that identify well-known legitimate vendors.

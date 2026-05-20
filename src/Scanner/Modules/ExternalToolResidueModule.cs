@@ -47,6 +47,14 @@ public class ExternalToolResidueModule : BaseModule
             "PATHPARSER", "PATHANALYZER",
         };
 
+    // Informational tools: external audit tools — not suspicious, not score-eligible.
+    // Their presence is recorded so the investigator knows a third-party review happened.
+    private static readonly HashSet<string> InformationalPrefetchNames =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            "EBAM",   // External BAM analyzer — third-party audit tool
+        };
+
     // Executáveis cujos caminhos de disco são inspecionados em locais sensíveis
     private static readonly string[] DiskCheckExecutables =
     [
@@ -109,25 +117,51 @@ public class ExternalToolResidueModule : BaseModule
                 var dashIdx  = baseName.LastIndexOf('-');
                 var toolName = dashIdx > 0 ? baseName[..dashIdx] : baseName; // e.g. PROCEXP64
 
-                if (!SuspiciousPrefetchNames.Contains(toolName)) continue;
+                bool isSuspicious    = SuspiciousPrefetchNames.Contains(toolName);
+                bool isInformational = InformationalPrefetchNames.Contains(toolName);
+
+                if (!isSuspicious && !isInformational) continue;
                 if (IsOwnProcess(toolName)) continue;
 
                 var lastWrite = File.GetLastWriteTime(pfFile);
 
-                findings.Add(new Finding(
-                    RiskLevel.Medium,
-                    FindingCategory.SuspiciousExecution,
-                    Name,
-                    $"Ferramenta de análise detectada no Prefetch: {toolName}",
-                    "Ferramenta de análise de processo/memória encontrada no histórico de execuções. " +
-                    "Sozinha é indício — correlacionar com evidências de cheat e timestamps.",
-                    evidence:       $"Arquivo Prefetch: {Path.GetFileName(pfFile)} | LastWriteTime: {lastWrite:dd/MM/yyyy HH:mm:ss}",
-                    timestamp:      lastWrite,
-                    confidence:     Confidence.Low,
-                    ruleId:         $"EXTOOL_PREFETCH_{toolName.ToUpperInvariant()}",
-                    entity:         toolName,
-                    validationHint: ValidationHintText
-                ));
+                if (isSuspicious)
+                {
+                    findings.Add(new Finding(
+                        RiskLevel.Medium,
+                        FindingCategory.SuspiciousExecution,
+                        Name,
+                        $"Ferramenta de análise detectada no Prefetch: {toolName}",
+                        "Ferramenta de análise de processo/memória encontrada no histórico de execuções. " +
+                        "Sozinha é indício — correlacionar com evidências de cheat e timestamps.",
+                        evidence:       $"Arquivo Prefetch: {Path.GetFileName(pfFile)} | LastWriteTime: {lastWrite:dd/MM/yyyy HH:mm:ss}",
+                        timestamp:      lastWrite,
+                        confidence:     Confidence.Low,
+                        ruleId:         $"EXTOOL_PREFETCH_{toolName.ToUpperInvariant()}",
+                        entity:         toolName,
+                        validationHint: ValidationHintText
+                    ));
+                }
+                else
+                {
+                    // Informational: external audit tool — recorded for chain-of-custody, not score-eligible
+                    var f = new Finding(
+                        RiskLevel.Info,
+                        FindingCategory.SuspiciousExecution,
+                        Name,
+                        $"Ferramenta de auditoria externa detectada no Prefetch: {toolName}",
+                        "Ferramenta de auditoria de terceiros registrada no histórico de execuções. " +
+                        "Não é indício de cheat por si só — verificar se foi usada por investigador.",
+                        evidence:       $"Arquivo Prefetch: {Path.GetFileName(pfFile)} | LastWriteTime: {lastWrite:dd/MM/yyyy HH:mm:ss}",
+                        timestamp:      lastWrite,
+                        confidence:     Confidence.Low,
+                        ruleId:         "EXTOOL_EBAM_EXTERNAL_AUDIT",
+                        entity:         toolName,
+                        validationHint: "Ferramenta de auditoria de BAM — pode ser uso pelo investigador ou pelo suspeito; correlacionar com contexto"
+                    );
+                    f.ScoreEligible = false;
+                    findings.Add(f);
+                }
             }
             catch (Exception ex)
             {
