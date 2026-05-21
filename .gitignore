@@ -19,6 +19,7 @@ dist/
 
 # Logs e relatórios gerados (não versionar)
 *.html
+!docs/site/index.html
 *.txt
 Bypass_Nerfados_*.html
 Bypass_Nerfados_*.txt
