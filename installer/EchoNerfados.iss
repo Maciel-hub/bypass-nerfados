@@ -64,8 +64,9 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 Name: "{commonappdata}\{#AppShortName}"; Permissions: users-readexec admins-full
 
 [Files]
-; GUI — main application (WPF)
+; GUI — main application (WPF) + native DLLs required by .NET WPF single-file publish
 Source: "..\publish\win-x64-gui\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\publish\win-x64-gui\*.dll";         DestDir: "{app}"; Flags: ignoreversion
 
 ; CLI — advanced forensic tool (verify-report, --machine-id, automation)
 Source: "..\publish\win-x64\{#AppCliName}";  DestDir: "{app}"; Flags: ignoreversion
