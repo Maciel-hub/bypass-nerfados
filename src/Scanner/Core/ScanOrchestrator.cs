@@ -32,6 +32,24 @@ public class ScanOrchestrator
 
     public async Task<ScanResult> RunAsync(CancellationToken cancellationToken = default)
     {
+        var scanStartedAt = DateTimeOffset.UtcNow;
+
+        // Pre-create runFolder so scan_status.json exists from the first module, giving
+        // QA/investigators partial evidence even if the scan hangs before report generation.
+        var runFolder  = _config.SaveReport
+            ? Path.Combine(_config.ReportOutputPath, _config.ReportFileName)
+            : null;
+        string? statusPath = null;
+        if (runFolder != null)
+        {
+            try
+            {
+                Directory.CreateDirectory(runFolder);
+                statusPath = Path.Combine(runFolder, "scan_status.json");
+            }
+            catch { /* non-fatal — failure here doesn't block the scan */ }
+        }
+
         if (!_result.IsAdministrator)
         {
             Report(new ScanProgressUpdate(
@@ -40,6 +58,8 @@ public class ScanOrchestrator
         }
 
         var modules = BuildModuleList();
+
+        WriteScanStatus(statusPath, scanStartedAt, "running", "Iniciando...", 0, modules.Count);
 
         Report(new ScanProgressUpdate(
             ScanProgressKind.ScanStarted,
@@ -51,6 +71,7 @@ public class ScanOrchestrator
             cancellationToken.ThrowIfCancellationRequested();
 
             var module = modules[i];
+            WriteScanStatus(statusPath, scanStartedAt, "running", module.Name, i + 1, modules.Count);
             Report(new ScanProgressUpdate(
                 ScanProgressKind.ModuleStarted,
                 $"Executando módulo {module.Name}.",
@@ -160,10 +181,9 @@ public class ScanOrchestrator
             "Resultado de varredura pronto.",
             Result: _result));
 
-        // Generate report — all outputs go into a timestamped run folder
-        if (_config.SaveReport)
+        // Generate report — runFolder was pre-created at scan start; Directory.CreateDirectory is idempotent
+        if (_config.SaveReport && runFolder != null)
         {
-            var runFolder  = Path.Combine(_config.ReportOutputPath, _config.ReportFileName);
             var reportPath = Path.Combine(runFolder, "report.html");
             var txtPath    = Path.Combine(runFolder, "report.txt");
 
@@ -191,6 +211,7 @@ public class ScanOrchestrator
                     manifestHash = File.ReadAllText(sha256Path).Split(' ', 2)[0].Trim().ToUpperInvariant();
                 ReportGenerator.GenerateExecutiveHtml(_result, _config, runFolder, manifestHash);
 
+                WriteScanStatus(statusPath, scanStartedAt, "completed", "Concluído", modules.Count, modules.Count);
                 Report(new ScanProgressUpdate(
                     ScanProgressKind.ReportGenerated,
                     $"Relatório exportado em {runFolder}",
@@ -200,10 +221,12 @@ public class ScanOrchestrator
             }
             catch (OperationCanceledException)
             {
+                WriteScanStatus(statusPath, scanStartedAt, "cancelled", "Cancelado", modules.Count, modules.Count);
                 throw;
             }
             catch (Exception ex)
             {
+                WriteScanStatus(statusPath, scanStartedAt, "failed", ex.Message, modules.Count, modules.Count);
                 Report(new ScanProgressUpdate(
                     ScanProgressKind.ReportFailed,
                     $"Erro ao gerar relatório: {ex.Message}",
@@ -223,6 +246,27 @@ public class ScanOrchestrator
     }
 
     private void Report(ScanProgressUpdate update) => _progress?.Report(update);
+
+    private static void WriteScanStatus(
+        string? path, DateTimeOffset startedAt, string status,
+        string currentModule, int moduleIndex, int moduleCount)
+    {
+        if (path is null) return;
+        try
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                startedAt      = startedAt.ToString("O"),
+                status,
+                currentModule,
+                moduleIndex,
+                moduleCount,
+                lastProgressAt = DateTimeOffset.UtcNow.ToString("O"),
+            }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+            File.WriteAllText(path, json);
+        }
+        catch { }
+    }
 
     private List<BaseModule> BuildModuleList()
     {

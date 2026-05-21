@@ -90,6 +90,10 @@ public sealed partial class HomeViewModel : ObservableObject
                 Features:           lic.Features) : null,
         };
 
+        // Explicit per-profile flags so Default never accidentally runs memory/USN like Deep
+        config.RunUsnJournal  = config.Profile is not ScanProfile.Fast;
+        config.DeepMemoryScan = config.Profile is ScanProfile.Deep or ScanProfile.FiveM or ScanProfile.Florence;
+
         if (!config.LicenseFeatures.Contains("memory"))
             config.DeepMemoryScan = false;
         if (!config.LicenseFeatures.Contains("deep") && config.Profile == ScanProfile.Deep)
@@ -128,10 +132,10 @@ public sealed record ScanProfileOption(string Label, string Description, ScanPro
 {
     public static readonly IReadOnlyList<ScanProfileOption> Profiles =
     [
-        new("Default",  "Todos os módulos (~2-3 min)",       ScanProfile.Default),
-        new("Fast",     "16 módulos essenciais (~30s)",      ScanProfile.Fast),
-        new("Deep",     "Todos + USN + Memória",             ScanProfile.Deep),
-        new("FiveM",    "Foco FiveM — timeline por sessão",  ScanProfile.FiveM),
-        new("Florence", "Todos + validação de fonte dupla",  ScanProfile.Florence),
+        new("Default",  "Todos os módulos + USN (~3-5 min)",         ScanProfile.Default),
+        new("Fast",     "16 módulos essenciais (~30s)",               ScanProfile.Fast),
+        new("Deep",     "Todos + USN + Memória de processo",          ScanProfile.Deep),
+        new("FiveM",    "Foco FiveM — todos + USN + Memória",         ScanProfile.FiveM),
+        new("Florence", "Todos + USN + validação de fonte dupla",     ScanProfile.Florence),
     ];
 }

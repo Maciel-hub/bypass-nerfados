@@ -52,7 +52,7 @@ public sealed partial class ScanViewModel : ObservableObject
         {
             var progress = new Progress<ScanProgressUpdate>(OnProgress);
             var orchestrator = new ScanOrchestrator(_config, progress);
-            _result = await orchestrator.RunAsync(_cts.Token);
+            _result = await Task.Run(() => orchestrator.RunAsync(_cts.Token));
         }
         catch (OperationCanceledException)
         {
