@@ -388,7 +388,8 @@ public class BrowserDownloadsModule : BaseModule
         var ext      = Path.GetExtension(fileName).ToLowerInvariant();
         var urlLower = tabUrl.ToLowerInvariant();
 
-        if (CheatDatabase.HasSuspiciousKeyword(fileName) || CheatDatabase.HasSuspiciousKeyword(targetPath))
+        if (CheatDatabase.HasSuspiciousKeyword(fileName) &&
+            !CheatDatabase.IsKnownLegitimate(targetPath))
         {
             findings.Add(new Finding(
                 RiskLevel.High, FindingCategory.Cheat, Name,
@@ -446,9 +447,9 @@ public class BrowserDownloadsModule : BaseModule
         var ext       = Path.GetExtension(fileName).ToLowerInvariant();
         var urlLower  = (tabUrl + " " + referrer).ToLowerInvariant();
 
-        // ── Condition A: suspicious file name or path ─────────────────────────
-        if (CheatDatabase.HasSuspiciousKeyword(fileName) ||
-            CheatDatabase.HasSuspiciousKeyword(targetPath))
+        // ── Condition A: suspicious file name (filename only — full path causes FP on dev dirs)
+        if (CheatDatabase.HasSuspiciousKeyword(fileName) &&
+            !CheatDatabase.IsKnownLegitimate(targetPath))
         {
             findings.Add(new Finding(
                 RiskLevel.High,

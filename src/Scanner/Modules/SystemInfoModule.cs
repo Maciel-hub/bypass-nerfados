@@ -54,6 +54,8 @@ public class SystemInfoModule : BaseModule
         CheckUnknownPcieDevices(findings, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         CheckVirtualization(findings);
+        cancellationToken.ThrowIfCancellationRequested();
+        CheckSteamInstallations(findings);
 
         return Task.FromResult(findings);
     }
@@ -557,34 +559,140 @@ public class SystemInfoModule : BaseModule
         catch (Exception ex) { LogPartialError("Enumeração de dispositivos desconhecidos falhou", ex); }
     }
 
+    private static readonly (string Keyword, string Label)[] VmStrings =
+    [
+        ("vmware",      "VMware"),
+        ("virtualbox",  "VirtualBox"),
+        ("vbox",        "VirtualBox"),
+        ("qemu",        "QEMU/KVM"),
+        ("hyper-v",     "Hyper-V"),
+        ("xen",         "Xen"),
+        ("parallels",   "Parallels"),
+        ("innotek",     "VirtualBox (innotek)"),
+        ("bochs",       "Bochs"),
+    ];
+
     private void CheckVirtualization(List<Finding> findings)
     {
+        var signals = new List<string>();
+
+        // 1. Disk enum (original check — most reliable for online VMs)
         try
         {
-            using var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\Disk\Enum");
-            if (key == null) return;
-
-            var disk0 = key.GetValue("0")?.ToString() ?? "";
+            using var diskKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\Disk\Enum");
+            var disk0 = diskKey?.GetValue("0")?.ToString() ?? "";
             var lower = disk0.ToLowerInvariant();
+            foreach (var (kw, label) in VmStrings)
+                if (lower.Contains(kw)) { signals.Add($"Disco: {label} ({disk0})"); break; }
+        }
+        catch { }
 
-            bool isVm = lower.Contains("vmware") || lower.Contains("vbox") ||
-                        lower.Contains("virtual") || lower.Contains("qemu") ||
-                        lower.Contains("hyper-v");
-
-            if (isVm)
+        // 2. BIOS manufacturer / product name
+        try
+        {
+            using var biosKey = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\BIOS");
+            if (biosKey != null)
             {
-                findings.Add(new Finding(
-                    RiskLevel.High,
-                    FindingCategory.SystemTampering,
-                    "System Info",
-                    $"MÁQUINA VIRTUAL DETECTADA: {disk0}",
-                    "O sistema está rodando em ambiente virtualizado. " +
-                    "Screen-share em VM pode ser usado para ocultar atividade do host real. " +
-                    "DMA cheats também podem ser usados com VM para isolar o processo do cheat.",
-                    $"Disco: {disk0}"
-                ));
+                var mfr  = (biosKey.GetValue("SystemManufacturer") ?? biosKey.GetValue("BaseBoardManufacturer"))?.ToString() ?? "";
+                var prod = (biosKey.GetValue("SystemProductName")  ?? biosKey.GetValue("BaseBoardProduct"))?.ToString()      ?? "";
+                var combined = (mfr + " " + prod).ToLowerInvariant();
+                foreach (var (kw, label) in VmStrings)
+                    if (combined.Contains(kw)) { signals.Add($"BIOS: {label} ({mfr} / {prod})".TrimEnd()); break; }
             }
         }
-        catch (Exception ex) { LogPartialError("Dados de virtualização inacessíveis via registry", ex); }
+        catch { }
+
+        // 3. VM guest software / service registry keys
+        var vmRegistryChecks = new[]
+        {
+            (@"SOFTWARE\VMware, Inc.\VMware Tools",              "VMware Tools instalado"),
+            (@"SOFTWARE\Oracle\VirtualBox Guest Additions",      "VirtualBox Guest Additions instalado"),
+            (@"SYSTEM\CurrentControlSet\Services\vmtoolsd",      "Serviço VMware Tools (vmtoolsd)"),
+            (@"SYSTEM\CurrentControlSet\Services\VBoxService",   "Serviço VirtualBox (VBoxService)"),
+            (@"SYSTEM\CurrentControlSet\Services\vmbus",         "Barramento Hyper-V (vmbus)"),
+            (@"SYSTEM\CurrentControlSet\Services\vmicheartbeat", "Hyper-V Integration Services"),
+        };
+        foreach (var (regPath, label) in vmRegistryChecks)
+        {
+            try
+            {
+                using var k = Registry.LocalMachine.OpenSubKey(regPath);
+                if (k != null) signals.Add(label);
+            }
+            catch { }
+        }
+
+        if (signals.Count == 0) return;
+
+        findings.Add(new Finding(
+            RiskLevel.High,
+            FindingCategory.SystemTampering,
+            "System Info",
+            $"MÁQUINA VIRTUAL DETECTADA ({signals.Count} indicador(es))",
+            "O sistema está rodando em ambiente virtualizado. " +
+            "Screen-share em VM pode ser usado para ocultar atividade do host real. " +
+            "DMA cheats também podem ser usados com VM para isolar o processo do cheat.\n" +
+            "Indicadores:\n" + string.Join("\n", signals.Select(s => $"  • {s}")),
+            string.Join(" | ", signals)
+        ));
+    }
+
+    private void CheckSteamInstallations(List<Finding> findings)
+    {
+        var steamPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // User-level Steam (most common)
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(@"Software\Valve\Steam");
+            var p = key?.GetValue("SteamPath")?.ToString();
+            if (!string.IsNullOrEmpty(p)) steamPaths.Add(p);
+        }
+        catch { }
+
+        // Machine-level Steam (both native and Wow6432Node for 64-bit Windows)
+        foreach (var regPath in new[] { @"SOFTWARE\Valve\Steam", @"SOFTWARE\Wow6432Node\Valve\Steam" })
+        {
+            try
+            {
+                using var key = Registry.LocalMachine.OpenSubKey(regPath);
+                var p = key?.GetValue("InstallPath")?.ToString();
+                if (!string.IsNullOrEmpty(p)) steamPaths.Add(p);
+            }
+            catch { }
+        }
+
+        if (steamPaths.Count == 0) return;
+
+        // Count library folders from libraryfolders.vdf inside each Steam installation
+        var libraryCount = 0;
+        foreach (var steamPath in steamPaths)
+        {
+            var vdf = Path.Combine(steamPath, "steamapps", "libraryfolders.vdf");
+            if (!File.Exists(vdf)) continue;
+            try
+            {
+                var content = File.ReadAllText(vdf);
+                // vdf format: "path" "<folder_path>" entries — count unique path values
+                var matches = System.Text.RegularExpressions.Regex.Matches(
+                    content, @"""path""\s+""([^""]+)""",
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                libraryCount += matches.Count;
+            }
+            catch { }
+        }
+
+        var summary = steamPaths.Count == 1
+            ? steamPaths.First()
+            : string.Join("; ", steamPaths);
+
+        findings.Add(new Finding(
+            RiskLevel.Info,
+            FindingCategory.SystemTampering,
+            "System Info",
+            $"Steam: {steamPaths.Count} instalação(ões){(libraryCount > 0 ? $", {libraryCount} biblioteca(s)" : "")}",
+            $"Instalações Steam encontradas no registro.\nCaminhos: {summary}",
+            summary
+        ));
     }
 }

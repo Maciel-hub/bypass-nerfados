@@ -59,7 +59,10 @@ public class DefenderModule : BaseModule
                         var lower = detail.ToLowerInvariant();
                         bool isCheat = CheatDatabase.KnownExecutables.Keys
                             .Any(k => lower.Contains(k.Replace(".exe", "")));
-                        bool isSuspicious = CheatDatabase.HasSuspiciousKeyword(lower);
+                        // Guard: skip keyword check if description refers to a known-legitimate path
+                        // (e.g. Defender events for Echo's own harness files at D:\BypassNerfados\)
+                        bool isSuspicious = CheatDatabase.HasSuspiciousKeyword(lower) &&
+                                            !CheatDatabase.IsKnownLegitimate(lower);
 
                         var risk = (record.Id == 1116 || record.Id == 1118)
                             ? (isCheat || isSuspicious ? RiskLevel.Critical : RiskLevel.High)

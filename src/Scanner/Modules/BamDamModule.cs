@@ -113,7 +113,8 @@ public class BamDamModule : BaseModule
                             continue;
                         }
 
-                        // Suspicious paths
+                        // Suspicious paths — skip known-legitimate software at unusual locations
+                        if (CheatDatabase.IsKnownLegitimate(exePath)) continue;
                         var pathRisk = ClassifyExecutablePath(exePath);
                         if (pathRisk >= RiskLevel.High)
                         {

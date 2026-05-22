@@ -99,8 +99,10 @@ public class UsnJournalModule : BaseModule
             return;
         }
 
-        // Suspicious keyword in exe/dll name
-        if ((ext == ".exe" || ext == ".dll") && CheatDatabase.HasSuspiciousKeyword(lower))
+        // Suspicious keyword in exe/dll name — suppress standard .NET runtime DLLs
+        if ((ext == ".exe" || ext == ".dll") &&
+            CheatDatabase.HasSuspiciousKeyword(lower) &&
+            !IsStandardRuntimeFile(lower))
         {
             findings.Add(new Finding(
                 RiskLevel.High,
@@ -278,8 +280,9 @@ public class UsnJournalModule : BaseModule
             if (!ExecutableExts.Contains(ext) && !ArchiveExts.Contains(ext)) continue;
             if (!createdByName.TryGetValue(del.FileNameLower, out var createTime)) continue;
 
-            bool isSuspicious = CheatDatabase.KnownExecutables.ContainsKey(del.FileNameLower)
-                             || CheatDatabase.HasSuspiciousKeyword(del.FileNameLower);
+            bool isSuspicious = (CheatDatabase.KnownExecutables.ContainsKey(del.FileNameLower)
+                             || CheatDatabase.HasSuspiciousKeyword(del.FileNameLower))
+                             && !IsStandardRuntimeFile(del.FileNameLower);
             if (!isSuspicious) continue; // generic runtime files (node, libssl, sqlite…) — not a signal
 
             if (del.Timestamp.HasValue && createTime.HasValue)
@@ -471,6 +474,18 @@ public class UsnJournalModule : BaseModule
         or ".ps1" or ".bat" or ".vbs" or ".pf"
         or ".evtx" or ".lnk" or ".automaticDestinations-ms" or ".customDestinations-ms"
         or ".py" or ".cfg";
+
+    // Returns true for standard .NET runtime / framework DLLs whose names happen to contain
+    // suspicious keywords (e.g. "loader", "inject") but are not cheats.
+    // These appear in USN records whenever the .NET runtime is updated or apps are published.
+    private static bool IsStandardRuntimeFile(string nameLower) =>
+        nameLower.StartsWith("system.") ||
+        nameLower.StartsWith("microsoft.extensions.") ||
+        nameLower.StartsWith("microsoft.aspnetcore.") ||
+        nameLower.StartsWith("microsoft.netcore.") ||
+        nameLower.StartsWith("windowsbase") ||
+        nameLower == "webview2loader.dll" ||
+        CheatDatabase.IsKnownLegitimate(nameLower);
 
     // FullPath intentionally omitted — USN Journal provides filename only.
     // Path-based analysis requires MFT parent-chain reconstruction (out of scope).

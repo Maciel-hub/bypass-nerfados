@@ -125,7 +125,7 @@ public static class CheatDatabase
         "cheat", "hack", "bypass", "inject", "loader", "aimbot", "wallhack",
         "esp", "triggerbot", "bhop", "spinbot", "ragebot", "hvh",
         "keyauth", "skript", "skid", "ghost", "gosth", "farinha",
-        "citizen", "fivem_bypass", "norecoil", "aimassist", "triggerassist",
+        "fivem_bypass", "norecoil", "aimassist", "triggerassist",
         "storm", "xrc", "wexize", "regedit_cleaner", "logcleaner",
         // Famílias FiveM conhecidas
         "eulen", "redengine", "susano", "tzproject", "spoofer",
@@ -228,6 +228,16 @@ public static class CheatDatabase
         "echo kilo", "echo kilo studios",
         "eks_seatbelt", "eks_respawn", "eks_hat",
         "echo-notify", "echonotify",
+
+        // Echo Nerfados Shield XDR — our own product; suppress self-detection
+        // Covers: installed path C:\Program Files\EchoNerfados\..., exe names, harness paths
+        "echonerfados", "echo nerfados", "nerfados_shield",
+        "echoharness", "memoryharness", "fvem_b_harness",
+        // Dev environment — D:\BypassNerfados\; never on a suspect's machine
+        "bypassnerfados",
+
+        // EA Anti-Cheat — legitimate anti-cheat (triggers "inject"/"bypass" keywords in some events)
+        "eaanticheat", @"\ea\ac\",
     };
 
     // Publisher name fragments that identify well-known legitimate vendors.

@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using BypassNerfados.Scanner.Data;
 using BypassNerfados.Scanner.Models;
 
 namespace BypassNerfados.Scanner.Core;
@@ -200,9 +201,10 @@ public static class Correlator
         var suspiciousFindings = result.Findings
             .Where(f => f.Timestamp.HasValue &&
                         f.Risk >= RiskLevel.Medium &&
-                        f.Category is FindingCategory.Cheat
-                                   or FindingCategory.SuspiciousExecution
-                                   or FindingCategory.KernelArtifact)
+                        (f.Category is FindingCategory.Cheat
+                                    or FindingCategory.SuspiciousExecution
+                                    or FindingCategory.KernelArtifact) &&
+                        !CheatDatabase.IsKnownLegitimate(f.Entity ?? ""))
             .ToList();
 
         if (suspiciousFindings.Count == 0) return;
