@@ -559,31 +559,39 @@ public class SystemInfoModule : BaseModule
         catch (Exception ex) { LogPartialError("Enumeração de dispositivos desconhecidos falhou", ex); }
     }
 
-    // VM string fragments matched against BIOS and disk strings (strong indicators)
+    // VM guest string fragments matched against BIOS and disk strings.
+    // "microsoft corporation" intentionally excluded: Surface and other physical MS hardware
+    // report this manufacturer, so it cannot be a standalone strong signal.
     private static readonly (string Keyword, string Label)[] VmGuestStrings =
     [
-        ("vmware",      "VMware"),
-        ("virtualbox",  "VirtualBox"),
-        ("vbox",        "VirtualBox"),
-        ("qemu",        "QEMU/KVM"),
-        ("xen",         "Xen"),
-        ("parallels",   "Parallels"),
-        ("innotek",     "VirtualBox (innotek)"),
-        ("bochs",       "Bochs"),
-        // Hyper-V guest BIOS/disk strings — distinct from host capability
-        ("microsoft corporation",  "Hyper-V guest (Microsoft Corp)"),
-        ("virtual machine",        "Hyper-V guest (Virtual Machine)"),
-        ("virtual disk",           "Hyper-V guest (Virtual Disk)"),
-        ("msft virtual",           "Hyper-V guest (MSFT)"),
+        ("vmware",         "VMware"),
+        ("virtualbox",     "VirtualBox"),
+        ("vbox",           "VirtualBox"),
+        ("qemu",           "QEMU/KVM"),
+        ("xen",            "Xen"),
+        ("parallels",      "Parallels"),
+        ("innotek",        "VirtualBox (innotek)"),
+        ("bochs",          "Bochs"),
+        // Hyper-V guest: product name/disk must contain "virtual" explicitly.
+        // Physical hosts running Hyper-V do NOT show these strings in their own BIOS/disk.
+        ("virtual machine", "Hyper-V guest (Virtual Machine)"),
+        ("virtual disk",    "Hyper-V guest (Virtual Disk)"),
+        ("msft virtual",    "Hyper-V guest (MSFT)"),
     ];
 
     private void CheckVirtualization(List<Finding> findings)
     {
-        // Scoring approach — prevents false positives on physical hosts with Hyper-V installed.
-        // Strong signals (BIOS/disk virtual, guest additions): each worth 2 points.
-        // Weak signals (Hyper-V service keys, which exist on physical hosts with Hyper-V feature): 1 point.
-        // HIGH finding only when score >= 2.
-        // INFO finding when only weak signals present (Hyper-V host capability, not a guest).
+        // Two-tier classification — prevents false positives on physical hosts with Hyper-V.
+        //
+        // Strong signals (BIOS/disk contain VM string, or guest additions present):
+        //   → required for High. One strong signal is enough.
+        //
+        // Weak signals (Hyper-V service keys with Boot/System/Auto start):
+        //   → context-only. No matter how many, they can NEVER produce High alone.
+        //   → weak-only without any strong signal → Info at most (Hyper-V host capability).
+        //
+        // This ensures that a physical host with Hyper-V feature installed (vmbus Start=0,
+        // vid Start=1, etc.) never reaches High without actual guest evidence.
 
         var strongSignals = new List<string>();
         var weakSignals   = new List<string>();
@@ -645,10 +653,10 @@ public class SystemInfoModule : BaseModule
             catch { }
         }
 
-        // 4. Hyper-V service keys — WEAK indicator.
-        //    vmbus and vmicheartbeat exist on physical hosts that have the Hyper-V Windows Feature
-        //    installed (even with services Stopped/Manual). Only count as evidence when combined
-        //    with a strong signal or when the service is actually running (start type = 1/2/4).
+        // 4. Hyper-V service keys — context-only (weak) indicator.
+        //    vmbus and vid exist on physical hosts that installed the Hyper-V Windows Feature.
+        //    They are Boot/System start by design on the host, not because the machine is a guest.
+        //    Collect them for context display only — they never contribute to a High finding.
         var hypervKeys = new[]
         {
             (@"SYSTEM\CurrentControlSet\Services\vmbus",         "Hyper-V vmbus"),
@@ -662,20 +670,15 @@ public class SystemInfoModule : BaseModule
             {
                 using var k = Registry.LocalMachine.OpenSubKey(regPath);
                 if (k == null) continue;
-                // Start type: 0=Boot, 1=System, 2=Automatic, 3=Manual, 4=Disabled
                 var startType = k.GetValue("Start") as int?;
                 if (startType is 0 or 1 or 2)
-                    weakSignals.Add($"{label} (Start={startType} — automático)");
-                // else: Manual/Disabled on host machine — ignore as standalone signal
+                    weakSignals.Add($"{label} (Start={startType})");
             }
             catch { }
         }
 
-        var score = strongSignals.Count * 2 + weakSignals.Count;
-
-        if (score == 0) return;
-
-        if (score >= 2)
+        // Decision: strong signals required for High — weak-only never reaches High.
+        if (strongSignals.Count >= 1)
         {
             var allSignals = strongSignals.Concat(weakSignals).ToList();
             findings.Add(new Finding(
@@ -690,18 +693,17 @@ public class SystemInfoModule : BaseModule
                 string.Join(" | ", allSignals)
             ));
         }
-        else
+        else if (weakSignals.Count > 0)
         {
-            // Only weak signals (e.g. Hyper-V host capability with Start=Auto but no BIOS/disk/guest evidence)
+            // Hyper-V Windows Feature installed on a physical host — not a VM guest.
             findings.Add(new Finding(
                 RiskLevel.Info,
                 FindingCategory.SystemTampering,
                 "System Info",
                 "Hyper-V: recurso de host detectado (não é VM guest)",
-                "Chaves de serviço Hyper-V encontradas com inicialização automática, mas sem indicadores de guest " +
+                "Chaves de serviço Hyper-V encontradas, mas sem indicadores de guest " +
                 "(BIOS/disco virtual, VMware Tools, VirtualBox GAs). " +
-                "Provavelmente é o recurso Hyper-V do Windows instalado no host físico. " +
-                "Sinal fraco isolado — não indica uso de cheat.",
+                "Recurso Hyper-V instalado no host físico — não indica uso de cheat.",
                 string.Join(" | ", weakSignals)
             ));
         }
