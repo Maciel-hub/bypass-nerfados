@@ -696,6 +696,8 @@ public class SystemInfoModule : BaseModule
         else if (weakSignals.Count > 0)
         {
             // Hyper-V Windows Feature installed on a physical host — not a VM guest.
+            // ScoreEligible=false: Info findings don't score, but set explicitly to prevent
+            // future refactors from accidentally including this in risk totals.
             findings.Add(new Finding(
                 RiskLevel.Info,
                 FindingCategory.SystemTampering,
@@ -705,7 +707,7 @@ public class SystemInfoModule : BaseModule
                 "(BIOS/disco virtual, VMware Tools, VirtualBox GAs). " +
                 "Recurso Hyper-V instalado no host físico — não indica uso de cheat.",
                 string.Join(" | ", weakSignals)
-            ));
+            ) { ScoreEligible = false });
         }
     }
 

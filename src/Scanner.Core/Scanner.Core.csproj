@@ -11,7 +11,7 @@
     <AssemblyTitle>Echo Nerfados Core</AssemblyTitle>
     <Product>Echo Nerfados Shield XDR</Product>
     <Description>Echo Nerfados core scanner engine — shared by CLI and GUI hosts</Description>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <!-- Files live in the sibling Scanner folder; disable the default glob -->
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
