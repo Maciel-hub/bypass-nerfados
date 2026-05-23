@@ -89,6 +89,7 @@ public static class HtmlTemplate
             ("memoria",       "Memória",        "warn"),
             ("bypass",        "Bypass",         "danger"),
             ("outros",        "Outros",         ""),
+            ("sessaofivem",   "Sessão FiveM",   "danger"),
             ("timeline",      "Timeline",       ""),
             ("cobertura",     "Cobertura",      ""),
         };
@@ -98,6 +99,7 @@ public static class HtmlTemplate
             "resumo"        => true,
             "diagnostico"   => hasBundles,
             "provas-fortes" => provasFortes.Count > 0,
+            "sessaofivem"   => result.FiveMSessionContexts.Count > 0,
             "timeline"      => allTimed.Count > 0,
             "cobertura"     => result.ModuleCoverage.Count > 0 || TabFindings("cobertura").Count > 0,
             _               => TabFindings(id).Count > 0
@@ -108,6 +110,7 @@ public static class HtmlTemplate
             "resumo"        => result.Findings.Count,
             "diagnostico"   => result.EvidenceBundles.Count,
             "provas-fortes" => provasFortes.Count,
+            "sessaofivem"   => result.FiveMSessionContexts.Count,
             "timeline"      => allTimed.Count,
             "cobertura"     => result.ModuleCoverage.Count,
             _               => TabFindings(id).Count
@@ -438,6 +441,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 case "memoria":     sb.AppendLine(FindingsTabHtml("MEMÓRIA / PROCESSOS",           TabFindings("memoria"),   "memoria",   "var(--high)",     "Process Memory — DLLs injetadas, módulos suspeitos")); break;
                 case "bypass":        sb.AppendLine(BypassTabHtml(TabFindings("bypass"))); break;
                 case "outros":      sb.AppendLine(FindingsTabHtml("OUTROS INDICADORES",            TabFindings("outros"),    "outros",    "var(--muted)",    "System Info · Event Viewer · Defender · Rede · SRUM · File System")); break;
+                case "sessaofivem": sb.AppendLine(FiveMSessionTabHtml(result)); break;
                 case "timeline":    sb.AppendLine(TimelineTabHtml(allTimed, config)); break;
                 case "cobertura":   sb.AppendLine(CoberturaTabHtml(result, TabFindings("cobertura"))); break;
             }
@@ -698,6 +702,124 @@ document.addEventListener('DOMContentLoaded', function() {
             "Anti-Forensics · System Tampering · Service Tampering · Limpeza de Logs · Reconfiguração do Defender"));
 
         return sb.ToString();
+    }
+
+    private static string FiveMSessionTabHtml(ScanResult result)
+    {
+        var sb = new StringBuilder();
+        var ctxs = result.FiveMSessionContexts;
+
+        sb.AppendLine($"""<div class="tab-heading" style="color:var(--critical)">SESSÃO FIVEM<span>{ctxs.Count} executáveis classificados</span></div>""");
+
+        var direct  = ctxs.Where(c => c.Relation == FiveMRelation.DirectInteraction)
+                          .OrderByDescending(c => (int)c.Risk).ToList();
+        var near    = ctxs.Where(c => c.Relation == FiveMRelation.NearSession)
+                          .OrderByDescending(c => (int)c.Risk).ToList();
+        var outside = ctxs.Where(c => c.Relation == FiveMRelation.OutsideSession)
+                          .OrderByDescending(c => (int)c.Risk).ToList();
+
+        void Section(string title, string color, List<FiveMSessionContext> list)
+        {
+            sb.AppendLine($"""
+<div style="margin:20px 0 8px;padding:10px 14px;background:linear-gradient(90deg,{color}18,var(--panel));border-left:3px solid {color};border-radius:4px;display:flex;align-items:center;gap:8px">
+  <span style="color:{color};font-size:13px;font-weight:800">{Esc(title)}</span>
+  <span style="color:var(--dim);font-size:11px">{list.Count} executável{(list.Count == 1 ? "" : "is")}</span>
+</div>
+""");
+
+            if (list.Count == 0)
+            {
+                sb.AppendLine("""<div style="color:var(--dim);font-size:12px;padding:4px 14px;margin-bottom:12px">Nenhum executável nesta categoria.</div>""");
+                return;
+            }
+
+            sb.AppendLine("""
+<div style="overflow-x:auto;margin-bottom:16px">
+<table>
+  <thead>
+    <tr>
+      <th>Executável</th>
+      <th>Caminho</th>
+      <th>Delta</th>
+      <th>Fonte</th>
+      <th>Prova</th>
+      <th>Risco</th>
+      <th>Confiança</th>
+      <th>Validar</th>
+    </tr>
+  </thead>
+  <tbody>
+""");
+
+            foreach (var c in list)
+            {
+                var riskColor = c.Risk switch
+                {
+                    RiskLevel.Critical => "var(--critical)",
+                    RiskLevel.High     => "var(--high)",
+                    RiskLevel.Medium   => "var(--medium)",
+                    RiskLevel.Low      => "var(--low)",
+                    _                  => "var(--info)"
+                };
+                var riskLabel = c.Risk switch
+                {
+                    RiskLevel.Critical => "CRÍTICO",
+                    RiskLevel.High     => "ALTO",
+                    RiskLevel.Medium   => "MÉDIO",
+                    RiskLevel.Low      => "BAIXO",
+                    _                  => "INFO"
+                };
+                var confLabel = c.Confidence switch
+                {
+                    Confidence.Confirmed => "CONFIRMADO",
+                    Confidence.High      => "Alta",
+                    Confidence.Medium    => "Média",
+                    _                    => "Baixa"
+                };
+                var deltaHtml = c.DeltaMinutes is { } d
+                    ? FormatDeltaHtml(d)
+                    : "<span style=\"color:var(--dim)\">—</span>";
+                var pathHtml  = c.Path != null
+                    ? $"""<span style="font-family:monospace;font-size:10px;color:var(--dim);word-break:break-all">{Esc(c.Path)}</span>"""
+                    : "<span style=\"color:var(--dim)\">—</span>";
+                var sources   = Esc(string.Join(", ", c.Sources));
+                var hint      = c.ValidationHint != null
+                    ? $"""<span style="color:#fde68a;font-size:10px">{Esc(c.ValidationHint)}</span>"""
+                    : "<span style=\"color:var(--dim)\">—</span>";
+
+                sb.AppendLine($"""
+    <tr data-search="{Esc(c.FileName + " " + (c.Path ?? "") + " " + c.EvidenceSummary)}">
+      <td style="font-weight:600;color:var(--text)">{Esc(c.FileName)}</td>
+      <td>{pathHtml}</td>
+      <td style="font-family:monospace;font-size:11px">{deltaHtml}</td>
+      <td style="color:var(--muted);font-size:11px">{sources}</td>
+      <td style="color:var(--muted);font-size:11px">{Esc(c.EvidenceSummary)}</td>
+      <td><span style="color:{riskColor};font-weight:700;font-size:11px">{riskLabel}</span></td>
+      <td style="color:var(--muted);font-size:11px">{confLabel}</td>
+      <td>{hint}</td>
+    </tr>
+""");
+            }
+
+            sb.AppendLine("  </tbody>\n</table>\n</div>");
+        }
+
+        Section("&#9632; Interagiram com FiveM",    "#ef4444", direct);
+        Section("&#9650; Próximos da sessão",        "#f97316", near);
+        Section("&#9679; Fora de contexto",          "#64748b", outside);
+
+        return sb.ToString();
+    }
+
+    private static string FormatDeltaHtml(double delta)
+    {
+        var abs   = Math.Abs(delta);
+        var sign  = delta >= 0 ? "+" : "-";
+        var color = Math.Abs(delta) <= 30 ? "var(--high)" : "var(--dim)";
+        var text  = abs >= 60
+            ? $"{sign}{(int)(abs / 60)}h{(int)(abs % 60):00}"
+            : $"{sign}{abs:F1} min";
+        return $"""<span style="color:{color}">{text}</span>""";
     }
 
     private static string CoberturaTabHtml(ScanResult result, List<Finding> coverageFindings)

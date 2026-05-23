@@ -27,6 +27,7 @@
   <!-- Core engine — all files except ConsoleUI / LiveDashboard (Spectre.Console-only) -->
   <ItemGroup>
     <Compile Include="..\Scanner\Core\Correlator.cs" />
+    <Compile Include="..\Scanner\Core\FiveMSessionAnalyzer.cs" />
     <Compile Include="..\Scanner\Core\EvidenceEnricher.cs" />
     <Compile Include="..\Scanner\Core\FindingDeduplicator.cs" />
     <Compile Include="..\Scanner\Core\LicenseValidator.cs" />
@@ -36,6 +37,7 @@
     <Compile Include="..\Scanner\Core\ScanProgressUpdate.cs" />
     <Compile Include="..\Scanner\Data\CheatDatabase.cs" />
     <Compile Include="..\Scanner\Models\EvidenceBundle.cs" />
+    <Compile Include="..\Scanner\Models\FiveMSessionContext.cs" />
     <Compile Include="..\Scanner\Models\Finding.cs" />
     <Compile Include="..\Scanner\Models\ModuleCoverageEntry.cs" />
     <Compile Include="..\Scanner\Models\ScanResult.cs" />

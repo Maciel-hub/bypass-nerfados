@@ -220,15 +220,31 @@ public static class Correlator
 
             if (inWindow.Count == 0) continue;
 
-            var entities  = string.Join(", ", inWindow.Take(5).Select(f => f.Entity ?? f.Title).Distinct());
-            var modules   = string.Join(", ", inWindow.Select(f => f.Module).Distinct());
-            var ruleKey   = $"CORR_FIVEM_SESSION_{sessionTime:yyyyMMddHH}";
+            var entities = string.Join(", ", inWindow.Take(5).Select(f => f.Entity ?? f.Title).Distinct());
+            var modules  = string.Join(", ", inWindow.Select(f => f.Module).Distinct());
+            var ruleKey  = $"CORR_FIVEM_SESSION_{sessionTime:yyyyMMddHH}";
 
-            // Don't emit duplicate session correlations
             if (result.Findings.Any(f => f.RuleId == ruleKey)) continue;
 
+            // Critical only when direct evidence or 2+ independent sources exist.
+            // Direct: BAM_COEXEC, Memory modules, or FiveM Application Data paths.
+            bool hasDirectEvidence = inWindow.Any(f =>
+                f.RuleId?.StartsWith("BAM_COEXEC_") == true ||
+                f.Module is "Memory DLL Trace" or "Memory String Scan" ||
+                FiveMSessionAnalyzer.HasFiveMDataPath(f));
+
+            int distinctModules = inWindow.Select(f => f.Module).Distinct().Count();
+            bool hasMultipleSources = distinctModules >= 2;
+
+            var risk       = (hasDirectEvidence || hasMultipleSources) ? RiskLevel.Critical : RiskLevel.High;
+            var confidence = hasDirectEvidence  ? Confidence.High :
+                             hasMultipleSources ? Confidence.Medium : Confidence.Low;
+            var hint = (!hasDirectEvidence && !hasMultipleSources)
+                ? "Executáveis genéricos próximos à sessão sem prova direta de interação — validar manualmente."
+                : null;
+
             result.Findings.Add(new Finding(
-                RiskLevel.Critical,
+                risk,
                 FindingCategory.Cheat,
                 "Correlação",
                 $"EXECUÇÃO SUSPEITA NA SESSÃO FIVEM ({inWindow.Count} evento(s))",
@@ -237,9 +253,10 @@ public static class Correlator
                 $"Eventos correlacionados: {entities}",
                 $"Sessão: {sessionTime:HH:mm:ss} | {inWindow.Count} evento(s) na janela",
                 timestamp: sessionTime,
-                confidence: inWindow.Count >= 2 ? Confidence.High : Confidence.Medium,
+                confidence: confidence,
                 ruleId: ruleKey,
-                entity: $"fivem-session@{sessionTime:yyyyMMddHH}"
+                entity: $"fivem-session@{sessionTime:yyyyMMddHH}",
+                validationHint: hint
             ));
             break; // uma correlação por run é suficiente
         }

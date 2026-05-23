@@ -24,6 +24,7 @@ public class ScanResult
     public bool IsAdministrator { get; set; }
 
     public List<Finding> Findings { get; } = new();
+    public List<FiveMSessionContext> FiveMSessionContexts { get; } = new();
     public List<EvidenceBundle> EvidenceBundles { get; } = new();
     public List<ModuleCoverageEntry> ModuleCoverage { get; } = new();
     public List<string> ModulesRun { get; } = new();

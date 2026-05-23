@@ -146,6 +146,7 @@ public class ScanOrchestrator
             "Analisando padrões entre módulos."));
 
         Correlator.Correlate(_result);
+        FiveMSessionAnalyzer.Analyze(_result);
 
         // Noise reduction: threshold driven by score_weights.json (default: Medium+Low)
         var noiseRisk = ParseRisk(_config.Rules.Score.NoiseMinRisk, RiskLevel.Medium);

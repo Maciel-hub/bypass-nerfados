@@ -46,7 +46,8 @@ public static class EvidenceExporter
             OverallRisk           = result.OverallRiskLabel,
             Findings              = result.Findings.Select(FindingDto.From).ToList(),
             EvidenceBundles       = result.EvidenceBundles.Select(BundleDto.From).ToList(),
-            ModuleCoverage        = result.ModuleCoverage.Select(ModuleCoverageDto.From).ToList()
+            ModuleCoverage        = result.ModuleCoverage.Select(ModuleCoverageDto.From).ToList(),
+            FiveMSessionContexts  = result.FiveMSessionContexts.Select(FiveMSessionContextDto.From).ToList()
         };
         WriteJson(Path.Combine(runFolder, "evidence.json"), dto);
 
@@ -231,9 +232,10 @@ file sealed class EvidenceExportDto
     public int      EligibleFindingCount  { get; init; }
     public int      FilteredFindingCount  { get; init; }
     public string   OverallRisk           { get; init; } = "";
-    public List<FindingDto>         Findings        { get; init; } = [];
-    public List<BundleDto>          EvidenceBundles { get; init; } = [];
-    public List<ModuleCoverageDto>  ModuleCoverage  { get; init; } = [];
+    public List<FindingDto>                Findings             { get; init; } = [];
+    public List<BundleDto>                 EvidenceBundles      { get; init; } = [];
+    public List<ModuleCoverageDto>         ModuleCoverage       { get; init; } = [];
+    public List<FiveMSessionContextDto>    FiveMSessionContexts { get; init; } = [];
 }
 
 file sealed class ModuleExportDto
@@ -335,5 +337,39 @@ file sealed class BundleDto
         Summary          = b.Summary,
         BypassIndicators = b.BypassIndicators,
         ValidationSteps  = b.ValidationSteps
+    };
+}
+
+file sealed class FiveMSessionContextDto
+{
+    public string    Entity          { get; init; } = "";
+    public string    FileName        { get; init; } = "";
+    public string?   Path            { get; init; }
+    public string    Relation        { get; init; } = "";
+    public DateTime? EventTime       { get; init; }
+    public DateTime? SessionTime     { get; init; }
+    public double?   DeltaMinutes    { get; init; }
+    public string[]  Sources         { get; init; } = [];
+    public string    EvidenceSummary { get; init; } = "";
+    public string    Risk            { get; init; } = "";
+    public string    Confidence      { get; init; } = "";
+    public string?   RuleId          { get; init; }
+    public string?   ValidationHint  { get; init; }
+
+    public static FiveMSessionContextDto From(Models.FiveMSessionContext c) => new()
+    {
+        Entity          = c.Entity,
+        FileName        = c.FileName,
+        Path            = c.Path,
+        Relation        = c.Relation.ToString(),
+        EventTime       = c.EventTime,
+        SessionTime     = c.SessionTime,
+        DeltaMinutes    = c.DeltaMinutes,
+        Sources         = c.Sources,
+        EvidenceSummary = c.EvidenceSummary,
+        Risk            = c.Risk.ToString(),
+        Confidence      = c.Confidence.ToString(),
+        RuleId          = c.RuleId,
+        ValidationHint  = c.ValidationHint
     };
 }
