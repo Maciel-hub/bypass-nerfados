@@ -559,35 +559,53 @@ public class SystemInfoModule : BaseModule
         catch (Exception ex) { LogPartialError("Enumeração de dispositivos desconhecidos falhou", ex); }
     }
 
-    private static readonly (string Keyword, string Label)[] VmStrings =
+    // VM string fragments matched against BIOS and disk strings (strong indicators)
+    private static readonly (string Keyword, string Label)[] VmGuestStrings =
     [
         ("vmware",      "VMware"),
         ("virtualbox",  "VirtualBox"),
         ("vbox",        "VirtualBox"),
         ("qemu",        "QEMU/KVM"),
-        ("hyper-v",     "Hyper-V"),
         ("xen",         "Xen"),
         ("parallels",   "Parallels"),
         ("innotek",     "VirtualBox (innotek)"),
         ("bochs",       "Bochs"),
+        // Hyper-V guest BIOS/disk strings — distinct from host capability
+        ("microsoft corporation",  "Hyper-V guest (Microsoft Corp)"),
+        ("virtual machine",        "Hyper-V guest (Virtual Machine)"),
+        ("virtual disk",           "Hyper-V guest (Virtual Disk)"),
+        ("msft virtual",           "Hyper-V guest (MSFT)"),
     ];
 
     private void CheckVirtualization(List<Finding> findings)
     {
-        var signals = new List<string>();
+        // Scoring approach — prevents false positives on physical hosts with Hyper-V installed.
+        // Strong signals (BIOS/disk virtual, guest additions): each worth 2 points.
+        // Weak signals (Hyper-V service keys, which exist on physical hosts with Hyper-V feature): 1 point.
+        // HIGH finding only when score >= 2.
+        // INFO finding when only weak signals present (Hyper-V host capability, not a guest).
 
-        // 1. Disk enum (original check — most reliable for online VMs)
+        var strongSignals = new List<string>();
+        var weakSignals   = new List<string>();
+
+        // 1. Disk enum — strong indicator; VMware/VBox/QEMU disk strings only appear in actual guests
         try
         {
             using var diskKey = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\Disk\Enum");
             var disk0 = diskKey?.GetValue("0")?.ToString() ?? "";
             var lower = disk0.ToLowerInvariant();
-            foreach (var (kw, label) in VmStrings)
-                if (lower.Contains(kw)) { signals.Add($"Disco: {label} ({disk0})"); break; }
+            foreach (var (kw, label) in VmGuestStrings)
+            {
+                if (lower.Contains(kw))
+                {
+                    strongSignals.Add($"Disco: {label} ({disk0})");
+                    break;
+                }
+            }
         }
-        catch { }
+        catch (Exception ex) { LogPartialError("CheckVirtualization: leitura do disco falhou", ex); }
 
-        // 2. BIOS manufacturer / product name
+        // 2. BIOS manufacturer / product name — strong indicator
         try
         {
             using var biosKey = Registry.LocalMachine.OpenSubKey(@"HARDWARE\DESCRIPTION\System\BIOS");
@@ -596,45 +614,97 @@ public class SystemInfoModule : BaseModule
                 var mfr  = (biosKey.GetValue("SystemManufacturer") ?? biosKey.GetValue("BaseBoardManufacturer"))?.ToString() ?? "";
                 var prod = (biosKey.GetValue("SystemProductName")  ?? biosKey.GetValue("BaseBoardProduct"))?.ToString()      ?? "";
                 var combined = (mfr + " " + prod).ToLowerInvariant();
-                foreach (var (kw, label) in VmStrings)
-                    if (combined.Contains(kw)) { signals.Add($"BIOS: {label} ({mfr} / {prod})".TrimEnd()); break; }
+                foreach (var (kw, label) in VmGuestStrings)
+                {
+                    if (combined.Contains(kw))
+                    {
+                        strongSignals.Add($"BIOS: {label} ({mfr.Trim()} / {prod.Trim()})");
+                        break;
+                    }
+                }
             }
         }
         catch { }
 
-        // 3. VM guest software / service registry keys
-        var vmRegistryChecks = new[]
+        // 3. Guest additions (VMware Tools / VirtualBox GAs) — strong indicator;
+        //    these are installed inside the VM, not on the host.
+        var guestAdditions = new[]
         {
-            (@"SOFTWARE\VMware, Inc.\VMware Tools",              "VMware Tools instalado"),
-            (@"SOFTWARE\Oracle\VirtualBox Guest Additions",      "VirtualBox Guest Additions instalado"),
-            (@"SYSTEM\CurrentControlSet\Services\vmtoolsd",      "Serviço VMware Tools (vmtoolsd)"),
-            (@"SYSTEM\CurrentControlSet\Services\VBoxService",   "Serviço VirtualBox (VBoxService)"),
-            (@"SYSTEM\CurrentControlSet\Services\vmbus",         "Barramento Hyper-V (vmbus)"),
-            (@"SYSTEM\CurrentControlSet\Services\vmicheartbeat", "Hyper-V Integration Services"),
+            (@"SOFTWARE\VMware, Inc.\VMware Tools",              "VMware Tools (guest)"),
+            (@"SOFTWARE\Oracle\VirtualBox Guest Additions",      "VirtualBox Guest Additions"),
+            (@"SYSTEM\CurrentControlSet\Services\vmtoolsd",      "Serviço vmtoolsd (guest VMware)"),
+            (@"SYSTEM\CurrentControlSet\Services\VBoxService",   "Serviço VBoxService (guest VirtualBox)"),
         };
-        foreach (var (regPath, label) in vmRegistryChecks)
+        foreach (var (regPath, label) in guestAdditions)
         {
             try
             {
                 using var k = Registry.LocalMachine.OpenSubKey(regPath);
-                if (k != null) signals.Add(label);
+                if (k != null) strongSignals.Add(label);
             }
             catch { }
         }
 
-        if (signals.Count == 0) return;
+        // 4. Hyper-V service keys — WEAK indicator.
+        //    vmbus and vmicheartbeat exist on physical hosts that have the Hyper-V Windows Feature
+        //    installed (even with services Stopped/Manual). Only count as evidence when combined
+        //    with a strong signal or when the service is actually running (start type = 1/2/4).
+        var hypervKeys = new[]
+        {
+            (@"SYSTEM\CurrentControlSet\Services\vmbus",         "Hyper-V vmbus"),
+            (@"SYSTEM\CurrentControlSet\Services\vmicheartbeat", "Hyper-V vmicheartbeat"),
+            (@"SYSTEM\CurrentControlSet\Services\vmicrdv",       "Hyper-V vmicrdv"),
+            (@"SYSTEM\CurrentControlSet\Services\vid",           "Hyper-V vid"),
+        };
+        foreach (var (regPath, label) in hypervKeys)
+        {
+            try
+            {
+                using var k = Registry.LocalMachine.OpenSubKey(regPath);
+                if (k == null) continue;
+                // Start type: 0=Boot, 1=System, 2=Automatic, 3=Manual, 4=Disabled
+                var startType = k.GetValue("Start") as int?;
+                if (startType is 0 or 1 or 2)
+                    weakSignals.Add($"{label} (Start={startType} — automático)");
+                // else: Manual/Disabled on host machine — ignore as standalone signal
+            }
+            catch { }
+        }
 
-        findings.Add(new Finding(
-            RiskLevel.High,
-            FindingCategory.SystemTampering,
-            "System Info",
-            $"MÁQUINA VIRTUAL DETECTADA ({signals.Count} indicador(es))",
-            "O sistema está rodando em ambiente virtualizado. " +
-            "Screen-share em VM pode ser usado para ocultar atividade do host real. " +
-            "DMA cheats também podem ser usados com VM para isolar o processo do cheat.\n" +
-            "Indicadores:\n" + string.Join("\n", signals.Select(s => $"  • {s}")),
-            string.Join(" | ", signals)
-        ));
+        var score = strongSignals.Count * 2 + weakSignals.Count;
+
+        if (score == 0) return;
+
+        if (score >= 2)
+        {
+            var allSignals = strongSignals.Concat(weakSignals).ToList();
+            findings.Add(new Finding(
+                RiskLevel.High,
+                FindingCategory.SystemTampering,
+                "System Info",
+                $"MÁQUINA VIRTUAL DETECTADA ({allSignals.Count} indicador(es))",
+                "O sistema está rodando em ambiente virtualizado. " +
+                "Screen-share em VM pode ser usado para ocultar atividade do host real. " +
+                "DMA cheats também podem ser usados com VM para isolar o processo do cheat.\n" +
+                "Indicadores:\n" + string.Join("\n", allSignals.Select(s => $"  • {s}")),
+                string.Join(" | ", allSignals)
+            ));
+        }
+        else
+        {
+            // Only weak signals (e.g. Hyper-V host capability with Start=Auto but no BIOS/disk/guest evidence)
+            findings.Add(new Finding(
+                RiskLevel.Info,
+                FindingCategory.SystemTampering,
+                "System Info",
+                "Hyper-V: recurso de host detectado (não é VM guest)",
+                "Chaves de serviço Hyper-V encontradas com inicialização automática, mas sem indicadores de guest " +
+                "(BIOS/disco virtual, VMware Tools, VirtualBox GAs). " +
+                "Provavelmente é o recurso Hyper-V do Windows instalado no host físico. " +
+                "Sinal fraco isolado — não indica uso de cheat.",
+                string.Join(" | ", weakSignals)
+            ));
+        }
     }
 
     private void CheckSteamInstallations(List<Finding> findings)

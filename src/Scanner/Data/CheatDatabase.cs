@@ -232,7 +232,7 @@ public static class CheatDatabase
         // Echo Nerfados Shield XDR — our own product; suppress self-detection
         // Covers: installed path C:\Program Files\EchoNerfados\..., exe names, harness paths
         "echonerfados", "echo nerfados", "nerfados_shield",
-        "echoharness", "memoryharness", "fvem_b_harness",
+        "echoharness", "memoryharness", "fivem_b_harness",
         // Dev environment — D:\BypassNerfados\; never on a suspect's machine
         "bypassnerfados",
 
