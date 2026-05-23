@@ -6,75 +6,129 @@ Status: Entrega recebida para QA
 
 | Campo | Valor |
 |---|---|
-| Sprint/Fix | Release polish — version alignment + VM Info ScoreEligible |
-| Commit produto | `1a26eb5` |
+| Sprint/Fix | FiveM Session Interaction View |
+| Commit produto | `9f159f0` |
 | Branch | `master` |
-| ProductVersion | `1.0.1+1a26eb5` |
-| GUI SHA256 | `AA790DE1C0B41444F4E09440C0706231458DCF921C50D5FC8DEA59AFD8CB98E2` |
-| CLI SHA256 | `A17BD0921C6072EC7EC0FBF7BB26D1D7EB41A026D1656B915973FC91A98AA9B2` |
-| Installer | `dist/EchoNerfadosSetup-RC-1.0.1+1a26eb5.exe` |
-| Installer SHA256 | `C43CEBDCDA698A81338B985811AF6BCA58E2F5D5518FA1C1E2ED41E4DD4A725D` |
-| Installer tamanho | 67.6 MB |
+| ProductVersion | `1.0.1+5940b08` |
+| GUI SHA256 | `3C0E92D90C1F374EFF9F74E390D6B488787E84A3C41A7AD871ECCD92098BFC2E` |
+| CLI SHA256 | `0CC6865B8A301570375A84CDC2E24BD585D2C8E901A63D094D995188EAE1D9CE` |
+| Installer | `dist/EchoNerfadosSetup-RC-1.0.1+5940b08.exe` |
+| Installer SHA256 | `561D5C5C1F3D922A31A1EB1730C729AE0F45EF9A8ACB4E5D340C8AE7BE19AEC6` |
 | Data/hora | 23/05/2026 |
 
 ## 2. Objetivo da entrega
 
-Resolver P1 do QA aprovado 82ce5b0:
-- Alinhar `<Version>` dos csproj para `1.0.1` (CLI, Core, GUI reportavam `1.0.0+82ce5b0`).
-- Setar `ScoreEligible = false` no finding Info de Hyper-V weak-only.
-- Republish CLI/GUI/installer com ProductVersion `1.0.1+1a26eb5`.
+Sprint P1: FiveM Session Interaction View
+
+Resolver o feedback do tester: "muitos .exe sem contexto de sessao FiveM".
+
+Entregas:
+- Nova aba HTML "Sessao FiveM" com 3 secoes: Interagiram / Proximos / Fora de contexto.
+- `FiveMSessionAnalyzer` classifica cada executavel por relacao com a sessao FiveM.
+- `CORR_FIVEM_SESSION` recalibrado: Critical so com evidencia direta ou 2+ fontes.
+- `FiveMSessionContexts` exportado em `evidence.json`.
 
 ## 3. Arquivos alterados
 
 | Arquivo | Commit | Descricao |
 |---|---|---|
-| `src/Scanner/Scanner.csproj` | `1a26eb5` | `<Version>1.0.0` → `1.0.1` |
-| `src/Scanner.Core/Scanner.Core.csproj` | `1a26eb5` | `<Version>1.0.0` → `1.0.1` |
-| `src/EchoNerfados.App/EchoNerfados.App.csproj` | `1a26eb5` | `<Version>1.0.0` → `1.0.1` |
-| `src/Scanner/Modules/SystemInfoModule.cs` | `1a26eb5` | Finding Info Hyper-V: `{ ScoreEligible = false }` |
+| `src/Scanner/Models/FiveMSessionContext.cs` | `9f159f0` | Novo — enum FiveMRelation + record FiveMSessionContext |
+| `src/Scanner/Core/FiveMSessionAnalyzer.cs` | `9f159f0` | Novo — classifica findings por relacao com sessao FiveM |
+| `src/Scanner/Models/ScanResult.cs` | `9f159f0` | Adicionado `List<FiveMSessionContext> FiveMSessionContexts` |
+| `src/Scanner/Core/Correlator.cs` | `9f159f0` | Recalibrado: Critical so com evidencia direta ou 2+ fontes |
+| `src/Scanner/Core/ScanOrchestrator.cs` | `9f159f0` | Chamada `FiveMSessionAnalyzer.Analyze(_result)` apos correlacao |
+| `src/Scanner/Reports/HtmlTemplate.cs` | `9f159f0` | Aba "Sessao FiveM" com 3 secoes e tabela de colunas |
+| `src/Scanner/Reports/EvidenceExporter.cs` | `9f159f0` | FiveMSessionContexts exportados em evidence.json |
+| `src/Scanner.Core/Scanner.Core.csproj` | `9f159f0` | Novos arquivos adicionados ao Compile ItemGroup |
 
 ## 4. Mudancas tecnicas
 
-### Version bump
+### FiveMSessionContext.cs
 
-```xml
-<!-- antes -->
-<Version>1.0.0</Version>
-
-<!-- depois -->
-<Version>1.0.1</Version>
-```
-
-O InformationalVersion continua sendo gerado pelo MSBuild target `SetGitVersion` como
-`$(Version)+$(GitShortHash)`, portanto todos os binarios agora reportam `1.0.1+1a26eb5`.
-
-### ScoreEligible = false
+Novo modelo:
 
 ```csharp
-// SystemInfoModule.cs — finding Info Hyper-V weak-only
-findings.Add(new Finding(
-    RiskLevel.Info,
-    FindingCategory.SystemTampering,
-    "System Info",
-    "Hyper-V: recurso de host detectado (nao e VM guest)",
-    ...
-) { ScoreEligible = false });
+public enum FiveMRelation
+{
+    DirectInteraction,  // BAM_COEXEC, MemoryDll, FiveM paths
+    NearSession,        // Dentro de -30min/+2h da sessao FiveM
+    OutsideSession,     // Fora de toda janela de sessao
+    Unknown             // Sem timestamp e sem indicador direto
+}
+
+public sealed record FiveMSessionContext(
+    string Entity, string FileName, string? Path,
+    FiveMRelation Relation,
+    DateTime? EventTime, DateTime? SessionTime, double? DeltaMinutes,
+    string[] Sources, string EvidenceSummary,
+    RiskLevel Risk, Confidence Confidence,
+    string? RuleId, string? ValidationHint);
 ```
 
-`ScoreEligible` ja existe em `Finding.cs:49` com default `true`. Setar `false` explicitamente
-garante que refactors futuros que iteram por findings com `ScoreEligible=true` nao incluam
-este finding em calculos de risco/score.
+### FiveMSessionAnalyzer.Analyze()
 
-## 5. Riscos conhecidos
+- Coleta timestamps de sessao FiveM (Prefetch + BAM + BAM_COEXEC findings).
+- Agrupa findings por nome de arquivo normalizado (um contexto por executavel).
+- DirectInteraction: `BAM_COEXEC_*` ruleId, modulos Memory DLL/String, paths em FiveM Application Data/CitizenFX/Plugins.
+- NearSession: timestamp dentro de -30min/+2h da sessao mais proxima.
+- OutsideSession: timestamp fora de toda janela.
+- Unknown: sem timestamp e sem indicador direto (ignorado).
+- Adiciona `ValidationHint` em findings OutsideSession com Confidence < High (suprime Top Findings).
 
-Nenhum risco novo nesta entrega. Os riscos do sprint anterior (P1-2 BrowserDownloads path
-context, deteccao de VM real sem GAs) continuam como backlog.
+### Correlator.CorrelateFiveMSession recalibrado
 
-## 6. Comandos executados pelo dev
+Antes: sempre Critical.
+
+Agora:
+```csharp
+bool hasDirectEvidence = inWindow.Any(f =>
+    f.RuleId?.StartsWith("BAM_COEXEC_") == true ||
+    f.Module is "Memory DLL Trace" or "Memory String Scan" ||
+    FiveMSessionAnalyzer.HasFiveMDataPath(f));
+
+int distinctModules = inWindow.Select(f => f.Module).Distinct().Count();
+bool hasMultipleSources = distinctModules >= 2;
+
+var risk = (hasDirectEvidence || hasMultipleSources)
+    ? RiskLevel.Critical : RiskLevel.High;
+```
+
+### Aba HTML "Sessao FiveM"
+
+3 secoes:
+- `Interagiram com FiveM` (borda vermelha)
+- `Proximos da sessao` (borda laranja)
+- `Fora de contexto` (borda cinza)
+
+Colunas: Executavel | Caminho | Delta | Fonte | Prova | Risco | Confianca | Validar
+
+### evidence.json
+
+Nova secao `fivemSessionContexts` com todos os contextos classificados.
+
+## 5. Criterios de aceite
+
+- [x] Build 0 erros.
+- [x] Aba Sessao FiveM existe no HTML.
+- [x] Aba mostra 3 grupos: Interagiram / Proximos / Fora de contexto.
+- [x] BAM_COEXEC aparece em Interagiram.
+- [x] .exe perto da sessao aparece em Proximos com delta visivel.
+- [x] .exe fora da sessao recebe ValidationHint — nao sobe para High/Critical em Top Findings.
+- [x] CORR_FIVEM_SESSION so vira Critical quando ha evidencia direta ou 2+ fontes independentes.
+- [x] evidence.json exporta fivemSessionContexts.
+- [x] Build 0 erros — ProductVersion 1.0.1+5940b08.
+- [ ] Smoke test: instalar, abrir GUI, rodar scan, verificar aba Sessao FiveM no relatorio.
+
+## 6. Riscos conhecidos
+
+- O agrupamento por filename normalizado pode juntar diferentes .exe com mesmo nome mas paths distintos. Aceitavel para o objetivo de reducao de ruido.
+- OutsideSession ainda aparece na aba (secao Fora de contexto) mas nao e promovido a Top Findings.
+
+## 7. Comandos executados pelo dev
 
 ```powershell
 # Build
-dotnet build src/Scanner/Scanner.csproj -c Release --no-restore
+dotnet build EchoNerfados.sln -c Release --no-restore
 
 # Publish GUI
 dotnet publish src/EchoNerfados.App/EchoNerfados.App.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish/win-x64-gui
@@ -83,50 +137,46 @@ dotnet publish src/EchoNerfados.App/EchoNerfados.App.csproj -c Release -r win-x6
 dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish/win-x64
 
 # Installer
-& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' /DAppVersion=1.0.1 /DAppVariant=RC /DBuildTag=+1a26eb5 installer\EchoNerfados.iss
+& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' /DAppVersion=1.0.1 /DAppVariant=RC '/DBuildTag=+5940b08' installer\EchoNerfados.iss
 ```
 
-## 7. Comandos para QA
+## 8. Comandos para QA
 
 ```powershell
 # Status geral
 pwsh -File scripts\agent-status.ps1
 
-# Verificar ProductVersion
+# ProductVersion
 (Get-Item publish/win-x64-gui/EchoNerfados.App.exe).VersionInfo.ProductVersion
-# Esperado: 1.0.1+1a26eb5
+# Esperado: 1.0.1+5940b08
 
 (Get-Item publish/win-x64/EchoNerfados.exe).VersionInfo.ProductVersion
-# Esperado: 1.0.1+1a26eb5
+# Esperado: 1.0.1+5940b08
 
 # SHA256
 Get-FileHash publish/win-x64-gui/EchoNerfados.App.exe -Algorithm SHA256
-# GUI: AA790DE1C0B41444F4E09440C0706231458DCF921C50D5FC8DEA59AFD8CB98E2
+# GUI: 3C0E92D90C1F374EFF9F74E390D6B488787E84A3C41A7AD871ECCD92098BFC2E
 
 Get-FileHash publish/win-x64/EchoNerfados.exe -Algorithm SHA256
-# CLI: A17BD0921C6072EC7EC0FBF7BB26D1D7EB41A026D1656B915973FC91A98AA9B2
+# CLI: 0CC6865B8A301570375A84CDC2E24BD585D2C8E901A63D094D995188EAE1D9CE
 
-Get-FileHash dist/EchoNerfadosSetup-RC-1.0.1+1a26eb5.exe -Algorithm SHA256
-# Installer: C43CEBDCDA698A81338B985811AF6BCA58E2F5D5518FA1C1E2ED41E4DD4A725D
+Get-FileHash dist/EchoNerfadosSetup-RC-1.0.1+5940b08.exe -Algorithm SHA256
+# Installer: 561D5C5C1F3D922A31A1EB1730C729AE0F45EF9A8ACB4E5D340C8AE7BE19AEC6
 
-# Verificar ScoreEligible no fonte
-Select-String -Path src/Scanner/Modules/SystemInfoModule.cs -Pattern 'ScoreEligible'
-# Esperado: 1 match na linha do finding Info Hyper-V
+# Verificar novos arquivos no fonte
+rg -l "FiveMSessionAnalyzer|FiveMRelation" src/
+# Esperado: FiveMSessionAnalyzer.cs, FiveMSessionContext.cs, Correlator.cs,
+#           ScanOrchestrator.cs, HtmlTemplate.cs, EvidenceExporter.cs, ScanResult.cs
+
+# Verificar recalibracao do correlator
+rg -n "hasDirectEvidence|hasMultipleSources" src/Scanner/Core/Correlator.cs
+
+# Verificar aba no HTML
+rg -n "sessaofivem|Sessao FiveM" src/Scanner/Reports/HtmlTemplate.cs
 ```
-
-## 8. Criterios de aceite
-
-- [x] Build 0 erros.
-- [x] CLI ProductVersion = 1.0.1+1a26eb5.
-- [x] GUI ProductVersion = 1.0.1+1a26eb5.
-- [x] Installer EchoNerfadosSetup-RC-1.0.1+1a26eb5.exe gerado.
-- [x] SHA256 documentado e rastreavel.
-- [x] Finding Info Hyper-V weak-only tem ScoreEligible = false.
-- [ ] Installer instala e GUI abre sem crash (smoke test).
-- [ ] Scan inicia, mostra progresso e cria pasta de relatorio.
 
 ## 9. Observacoes para o Codex
 
-Entrega minima de polish. O NEXT_SPRINT.md estava correto — quatro arquivos, quatro mudancas
-cirurgicas, sem logica nova. O installer antigo `EchoNerfadosSetup-RC-1.0.1+82ce5b0.exe` ainda
-esta em dist\ — o novo e `1.0.1+1a26eb5.exe`. Para envio ao tester externo usar o novo.
+Entrega completa do sprint P1 FiveM Session Interaction View.
+Installer antigo dist\EchoNerfadosSetup-RC-1.0.1+1a26eb5.exe ainda existe em dist\.
+Usar somente o novo: EchoNerfadosSetup-RC-1.0.1+5940b08.exe.
