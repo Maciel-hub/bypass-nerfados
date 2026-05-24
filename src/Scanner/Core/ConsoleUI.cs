@@ -71,7 +71,7 @@ public static class ConsoleUI
 
         // Top 5 findings
         var top5 = result.Findings
-            .Where(f => f.Risk >= RiskLevel.High)
+            .Where(f => f.Risk >= RiskLevel.High && f.ScoreEligible)
             .OrderByDescending(f => f.Risk)
             .ThenByDescending(f => f.Confidence)
             .Take(5)
@@ -139,7 +139,7 @@ public static class ConsoleUI
 
         // Top 10 high/critical
         var topFindings = result.Findings
-            .Where(f => f.Risk >= RiskLevel.High)
+            .Where(f => f.Risk >= RiskLevel.High && f.ScoreEligible)
             .OrderByDescending(f => f.Risk).ThenByDescending(f => f.Confidence)
             .Take(10).ToList();
 

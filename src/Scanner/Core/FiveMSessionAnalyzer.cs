@@ -63,11 +63,17 @@ public static class FiveMSessionAnalyzer
                 RuleId:         representative.RuleId,
                 ValidationHint: representative.ValidationHint));
 
-            // Add ValidationHint to OutsideSession generic findings to suppress from Top Findings
+            // OutsideSession generic/low-confidence: suppress from Top Findings and scoring
             if (relation == FiveMRelation.OutsideSession && representative.Confidence < Confidence.High)
             {
-                foreach (var f in findings.Where(f => f.ValidationHint == null))
-                    f.ValidationHint = "Fora da janela de sessão FiveM — sem prova de interação direta.";
+                foreach (var f in findings)
+                {
+                    if (f.ValidationHint == null)
+                        f.ValidationHint = "Fora da janela de sessão FiveM — sem prova de interação direta.";
+                    f.ScoreEligible = false;
+                    if (f.Risk > RiskLevel.Medium)
+                        f.Risk = RiskLevel.Medium;
+                }
             }
         }
     }
@@ -206,34 +212,31 @@ public static class FiveMSessionAnalyzer
             catch { }
         }
 
-        if (times.Count == 0)
+        foreach (var svc in new[] { "bam", "dam" })
         {
-            foreach (var svc in new[] { "bam", "dam" })
+            try
             {
-                try
+                using var hive = Registry.LocalMachine.OpenSubKey(
+                    $@"SYSTEM\CurrentControlSet\Services\{svc}\State\UserSettings");
+                if (hive == null) continue;
+                foreach (var sid in hive.GetSubKeyNames())
                 {
-                    using var hive = Registry.LocalMachine.OpenSubKey(
-                        $@"SYSTEM\CurrentControlSet\Services\{svc}\State\UserSettings");
-                    if (hive == null) continue;
-                    foreach (var sid in hive.GetSubKeyNames())
+                    using var key = hive.OpenSubKey(sid);
+                    if (key == null) continue;
+                    foreach (var vname in key.GetValueNames())
                     {
-                        using var key = hive.OpenSubKey(sid);
-                        if (key == null) continue;
-                        foreach (var vname in key.GetValueNames())
-                        {
-                            if (string.IsNullOrEmpty(vname)) continue;
-                            var lower = vname.ToLowerInvariant();
-                            if (!lower.EndsWith("\\fivem.exe") && !lower.EndsWith("\\gta5.exe")) continue;
-                            var data = key.GetValue(vname, null,
-                                RegistryValueOptions.DoNotExpandEnvironmentNames) as byte[];
-                            if (data?.Length < 8) continue;
-                            var ft = BitConverter.ToInt64(data!, 0);
-                            if (ft > 0) try { times.Add(DateTime.FromFileTime(ft)); } catch { }
-                        }
+                        if (string.IsNullOrEmpty(vname)) continue;
+                        var lower = vname.ToLowerInvariant();
+                        if (!lower.EndsWith("\\fivem.exe") && !lower.EndsWith("\\gta5.exe")) continue;
+                        var data = key.GetValue(vname, null,
+                            RegistryValueOptions.DoNotExpandEnvironmentNames) as byte[];
+                        if (data?.Length < 8) continue;
+                        var ft = BitConverter.ToInt64(data!, 0);
+                        if (ft > 0) try { times.Add(DateTime.FromFileTime(ft)); } catch { }
                     }
                 }
-                catch { }
             }
+            catch { }
         }
 
         times.AddRange(result.Findings

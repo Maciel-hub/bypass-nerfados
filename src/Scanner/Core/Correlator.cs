@@ -151,42 +151,39 @@ public static class Correlator
             catch { /* prefetch inacessível */ }
         }
 
-        // 2. BAM/DAM — fallback when Prefetch was deleted or SSD has it disabled.
+        // 2. BAM/DAM — always collect regardless of Prefetch availability.
         //    Value names are device paths; we match by filename suffix only.
-        if (fivemTimes.Count == 0)
+        foreach (var svcName in new[] { "bam", "dam" })
         {
-            foreach (var svcName in new[] { "bam", "dam" })
+            try
             {
-                try
+                using var hive = Registry.LocalMachine.OpenSubKey(
+                    $@"SYSTEM\CurrentControlSet\Services\{svcName}\State\UserSettings");
+                if (hive == null) continue;
+
+                foreach (var sid in hive.GetSubKeyNames())
                 {
-                    using var hive = Registry.LocalMachine.OpenSubKey(
-                        $@"SYSTEM\CurrentControlSet\Services\{svcName}\State\UserSettings");
-                    if (hive == null) continue;
+                    using var userKey = hive.OpenSubKey(sid);
+                    if (userKey == null) continue;
 
-                    foreach (var sid in hive.GetSubKeyNames())
+                    foreach (var valueName in userKey.GetValueNames())
                     {
-                        using var userKey = hive.OpenSubKey(sid);
-                        if (userKey == null) continue;
+                        if (string.IsNullOrEmpty(valueName)) continue;
+                        var lower = valueName.ToLowerInvariant();
+                        if (!lower.EndsWith("\\fivem.exe") && !lower.EndsWith("\\gta5.exe")) continue;
 
-                        foreach (var valueName in userKey.GetValueNames())
-                        {
-                            if (string.IsNullOrEmpty(valueName)) continue;
-                            var lower = valueName.ToLowerInvariant();
-                            if (!lower.EndsWith("\\fivem.exe") && !lower.EndsWith("\\gta5.exe")) continue;
+                        var data = userKey.GetValue(valueName, null,
+                            RegistryValueOptions.DoNotExpandEnvironmentNames) as byte[];
+                        if (data == null || data.Length < 8) continue;
 
-                            var data = userKey.GetValue(valueName, null,
-                                RegistryValueOptions.DoNotExpandEnvironmentNames) as byte[];
-                            if (data == null || data.Length < 8) continue;
-
-                            var fileTime = BitConverter.ToInt64(data, 0);
-                            if (fileTime <= 0) continue;
-                            try { fivemTimes.Add(DateTime.FromFileTime(fileTime)); }
-                            catch { /* invalid timestamp */ }
-                        }
+                        var fileTime = BitConverter.ToInt64(data, 0);
+                        if (fileTime <= 0) continue;
+                        try { fivemTimes.Add(DateTime.FromFileTime(fileTime)); }
+                        catch { /* invalid timestamp */ }
                     }
                 }
-                catch { /* BAM/DAM inacessível sem Admin */ }
             }
+            catch { /* BAM/DAM inacessível sem Admin */ }
         }
 
         // 3. BAM co-execution findings already emitted by BamDamModule carry FiveM session timestamps
@@ -234,7 +231,10 @@ public static class Correlator
                 FiveMSessionAnalyzer.HasFiveMDataPath(f));
 
             int distinctModules = inWindow.Select(f => f.Module).Distinct().Count();
-            bool hasMultipleSources = distinctModules >= 2;
+            // Two generic Medium sources alone are insufficient for Critical — require at least one
+            // score-eligible finding with Confidence >= High alongside the second source.
+            bool hasMultipleSources = distinctModules >= 2 &&
+                inWindow.Any(f => f.ScoreEligible && f.Confidence >= Confidence.High);
 
             var risk       = (hasDirectEvidence || hasMultipleSources) ? RiskLevel.Critical : RiskLevel.High;
             var confidence = hasDirectEvidence  ? Confidence.High :

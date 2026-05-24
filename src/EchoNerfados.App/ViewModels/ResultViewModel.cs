@@ -91,7 +91,7 @@ public sealed partial class ResultViewModel : ObservableObject
         }
 
         foreach (var f in result.Findings
-            .Where(f => f.Risk >= RiskLevel.High)
+            .Where(f => f.Risk >= RiskLevel.High && f.ScoreEligible)
             .OrderByDescending(f => f.Risk)
             .ThenByDescending(f => f.Confidence)
             .Take(10))

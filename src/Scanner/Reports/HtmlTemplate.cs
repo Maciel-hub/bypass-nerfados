@@ -70,9 +70,10 @@ public static class HtmlTemplate
 
         // Strong-evidence set: confirmed hash, high+confidence>=high, or correlated
         var provasFortes = result.Findings
-            .Where(f => f.Confidence == Confidence.Confirmed
-                     || (f.Risk >= RiskLevel.High && f.Confidence >= Confidence.High)
-                     || f.RuleId?.StartsWith("CORR_") == true)
+            .Where(f => f.ScoreEligible &&
+                        (f.Confidence == Confidence.Confirmed
+                      || (f.Risk >= RiskLevel.High && f.Confidence >= Confidence.High)
+                      || f.RuleId?.StartsWith("CORR_") == true))
             .OrderByDescending(f => f.Risk).ThenByDescending(f => f.Confidence)
             .ToList();
 
