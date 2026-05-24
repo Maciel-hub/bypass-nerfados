@@ -6,123 +6,82 @@ Status: Entrega recebida para QA
 
 | Campo | Valor |
 |---|---|
-| Sprint/Fix | FiveM Session Interaction View |
-| Commit produto | `9f159f0` |
+| Sprint/Fix | FiveM Session Interaction QA fixes (P0+P1) |
+| Commit produto | `f194191` |
 | Branch | `master` |
-| ProductVersion | `1.0.1+5940b08` |
-| GUI SHA256 | `3C0E92D90C1F374EFF9F74E390D6B488787E84A3C41A7AD871ECCD92098BFC2E` |
-| CLI SHA256 | `0CC6865B8A301570375A84CDC2E24BD585D2C8E901A63D094D995188EAE1D9CE` |
-| Installer | `dist/EchoNerfadosSetup-RC-1.0.1+5940b08.exe` |
-| Installer SHA256 | `561D5C5C1F3D922A31A1EB1730C729AE0F45EF9A8ACB4E5D340C8AE7BE19AEC6` |
+| ProductVersion | `1.0.1+f194191` |
+| GUI SHA256 | `9028F2A0DE1CC8FEC91D6FB94D2F8E8A38D14C21760C90F37E28B9506252D84D` |
+| CLI SHA256 | `E1AAAD7F57A7053A6F451FCD2BE1BEFA51B3AE6D204A26D8C3457AF962013E4C` |
+| Installer | `dist/EchoNerfadosSetup-RC-1.0.1+f194191.exe` |
+| Installer SHA256 | `64FEE608562E3C3068BCDEEB4058D3A70993315CB82E9764C421F80130A2C1AE` |
 | Data/hora | 23/05/2026 |
 
 ## 2. Objetivo da entrega
 
-Sprint P1: FiveM Session Interaction View
+Fix P0/P1 do QA do sprint FiveM Session Interaction View (9f159f0).
 
-Resolver o feedback do tester: "muitos .exe sem contexto de sessao FiveM".
-
-Entregas:
-- Nova aba HTML "Sessao FiveM" com 3 secoes: Interagiram / Proximos / Fora de contexto.
-- `FiveMSessionAnalyzer` classifica cada executavel por relacao com a sessao FiveM.
-- `CORR_FIVEM_SESSION` recalibrado: Critical so com evidencia direta ou 2+ fontes.
-- `FiveMSessionContexts` exportado em `evidence.json`.
+P0: Rebuildar apos o commit da feature para alinhar ProductVersion ao commit final.
+P1: Corrigir 3 issues de comportamento.
 
 ## 3. Arquivos alterados
 
 | Arquivo | Commit | Descricao |
 |---|---|---|
-| `src/Scanner/Models/FiveMSessionContext.cs` | `9f159f0` | Novo — enum FiveMRelation + record FiveMSessionContext |
-| `src/Scanner/Core/FiveMSessionAnalyzer.cs` | `9f159f0` | Novo — classifica findings por relacao com sessao FiveM |
-| `src/Scanner/Models/ScanResult.cs` | `9f159f0` | Adicionado `List<FiveMSessionContext> FiveMSessionContexts` |
-| `src/Scanner/Core/Correlator.cs` | `9f159f0` | Recalibrado: Critical so com evidencia direta ou 2+ fontes |
-| `src/Scanner/Core/ScanOrchestrator.cs` | `9f159f0` | Chamada `FiveMSessionAnalyzer.Analyze(_result)` apos correlacao |
-| `src/Scanner/Reports/HtmlTemplate.cs` | `9f159f0` | Aba "Sessao FiveM" com 3 secoes e tabela de colunas |
-| `src/Scanner/Reports/EvidenceExporter.cs` | `9f159f0` | FiveMSessionContexts exportados em evidence.json |
-| `src/Scanner.Core/Scanner.Core.csproj` | `9f159f0` | Novos arquivos adicionados ao Compile ItemGroup |
+| `src/Scanner/Core/FiveMSessionAnalyzer.cs` | `f194191` | OutsideSession: ScoreEligible=false + Risk cap Medium; BAM sempre coletado |
+| `src/Scanner/Core/Correlator.cs` | `f194191` | BAM sempre coletado; Critical exige Confidence>=High em 2+ fontes |
+| `src/Scanner/Core/ConsoleUI.cs` | `f194191` | Top Findings: filtra por ScoreEligible |
+| `src/EchoNerfados.App/ViewModels/ResultViewModel.cs` | `f194191` | TopFindings: filtra por ScoreEligible |
+| `src/Scanner/Reports/HtmlTemplate.cs` | `f194191` | ProvasFortes: filtra por ScoreEligible |
 
 ## 4. Mudancas tecnicas
 
-### FiveMSessionContext.cs
+### P1-1 — OutsideSession nao polui Top Findings
 
-Novo modelo:
+`FiveMSessionAnalyzer`: OutsideSession com Confidence < High agora recebe:
+- `ScoreEligible = false` — sai do score e do Top Findings
+- `Risk` rebaixado para no maximo Medium se estava acima
+- `ValidationHint` adicionado (ja estava, mantido)
+
+`ConsoleUI` (top5 e top10), `ResultViewModel.TopFindings`, `HtmlTemplate.provasFortes`:
+todos agora filtram `f.ScoreEligible == true` antes de listar High+.
+
+### P1-2 — Sessoes FiveM agora juntam Prefetch + BAM
+
+`FiveMSessionAnalyzer.CollectSessions` e `Correlator.CorrelateFiveMSession`:
+removido `if (times.Count == 0)` antes do loop BAM. Prefetch e BAM sao
+sempre coletados. `Distinct()` no final deduplica timestamps identicos.
+
+### P1-3 — CORR_FIVEM_SESSION Critical exige qualidade de fonte
 
 ```csharp
-public enum FiveMRelation
-{
-    DirectInteraction,  // BAM_COEXEC, MemoryDll, FiveM paths
-    NearSession,        // Dentro de -30min/+2h da sessao FiveM
-    OutsideSession,     // Fora de toda janela de sessao
-    Unknown             // Sem timestamp e sem indicador direto
-}
-
-public sealed record FiveMSessionContext(
-    string Entity, string FileName, string? Path,
-    FiveMRelation Relation,
-    DateTime? EventTime, DateTime? SessionTime, double? DeltaMinutes,
-    string[] Sources, string EvidenceSummary,
-    RiskLevel Risk, Confidence Confidence,
-    string? RuleId, string? ValidationHint);
-```
-
-### FiveMSessionAnalyzer.Analyze()
-
-- Coleta timestamps de sessao FiveM (Prefetch + BAM + BAM_COEXEC findings).
-- Agrupa findings por nome de arquivo normalizado (um contexto por executavel).
-- DirectInteraction: `BAM_COEXEC_*` ruleId, modulos Memory DLL/String, paths em FiveM Application Data/CitizenFX/Plugins.
-- NearSession: timestamp dentro de -30min/+2h da sessao mais proxima.
-- OutsideSession: timestamp fora de toda janela.
-- Unknown: sem timestamp e sem indicador direto (ignorado).
-- Adiciona `ValidationHint` em findings OutsideSession com Confidence < High (suprime Top Findings).
-
-### Correlator.CorrelateFiveMSession recalibrado
-
-Antes: sempre Critical.
-
-Agora:
-```csharp
-bool hasDirectEvidence = inWindow.Any(f =>
-    f.RuleId?.StartsWith("BAM_COEXEC_") == true ||
-    f.Module is "Memory DLL Trace" or "Memory String Scan" ||
-    FiveMSessionAnalyzer.HasFiveMDataPath(f));
-
-int distinctModules = inWindow.Select(f => f.Module).Distinct().Count();
+// antes
 bool hasMultipleSources = distinctModules >= 2;
 
-var risk = (hasDirectEvidence || hasMultipleSources)
-    ? RiskLevel.Critical : RiskLevel.High;
+// depois
+bool hasMultipleSources = distinctModules >= 2 &&
+    inWindow.Any(f => f.ScoreEligible && f.Confidence >= Confidence.High);
 ```
 
-### Aba HTML "Sessao FiveM"
-
-3 secoes:
-- `Interagiram com FiveM` (borda vermelha)
-- `Proximos da sessao` (borda laranja)
-- `Fora de contexto` (borda cinza)
-
-Colunas: Executavel | Caminho | Delta | Fonte | Prova | Risco | Confianca | Validar
-
-### evidence.json
-
-Nova secao `fivemSessionContexts` com todos os contextos classificados.
+Dois Medium genericos de modulos distintos nao mais viram Critical.
 
 ## 5. Criterios de aceite
 
 - [x] Build 0 erros.
-- [x] Aba Sessao FiveM existe no HTML.
-- [x] Aba mostra 3 grupos: Interagiram / Proximos / Fora de contexto.
-- [x] BAM_COEXEC aparece em Interagiram.
-- [x] .exe perto da sessao aparece em Proximos com delta visivel.
-- [x] .exe fora da sessao recebe ValidationHint — nao sobe para High/Critical em Top Findings.
-- [x] CORR_FIVEM_SESSION so vira Critical quando ha evidencia direta ou 2+ fontes independentes.
-- [x] evidence.json exporta fivemSessionContexts.
-- [x] Build 0 erros — ProductVersion 1.0.1+5940b08.
-- [ ] Smoke test: instalar, abrir GUI, rodar scan, verificar aba Sessao FiveM no relatorio.
+- [x] ProductVersion CLI/GUI: `1.0.1+f194191`.
+- [x] Installer: `EchoNerfadosSetup-RC-1.0.1+f194191.exe`.
+- [x] OutsideSession generico: ScoreEligible=false, Risk<=Medium.
+- [x] Top Findings (console/GUI/HTML ProvasFortes): filtra ScoreEligible.
+- [x] Prefetch + BAM coletados sempre.
+- [x] CORR_FIVEM_SESSION Critical: exige Confidence>=High em 2+ fontes.
+- [x] Aba Sessao FiveM continua com 3 secoes.
+- [x] evidence.json continua exportando fivemSessionContexts.
+- [ ] Smoke test: instalar, abrir GUI, scan, verificar aba Sessao FiveM.
 
 ## 6. Riscos conhecidos
 
-- O agrupamento por filename normalizado pode juntar diferentes .exe com mesmo nome mas paths distintos. Aceitavel para o objetivo de reducao de ruido.
-- OutsideSession ainda aparece na aba (secao Fora de contexto) mas nao e promovido a Top Findings.
+- Nenhum risco novo nesta entrega.
+- Agrupamento por filename normalizado (P1-4 do QA) permanece como era:
+  aceitavel no curto prazo conforme avaliado pelo Codex.
 
 ## 7. Comandos executados pelo dev
 
@@ -137,7 +96,7 @@ dotnet publish src/EchoNerfados.App/EchoNerfados.App.csproj -c Release -r win-x6
 dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish/win-x64
 
 # Installer
-& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' /DAppVersion=1.0.1 /DAppVariant=RC '/DBuildTag=+5940b08' installer\EchoNerfados.iss
+& 'C:\Program Files (x86)\Inno Setup 6\ISCC.exe' /DAppVersion=1.0.1 /DAppVariant=RC '/DBuildTag=+f194191' installer\EchoNerfados.iss
 ```
 
 ## 8. Comandos para QA
@@ -146,37 +105,41 @@ dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained
 # Status geral
 pwsh -File scripts\agent-status.ps1
 
-# ProductVersion
+# ProductVersion — esperado: 1.0.1+f194191
 (Get-Item publish/win-x64-gui/EchoNerfados.App.exe).VersionInfo.ProductVersion
-# Esperado: 1.0.1+5940b08
-
 (Get-Item publish/win-x64/EchoNerfados.exe).VersionInfo.ProductVersion
-# Esperado: 1.0.1+5940b08
 
 # SHA256
 Get-FileHash publish/win-x64-gui/EchoNerfados.App.exe -Algorithm SHA256
-# GUI: 3C0E92D90C1F374EFF9F74E390D6B488787E84A3C41A7AD871ECCD92098BFC2E
+# GUI: 9028F2A0DE1CC8FEC91D6FB94D2F8E8A38D14C21760C90F37E28B9506252D84D
 
 Get-FileHash publish/win-x64/EchoNerfados.exe -Algorithm SHA256
-# CLI: 0CC6865B8A301570375A84CDC2E24BD585D2C8E901A63D094D995188EAE1D9CE
+# CLI: E1AAAD7F57A7053A6F451FCD2BE1BEFA51B3AE6D204A26D8C3457AF962013E4C
 
-Get-FileHash dist/EchoNerfadosSetup-RC-1.0.1+5940b08.exe -Algorithm SHA256
-# Installer: 561D5C5C1F3D922A31A1EB1730C729AE0F45EF9A8ACB4E5D340C8AE7BE19AEC6
+Get-FileHash dist/EchoNerfadosSetup-RC-1.0.1+f194191.exe -Algorithm SHA256
+# Installer: 64FEE608562E3C3068BCDEEB4058D3A70993315CB82E9764C421F80130A2C1AE
 
-# Verificar novos arquivos no fonte
-rg -l "FiveMSessionAnalyzer|FiveMRelation" src/
-# Esperado: FiveMSessionAnalyzer.cs, FiveMSessionContext.cs, Correlator.cs,
-#           ScanOrchestrator.cs, HtmlTemplate.cs, EvidenceExporter.cs, ScanResult.cs
+# Verificar ScoreEligible + Risk cap em OutsideSession
+rg -n "ScoreEligible = false|f.Risk = RiskLevel.Medium" src/Scanner/Core/FiveMSessionAnalyzer.cs
 
-# Verificar recalibracao do correlator
-rg -n "hasDirectEvidence|hasMultipleSources" src/Scanner/Core/Correlator.cs
+# Verificar filtro ScoreEligible em Top Findings
+rg -n "ScoreEligible" src/Scanner/Core/ConsoleUI.cs
+rg -n "ScoreEligible" src/EchoNerfados.App/ViewModels/ResultViewModel.cs
 
-# Verificar aba no HTML
-rg -n "sessaofivem|Sessao FiveM" src/Scanner/Reports/HtmlTemplate.cs
+# Verificar coleta de sessoes (sem if(times.Count==0))
+rg -n "if.*times.Count" src/Scanner/Core/FiveMSessionAnalyzer.cs
+# Esperado: 0 matches
+
+# Verificar Critical condition no correlator
+rg -n "hasMultipleSources|Confidence.High" src/Scanner/Core/Correlator.cs
 ```
 
 ## 9. Observacoes para o Codex
 
-Entrega completa do sprint P1 FiveM Session Interaction View.
-Installer antigo dist\EchoNerfadosSetup-RC-1.0.1+1a26eb5.exe ainda existe em dist\.
-Usar somente o novo: EchoNerfadosSetup-RC-1.0.1+5940b08.exe.
+Esta entrega fecha os P0/P1 do QA anterior.
+
+Historial de commits para rastreabilidade:
+- `9f159f0`: feat — FiveM Session Interaction View (feature base)
+- `f194191`: fix — QA fixes P0/P1 (artefato alinhado + comportamento corrigido)
+
+Installer anterior `+5940b08` e `+1a26eb5` ainda existem em dist\. Usar somente `+f194191`.
