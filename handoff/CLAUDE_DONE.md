@@ -6,109 +6,92 @@ Status: Entrega recebida para QA
 
 | Campo | Valor |
 |---|---|
-| Sprint/Fix | Sprint 6 — Stan Menu P0: loader.exe/.credentials/portal chain detection |
-| Commit produto | `bf3527b` |
+| Sprint/Fix | Fix QA Sprint 6 — blockers P0-1, P0-2, P1-1, P1-2 |
+| Commit produto | `98de112` |
 | Branch | `master` |
-| ProductVersion CLI/GUI | `1.0.1+bf3527b` |
-| CLI SHA256 | `BC824B26106F17B56E26BC9B598B62153AA9079DC65FDA44934D3C7E68A02790` |
-| GUI SHA256 | `DB9508FFBA1827C7A257A51565BB66BD4941BCBCF0801579EFD4D0C45072235A` |
-| Installer per-user | `dist/EchoNerfadosSetup-RC-User-1.0.1+bf3527b.exe` |
-| Installer per-user SHA256 | `7D97B929FE688231EE810A130340D9575ED697F3488E499F4AABCFC467E291C5` |
-| Installer admin | `dist/EchoNerfadosSetup-RC-1.0.1+bf3527b.exe` |
-| Installer admin SHA256 | `5319D7E9DA5FEE0EABA37BAB1086DC526DEFC5E1C6957C270FF94138B874BDFA` |
+| ProductVersion CLI/GUI | `1.0.1+98de112` |
+| CLI SHA256 | `DFE8BE6C17E03BA08C670AC02D284C765D21F4C49CAF58DE1DF8F899015FB51B` |
+| GUI SHA256 | `83F98ADA0432C8925DBBE4114B1602A024CFEDF883415F3F55A8D258079EA586` |
+| Installer per-user | `dist/EchoNerfadosSetup-RC-User-1.0.1+98de112.exe` |
+| Installer per-user SHA256 | `097B692E71FD1D8D64C1221BC89FB2B15818549D577F7089095092AF4EA087FA` |
+| Installer admin | `dist/EchoNerfadosSetup-RC-1.0.1+98de112.exe` |
+| Installer admin SHA256 | `83A34357335D215B1FE19CC46EFD5A9CA4F8784B7DC0FE92E37572566FB7806A` |
 | Data/hora | 27/05/2026 |
 
 ## 2. Objetivo da entrega
 
-Sprint 6 P0: Cobertura completa Stan Menu antes do QA.
-
-Problema: Stan foi testado em runtime mas o Echo documentava apenas Prefetch/BAM/UserAssist
-soltos sem cadeia comportamental. RedENGINE e Astrix estavam fortes; Stan ficaria
-subdetectado se liberarmos QA sem esta entrega.
-
-Cadeia a detectar: download de redengine.net/customer-area/orders (Loader-ffb16aac.zip)
-→ loader.exe + f0686phud.credentials no mesmo diretório
-→ execução confirmada por Prefetch LOADER.EXE e BAM
-→ correlação → CoProcessInteraction na aba Sessao FiveM.
+Fix dos 4 blockers do QA Sprint 6 (bf3527b):
+- P0-1: stan_90d.json nao era exportado
+- P0-2: REDENGINE_RANDOM_LOADER_NET marcando OneDrive/FileCoAuth como High
+- P1-1: loader.exe em CoProcessInteraction com delta -1585 min (timestamp errado)
+- P1-2: BROWSER_DL_CHEAT_PORTAL_ARCHIVE nao aparecia para Loader-ffb16aac.zip
 
 ## 3. Arquivos alterados
 
 | Arquivo | Commit | Descricao |
 |---|---|---|
-| `src/Scanner/Modules/StanArtifactsModule.cs` | `bf3527b` | Novo — 5 ruleIds Stan (loader.exe, .credentials, arquivo, Prefetch, BAM) |
-| `src/Scanner/Modules/BrowserDownloadsModule.cs` | `bf3527b` | BROWSER_DL_REDENGINE_PORTAL + BROWSER_DL_CHEAT_PORTAL_ARCHIVE |
-| `src/Scanner/Core/FiveMSessionAnalyzer.cs` | `bf3527b` | STAN_ ruleIds em CoProcessInteraction + BuildSummary Stan + IsExecutableFinding |
-| `src/Scanner/Core/Correlator.cs` | `bf3527b` | CorrelateCheatLoaderChain: CHEAT_GENERIC_LOADER_FROM_PORTAL_DOWNLOAD + CHEAT_GENERIC_LOADER_WITH_CREDENTIAL |
-| `src/Scanner/Core/ScanOrchestrator.cs` | `bf3527b` | Queue(new StanArtifactsModule()) |
-| `src/Scanner.Core/Scanner.Core.csproj` | `bf3527b` | Compile include para StanArtifactsModule.cs |
+| `src/Scanner/Reports/EvidenceExporter.cs` | `98de112` | Adiciona astrix_90d.json e stan_90d.json; adiciona ao _fullCoverageModules |
+| `src/Scanner/Core/SuspiciousCoProcessResolver.cs` | `98de112` | Allowlist filecoauth/onedrive/teams; excluir \microsoft\onedrive\ e \windowsapps\ |
+| `src/Scanner/Core/FiveMSessionAnalyzer.cs` | `98de112` | CoProcess pivot: escolhe timestamp mais proximo da sessao FiveM |
+| `src/Scanner/Modules/BrowserDownloadsModule.cs` | `98de112` | Remove guard portalFamily==null: CHEAT_PORTAL_ARCHIVE emite mesmo com portal match |
 
-## 4. Mudancas tecnicas
+## 4. Mudancas tecnicas por blocker
 
-### StanArtifactsModule (novo)
+### P0-1: stan_90d.json nao exportado
 
-Detecta familia Stan Menu / loader generico com credencial:
+`EvidenceExporter.Export()`: adicionadas 2 linhas apos `redengine_{d}.json`:
+```csharp
+WriteModuleJson(result, runFolder, "Astrix Artifacts", $"astrix_{d}.json", lookback);
+WriteModuleJson(result, runFolder, "Stan Artifacts",   $"stan_{d}.json",   lookback);
+```
 
-**ScanLoaderExeOnDisk**: varredura de Downloads/Desktop/Documents/Temp por `loader.exe`.
-- Co-localizado com .credentials → `STAN_LOADER_WITH_CREDENTIAL` (High/High)
-- Sozinho → `STAN_LOADER_EXE` (Medium/Medium) — nao Critical, exige correlacao
+`_fullCoverageModules`: adicionados "Astrix Artifacts" e "Stan Artifacts" para relatar
+coverageOk=true (modulos de filesystem-scan, nao event-log com janela limitada).
 
-**ScanCredentialsFiles**: varredura por `*.credentials`.
-- SHA256 computado; conteudo NUNCA logado.
-- loader.exe no mesmo dir → `STAN_CREDENTIALS_NEAR_LOADER` (High/High)
-- Nome aleatorio isolado → `STAN_RANDOM_CREDENTIAL_FILE` (Medium/Medium)
+### P0-2: FP OneDrive/FileCoAuth
 
-**ScanLoaderArchives**: Loader-*.zip, Loader-*.rar, Executor*V*.zip, *spoofer*.zip
-→ `STAN_LOADER_ARCHIVE` (High/Medium)
+`IsUserWritablePath`: adicionados 2 novos exclusoes:
+- `\microsoft\onedrive\` → exclui FileCoAuth.exe e outros binarios do OneDrive
+- `\windowsapps\` → exclui Microsoft Store apps
 
-**ScanPrefetchBam**:
-- Prefetch LOADER.EXE* → `STAN_PREFETCH_EXECUTED` (High/High)
-- BAM loader.exe em user-writable path (via IsUserWritablePath) → `STAN_BAM_EXECUTED` (High/High)
+`s_knownSafe`: adicionados ~14 processos Microsoft/sistema com nomes mixed-case que
+trigavam a heuristica (filecoauth, onedrive, teams, outlook, microsoftedge, searchhost,
+runtimebroker, sihost, textinputhost, startmenuexperiencehost, lockapp,
+applicationframehost, shellexperiencehost, crashpad, crashpad_handler, msedgewebview2).
 
-### BrowserDownloadsModule (modificado)
+### P1-1: CoProcess delta incorreto
 
-Novos helpers:
-- `MatchCheatPortalUrl(urlLower)`: true para redengine.net/customer-area, /orders, /download
-- `IsCheatPortalArchive(fileNameLower)`: true para Loader-*.zip, Executor*.zip, *spoofer*.zip
+`FiveMSessionAnalyzer.DetermineRelation`: bloco `if (isCoProcess)` reescrito.
+Antes: usava `findings.FirstOrDefault(f => f.Timestamp.HasValue)` — podia pegar
+modificacao de arquivo antiga (ex: STAN_LOADER_WITH_CREDENTIAL com mtime de meses atras).
 
-Novos ruleIds emitidos (Chrome/Edge/Brave/Opera + Firefox):
-- `BROWSER_DL_REDENGINE_PORTAL` (High/High): URL do portal redengine.net — supersede BROWSER_DL_SUSPICIOUS_URL generico
-- `BROWSER_DL_CHEAT_PORTAL_ARCHIVE` (High/Medium): arquivo Loader-*.zip ou Executor*.zip (quando URL nao e portal)
+Agora: produto cartesiano findings × sessions → ordena por |delta| → pega o par com
+menor distancia. Garante que o delta exibido no HTML reflete o timestamp de execucao
+(Prefetch/BAM) mais proximo da sessao FiveM, nao um mtime aleatorio de arquivo.
 
-### Correlator.CorrelateCheatLoaderChain (novo)
+### P1-2: BROWSER_DL_CHEAT_PORTAL_ARCHIVE ausente
 
-`CHEAT_GENERIC_LOADER_FROM_PORTAL_DOWNLOAD` (Critical/High):
-- Exige: BROWSER_DL_REDENGINE_PORTAL ou BROWSER_DL_CHEAT_PORTAL_ARCHIVE
-  AND STAN_LOADER_EXE ou STAN_LOADER_WITH_CREDENTIAL ou STAN_PREFETCH_EXECUTED ou STAN_BAM_EXECUTED
+Antes: `if (IsCheatPortalArchive(fileName) && portalFamily == null)` — o guard
+impedia a emissao quando a URL ja havia gerado BROWSER_DL_REDENGINE_PORTAL.
 
-`CHEAT_GENERIC_LOADER_WITH_CREDENTIAL` (High/High):
-- Exige: STAN_LOADER_WITH_CREDENTIAL ou STAN_CREDENTIALS_NEAR_LOADER
-  AND qualquer evidencia de loader (STAN_LOADER_EXE / STAN_PREFETCH_EXECUTED / STAN_BAM_EXECUTED)
-
-### FiveMSessionAnalyzer (modificado)
-
-**DetermineRelation isCoProcess**: adicionados STAN_LOADER_WITH_CREDENTIAL, STAN_CREDENTIALS_NEAR_LOADER,
-STAN_PREFETCH_EXECUTED, STAN_BAM_EXECUTED → classificam como FiveMRelation.CoProcessInteraction.
-(STAN_LOADER_EXE isolado cai em NearSession/OutsideSession conforme timestamp — nao CoProcess.)
-
-**BuildSummary**: novo caso `STAN_` → "Co-processo Stan loader ({modulo})".
-
-**IsExecutableFinding**: STAN_ ruleIds incluidos → aparecem na aba Sessao FiveM.
+Agora: `if (IsCheatPortalArchive(fileName))` — ambos os findings sao emitidos quando
+um Loader-*.zip e baixado do portal. Os ruleIds sao distintos (REDENGINE_PORTAL vs
+CHEAT_PORTAL_ARCHIVE) e sao sinais complementares: URL confirma portal; nome de arquivo
+confirma padrao de entrega Stan/RedENGINE.
 
 ## 5. Criterios de aceite
 
-- [x] Build 0 erros (9 avisos pre-existentes de LicenseValidator/NU1701)
-- [x] Commit `bf3527b` com ProductVersion `1.0.1+bf3527b` nos binarios
+- [x] Build 0 erros (9 avisos pre-existentes)
+- [x] Commit `98de112` com ProductVersion `1.0.1+98de112`
 - [x] Installers gerados e SHA256 documentados
-- [ ] BrowserDownloads: download de redengine.net/customer-area/orders emite BROWSER_DL_REDENGINE_PORTAL
-- [ ] BrowserDownloads: Loader-ffb16aac.zip emite BROWSER_DL_CHEAT_PORTAL_ARCHIVE
-- [ ] StanArtifacts: loader.exe + f0686phud.credentials no mesmo dir emite STAN_LOADER_WITH_CREDENTIAL
-- [ ] StanArtifacts: .credentials isolado emite STAN_RANDOM_CREDENTIAL_FILE sem logar conteudo
-- [ ] StanArtifacts: LOADER.EXE*.PF em Prefetch emite STAN_PREFETCH_EXECUTED
-- [ ] StanArtifacts: BAM loader.exe em caminho de usuario emite STAN_BAM_EXECUTED
-- [ ] Correlator: BROWSER_DL_REDENGINE_PORTAL + STAN_PREFETCH_EXECUTED → CHEAT_GENERIC_LOADER_FROM_PORTAL_DOWNLOAD (Critical)
-- [ ] Correlator: STAN_LOADER_WITH_CREDENTIAL → CHEAT_GENERIC_LOADER_WITH_CREDENTIAL (High)
-- [ ] HTML aba "Sessao FiveM": loader.exe com STAN_LOADER_WITH_CREDENTIAL aparece em Co-processos ativos
-- [ ] loader.exe isolado fora da sessao FiveM NAO vira Critical
+- [ ] stan_90d.json exportado no runFolder apos varredura com Stan Artifacts
+- [ ] astrix_90d.json exportado no runFolder apos varredura com Astrix Artifacts
+- [ ] FileCoAuth.exe NAO gera REDENGINE_RANDOM_LOADER_NET
+- [ ] OneDrive.exe NAO gera REDENGINE_RANDOM_LOADER_NET
+- [ ] loader.exe com STAN_PREFETCH_EXECUTED: delta em CoProcessInteraction reflete
+      timestamp do Prefetch (proximo da sessao FiveM), nao mtime do arquivo no disco
+- [ ] Download Loader-ffb16aac.zip de redengine.net: AMBOS os findings emitidos
+      (BROWSER_DL_REDENGINE_PORTAL e BROWSER_DL_CHEAT_PORTAL_ARCHIVE)
 
 ## 6. Comandos executados pelo dev
 
@@ -117,86 +100,70 @@ STAN_PREFETCH_EXECUTED, STAN_BAM_EXECUTED → classificam como FiveMRelation.CoP
 dotnet build EchoNerfados.sln -c Release --nologo
 
 # Commit
-git add src/Scanner/Modules/StanArtifactsModule.cs src/Scanner/Modules/BrowserDownloadsModule.cs src/Scanner/Core/FiveMSessionAnalyzer.cs src/Scanner/Core/Correlator.cs src/Scanner/Core/ScanOrchestrator.cs src/Scanner.Core/Scanner.Core.csproj
-git commit -m "feat: Stan Menu P0 — loader.exe/.credentials/portal chain detection"
-# hash: bf3527b
+git add src/Scanner/Reports/EvidenceExporter.cs src/Scanner/Core/SuspiciousCoProcessResolver.cs src/Scanner/Core/FiveMSessionAnalyzer.cs src/Scanner/Modules/BrowserDownloadsModule.cs
+git commit
+# hash: 98de112
 
-# Rebuild apos commit (ProductVersion correto)
+# Rebuild apos commit
 dotnet publish src/Scanner/Scanner.csproj -c Release -r win-x64 --self-contained false -o publish/win-x64
 dotnet publish src/EchoNerfados.App/EchoNerfados.App.csproj -c Release -r win-x64 --self-contained false -o publish/win-x64-gui
 
 # Installers
-MSYS_NO_PATHCONV=1 "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /DAppVersion=1.0.1 /DBuildTag=+bf3527b installer/EchoNerfados-RC-User.iss
-MSYS_NO_PATHCONV=1 "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /DAppVersion=1.0.1 /DBuildTag=+bf3527b installer/EchoNerfados.iss
+MSYS_NO_PATHCONV=1 "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /DAppVersion=1.0.1 /DBuildTag=+98de112 installer/EchoNerfados-RC-User.iss
+MSYS_NO_PATHCONV=1 "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" /DAppVersion=1.0.1 /DBuildTag=+98de112 installer/EchoNerfados.iss
 
 # SHA256s
-certutil -hashfile dist/EchoNerfadosSetup-RC-User-1.0.1+bf3527b.exe SHA256
-# 7D97B929FE688231EE810A130340D9575ED697F3488E499F4AABCFC467E291C5
-certutil -hashfile dist/EchoNerfadosSetup-RC-1.0.1+bf3527b.exe SHA256
-# 5319D7E9DA5FEE0EABA37BAB1086DC526DEFC5E1C6957C270FF94138B874BDFA
+certutil -hashfile dist/EchoNerfadosSetup-RC-User-1.0.1+98de112.exe SHA256
+# 097B692E71FD1D8D64C1221BC89FB2B15818549D577F7089095092AF4EA087FA
+certutil -hashfile dist/EchoNerfadosSetup-RC-1.0.1+98de112.exe SHA256
+# 83A34357335D215B1FE19CC46EFD5A9CA4F8784B7DC0FE92E37572566FB7806A
 certutil -hashfile publish/win-x64/EchoNerfados.exe SHA256
-# BC824B26106F17B56E26BC9B598B62153AA9079DC65FDA44934D3C7E68A02790
+# DFE8BE6C17E03BA08C670AC02D284C765D21F4C49CAF58DE1DF8F899015FB51B
 certutil -hashfile publish/win-x64-gui/EchoNerfados.App.exe SHA256
-# DB9508FFBA1827C7A257A51565BB66BD4941BCBCF0801579EFD4D0C45072235A
+# 83F98ADA0432C8925DBBE4114B1602A024CFEDF883415F3F55A8D258079EA586
 ```
 
 ## 7. Comandos para QA
 
 ```powershell
-# 1. Verificar novo modulo no csproj
-Select-String "StanArtifacts" src\Scanner.Core\Scanner.Core.csproj
+# 1. Verificar exports JSON das novas familias
+# Executar varredura e confirmar arquivos no runFolder:
+ls <runFolder>\stan_90d.json
+ls <runFolder>\astrix_90d.json
 
-# 2. Verificar privacidade .credentials — conteudo nunca logado
-Select-String "ReadAllText|ReadAllLines|GetString|ReadToEnd" src\Scanner\Modules\StanArtifactsModule.cs
-# Esperado: nenhum match (apenas ReadAllBytes para SHA256)
+# 2. Verificar allowlist OneDrive
+Select-String "filecoauth|onedrive|windowsapps|microsoft.onedrive" src\Scanner\Core\SuspiciousCoProcessResolver.cs
+# Esperado: ambos em s_knownSafe e em IsUserWritablePath
 
-# 3. Verificar ruleIds BrowserDownloads
-Select-String "BROWSER_DL_REDENGINE_PORTAL|BROWSER_DL_CHEAT_PORTAL_ARCHIVE" src\Scanner\Modules\BrowserDownloadsModule.cs
-# Esperado: 2 matches (emissao dos findings)
+# 3. Teste FP OneDrive (maquina com OneDrive instalado):
+# Executar varredura
+# Verificar: FileCoAuth.exe NAO aparece em REDENGINE_RANDOM_LOADER_NET
 
-# 4. Verificar correlacoes Stan no Correlator
-Select-String "CHEAT_GENERIC_LOADER" src\Scanner\Core\Correlator.cs
-# Esperado: CHEAT_GENERIC_LOADER_FROM_PORTAL_DOWNLOAD e CHEAT_GENERIC_LOADER_WITH_CREDENTIAL
+# 4. Teste delta CoProcessInteraction:
+# Colocar loader.exe em Downloads\ (mtime antigo)
+# Ter PREFETCH LOADER.EXE*.PF recente (proximo da ultima sessao FiveM)
+# Executar varredura
+# Verificar: delta em "Sessao FiveM" reflete diferenca entre Prefetch e sessao, nao mtime do exe
 
-# 5. Verificar CoProcessInteraction para Stan no FiveMSessionAnalyzer
-Select-String "STAN_" src\Scanner\Core\FiveMSessionAnalyzer.cs
-# Esperado: STAN_LOADER_WITH_CREDENTIAL, STAN_CREDENTIALS_NEAR_LOADER, STAN_PREFETCH_EXECUTED, STAN_BAM_EXECUTED, STAN_
+# 5. Teste dual-finding portal+archive:
+# Ter historico do Chrome com download de redengine.net/customer-area/orders/Loader-ffb16aac.zip
+# Executar varredura
+# Verificar: DOIS findings — BROWSER_DL_REDENGINE_PORTAL e BROWSER_DL_CHEAT_PORTAL_ARCHIVE
 
-# 6. Teste funcional (maquina com artefatos Stan):
-# a. Colocar loader.exe + f0686phud.credentials em Downloads\
-# b. Executar varredura
-# c. Verificar: STAN_LOADER_WITH_CREDENTIAL + CHEAT_GENERIC_LOADER_WITH_CREDENTIAL
-
-# 7. Teste BrowserDownloads (Chrome/Edge com historico de redengine.net):
-# a. Verificar: BROWSER_DL_REDENGINE_PORTAL para URL redengine.net/customer-area/orders
-# b. Verificar: BROWSER_DL_CHEAT_PORTAL_ARCHIVE para Loader-*.zip
-
-# 8. SHA256 installers
-certutil -hashfile dist\EchoNerfadosSetup-RC-User-1.0.1+bf3527b.exe SHA256
-# Esperado: 7D97B929FE688231EE810A130340D9575ED697F3488E499F4AABCFC467E291C5
-
-# 9. Verificar que loader.exe SOZINHO (sem .credentials/BAM/Prefetch) e apenas Medium
-# e nao aparece em Co-processos ativos — deve ir para NearSession/OutsideSession
+# 6. SHA256 installers
+certutil -hashfile dist\EchoNerfadosSetup-RC-User-1.0.1+98de112.exe SHA256
+# Esperado: 097B692E71FD1D8D64C1221BC89FB2B15818549D577F7089095092AF4EA087FA
 ```
 
-## 8. Restricao de privacidade (CRITICA)
+## 8. Observacoes para o Codex
 
-StanArtifactsModule NUNCA registra conteudo do .credentials.
-Registra apenas: SHA256 do arquivo, tamanho em bytes, timestamp, caminho, bool co-localizado com loader.exe.
-
-Verificar: Select-String "ReadAllText|ReadAllLines|GetString|ReadToEnd" src\Scanner\Modules\StanArtifactsModule.cs
-Resultado esperado: nenhum match.
-
-## 9. Observacoes para o Codex
-
-- Enviar installer per-user `EchoNerfadosSetup-RC-User-1.0.1+bf3527b.exe` para tester externo
-- Installers anteriores (+5723c2c) sao invalidos para este sprint — nao enviar
-- loader.exe isolado (STAN_LOADER_EXE) sozinho e apenas Medium/Medium — NAO Critical.
-  Critical exige correlacao via Correlator (portal download + loader, ou loader + .credentials).
-- STAN_LOADER_EXE sozinho NAO entra em CoProcessInteraction — cai em NearSession/OutsideSession
-  conforme proximidade temporal com sessao FiveM. Apenas STAN_LOADER_WITH_CREDENTIAL,
-  STAN_CREDENTIALS_NEAR_LOADER, STAN_PREFETCH_EXECUTED e STAN_BAM_EXECUTED classificam CoProcess.
-- CorrelateCheatLoaderChain e chamado apos CorrelateFiveMSession — ordem importa pois
-  os findings CORR_ gerados antes ficam visiveis para o EvidenceEnricher.
-- Sprint anterior (5723c2c): RedENGINE + Astrix. Este sprint: Stan Menu chain. Ambos
-  sao Pre-QA; o Codex deve testar as tres familias neste ciclo.
+- Installer anterior (+bf3527b) invalido para este QA — usar +98de112.
+- P0-2: a allowlist s_knownSafe usa o stem do executavel (sem extensao), lowercase.
+  FileCoAuth.exe → stem "FileCoAuth" → lowercase "filecoauth" → match na allowlist.
+  A exclusao de path \microsoft\onedrive\ e uma segunda linha de defesa para binarios
+  do OneDrive em paths nao cobertos pela allowlist de nomes.
+- P1-1: o algoritmo de pivot agora e O(N×M) onde N=findings, M=sessions. Para o
+  cenario tipico (< 20 findings por grupo, < 10 sessoes FiveM) e negligenciavel.
+- P1-2: o deduplicador (FindingDeduplicator) nao merge findings com ruleIds distintos,
+  entao BROWSER_DL_REDENGINE_PORTAL e BROWSER_DL_CHEAT_PORTAL_ARCHIVE coexistem
+  corretamente para o mesmo download.
