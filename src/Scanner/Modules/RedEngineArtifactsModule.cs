@@ -5,15 +5,12 @@ using BypassNerfados.Scanner.Models;
 namespace BypassNerfados.Scanner.Modules;
 
 // RedENGINE is a FiveM Lua executor with aimbot/ESP/no-recoil.
-// It leaves distinctive artifacts that survive after the main .exe is deleted:
-//   settings.cock   — unique config file, no legitimate software uses this name
-//   *.lua menus     — named menu scripts (absolute.lua, lumia.lua, phaze.lua, nexus.lua)
-//   imgui.ini       — ImGui config written to the GTA V directory during injection
-//   WinRAR temps    — Rar$EXa* / Rar$DIa* extraction dirs containing redEngine.exe
+// v1 artifacts: settings.cock, *.lua menus, imgui.ini, WinRAR temp dirs.
+// v2 runtime artifacts: random-name loader (-cf <numeric>.exe), cfg.dat, port 10001 C2.
 public class RedEngineArtifactsModule : BaseModule
 {
     public override string Name        => "RedENGINE Artifacts";
-    public override string Description => "Artefatos do executor FiveM RedENGINE (settings.cock, menus .lua, imgui.ini, WinRAR)";
+    public override string Description => "Artefatos do executor FiveM RedENGINE (settings.cock, menus .lua, imgui.ini, WinRAR, loader, cfg.dat, porta C2)";
 
     // Menu .lua filenames bundled with or downloaded for RedENGINE loaders
     private static readonly HashSet<string> MenuLuaNames = new(StringComparer.OrdinalIgnoreCase)
@@ -40,10 +37,15 @@ public class RedEngineArtifactsModule : BaseModule
     {
         var findings = new List<Finding>();
 
+        // v1: static artifacts on disk
         ScanSettingsCock(findings, ct);
         ScanMenuLuaFiles(findings, ct);
         ScanImguiIni(findings, ct);
         ScanWinRarTemps(findings, ct);
+
+        // v2: runtime loader pattern (random loader + cfg.dat + -cf payload + C2 port)
+        ScanRandomLoaderWithCfgDat(findings, ct);
+        ScanActiveLoaderProcess(findings, ct);
 
         return Task.FromResult(findings);
     }
@@ -203,6 +205,179 @@ public class RedEngineArtifactsModule : BaseModule
             ));
         }
     }
+
+    // v2: Scan user-writable directories for random-name EXEs co-located with cfg.dat.
+    // cfg.dat in the same folder as a random loader is a strong RedENGINE signal:
+    // nkhDWzGn.exe + cfg.dat in Downloads → REDENGINE_CFG_DAT_NEAR_LOADER.
+    private void ScanRandomLoaderWithCfgDat(List<Finding> findings, CancellationToken ct)
+    {
+        var roots = new[]
+        {
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
+            Path.GetTempPath(),
+            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Temp"),
+        };
+
+        foreach (var root in roots)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (!Directory.Exists(root)) continue;
+
+            try
+            {
+                // Look for cfg.dat files — they are the RedENGINE loader config anchor
+                foreach (var cfgDat in Directory.EnumerateFiles(root, "cfg.dat",
+                    new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, MaxRecursionDepth = 4 }))
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    var dir = Path.GetDirectoryName(cfgDat) ?? "";
+
+                    // Find random-name EXEs in the same directory
+                    var randomExes = Directory.GetFiles(dir, "*.exe", SearchOption.TopDirectoryOnly)
+                        .Where(f => SuspiciousCoProcessResolver.IsRandomName(
+                            Path.GetFileNameWithoutExtension(f)))
+                        .ToList();
+
+                    var cfgModified = File.GetLastWriteTime(cfgDat);
+
+                    if (randomExes.Count > 0)
+                    {
+                        // Strongest pattern: cfg.dat + random loader EXE co-located
+                        var loaderName = Path.GetFileName(randomExes[0]);
+                        var loaderModified = File.GetLastWriteTime(randomExes[0]);
+                        var loaderSize = new FileInfo(randomExes[0]).Length;
+
+                        findings.Add(new Finding(
+                            RiskLevel.Critical,
+                            FindingCategory.Cheat,
+                            Name,
+                            $"REDENGINE LOADER: cfg.dat + loader de nome aleatório co-localizados",
+                            $"Arquivo de configuração cfg.dat encontrado junto a executável de nome aleatório.\n" +
+                            $"Padrão característico do loader RedENGINE (ex: nkhDWzGn.exe + cfg.dat).\n" +
+                            $"Loader: {randomExes[0]}\n" +
+                            $"cfg.dat: {cfgDat}",
+                            $"Loader: {loaderName} ({loaderSize} bytes, {loaderModified:dd/MM/yyyy HH:mm})" +
+                            $" | cfg.dat: {cfgModified:dd/MM/yyyy HH:mm}",
+                            timestamp: cfgModified > loaderModified ? cfgModified : loaderModified,
+                            confidence: Confidence.High,
+                            ruleId: "REDENGINE_CFG_DAT_NEAR_LOADER",
+                            entity: randomExes[0]
+                        ));
+                    }
+                    else
+                    {
+                        // cfg.dat alone in user path — weaker signal, corroboration needed
+                        var cfgSize = new FileInfo(cfgDat).Length;
+                        findings.Add(new Finding(
+                            RiskLevel.Medium,
+                            FindingCategory.SuspiciousExecution,
+                            Name,
+                            $"cfg.dat em caminho de usuário — possível artefato de loader RedENGINE",
+                            $"Arquivo cfg.dat encontrado em localização de usuário.\n" +
+                            $"Quando co-localizado com loader RedENGINE, é o arquivo de configuração do executor.\n" +
+                            $"Caminho: {cfgDat}",
+                            $"Tamanho: {cfgSize} bytes | Modificado: {cfgModified:dd/MM/yyyy HH:mm}",
+                            timestamp: cfgModified,
+                            confidence: Confidence.Low,
+                            ruleId: "REDENGINE_CFG_DAT_STANDALONE",
+                            entity: cfgDat,
+                            validationHint: "Correlacionar com Prefetch de loader de nome aleatório e sessão FiveM"
+                        ));
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex) { LogPartialError($"RedENGINE v2: varredura de cfg.dat em {root} falhou", ex); }
+        }
+    }
+
+    // v2: Detect actively running RedENGINE loaders via SuspiciousCoProcessResolver.
+    // Covers: random loader with -cf payload, numeric payload, port 10001 C2 connection.
+    private void ScanActiveLoaderProcess(List<Finding> findings, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        List<SuspiciousCoProcessResolver.SuspiciousCoProcess> coProcs;
+        try { coProcs = SuspiciousCoProcessResolver.Resolve(); }
+        catch (Exception ex) { LogPartialError("RedENGINE v2: SuspiciousCoProcessResolver falhou", ex); return; }
+
+        foreach (var proc in coProcs)
+        {
+            ct.ThrowIfCancellationRequested();
+            if (proc.IsAstrixProcess) continue; // handled by AstrixArtifactsModule
+
+            if (proc.PayloadPath != null)
+            {
+                // Loader with -cf <payload>.exe → REDENGINE_CMDLINE_CF_PAYLOAD
+                var risk = proc.HasNumericPayload ? RiskLevel.Critical : RiskLevel.High;
+                var conf = proc.HasNumericPayload ? Confidence.High    : Confidence.Medium;
+                var ruleId = proc.HasNumericPayload
+                    ? "REDENGINE_NUMERIC_PAYLOAD_EXECUTED"
+                    : "REDENGINE_CMDLINE_CF_PAYLOAD";
+
+                findings.Add(new Finding(
+                    risk,
+                    FindingCategory.Cheat,
+                    Name,
+                    proc.HasNumericPayload
+                        ? $"REDENGINE ATIVO: loader com payload numérico (-cf {Path.GetFileName(proc.PayloadPath)})"
+                        : $"REDENGINE LOADER: argumento -cf com payload detectado",
+                    $"Loader RedENGINE ativo com argumento de payload na linha de comando.\n" +
+                    $"Padrão: <loader>.exe -cf <payload>.exe\n" +
+                    $"Loader: {proc.ExePath}\n" +
+                    $"Payload: {proc.PayloadPath}\n" +
+                    $"Linha de comando: {TruncateCmd(proc.CommandLine)}",
+                    $"PID: {proc.Pid} | Payload: {Path.GetFileName(proc.PayloadPath)}" +
+                    (proc.HasExternalConnection ? $" | Conexões: {string.Join(", ", proc.ExternalConnections.Take(2))}" : ""),
+                    timestamp: proc.StartTime,
+                    confidence: conf,
+                    ruleId: ruleId,
+                    entity: proc.ExePath
+                ));
+            }
+
+            if (proc.ExternalConnections.Any(c => c.EndsWith(":10001")))
+            {
+                // Active C2 connection on port 10001 (RedENGINE licensing/C2 server)
+                var c2Conns = proc.ExternalConnections.Where(c => c.EndsWith(":10001")).ToList();
+                findings.Add(new Finding(
+                    RiskLevel.Critical,
+                    FindingCategory.Cheat,
+                    Name,
+                    $"REDENGINE C2 ATIVO: conexão na porta 10001 ({proc.ProcessName})",
+                    $"Processo com nome aleatório conectado à porta 10001 — porta C2/licenciamento do RedENGINE.\n" +
+                    $"Processo: {proc.ExePath}",
+                    $"PID: {proc.Pid} | Destinos: {string.Join(", ", c2Conns)}",
+                    timestamp: proc.StartTime,
+                    confidence: Confidence.High,
+                    ruleId: "REDENGINE_ACTIVE_C2_PORT",
+                    entity: proc.ExePath
+                ));
+            }
+            else if (proc.HasExternalConnection && !proc.IsRedEngineLoader && proc.PayloadPath == null)
+            {
+                // Random-name EXE in user path with external connection but no -cf → suspicious loader
+                findings.Add(new Finding(
+                    RiskLevel.High,
+                    FindingCategory.SuspiciousExecution,
+                    Name,
+                    $"Loader de nome aleatório com conexão externa ativa: {proc.ProcessName}",
+                    $"Executável com nome aleatório em caminho de usuário com conexão de rede ativa.\n" +
+                    $"Padrão associado a loaders RedENGINE e similares.\n" +
+                    $"Caminho: {proc.ExePath}",
+                    $"PID: {proc.Pid} | Conexões: {string.Join(", ", proc.ExternalConnections.Take(3))}",
+                    timestamp: proc.StartTime,
+                    confidence: Confidence.Medium,
+                    ruleId: "REDENGINE_RANDOM_LOADER_NET",
+                    entity: proc.ExePath,
+                    validationHint: "Confirmar com cfg.dat no mesmo diretório, Prefetch e sessão FiveM"
+                ));
+            }
+        }
+    }
+
+    private static string TruncateCmd(string? cmd, int max = 120) =>
+        cmd == null ? "" : cmd.Length <= max ? cmd : cmd[..max] + "…";
 
     // RedENGINE is typically distributed as a ZIP/RAR archive. WinRAR extraction
     // leaves temporary directories (Rar$EXa* / Rar$DIa*) in %TEMP% that may

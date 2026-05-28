@@ -3,6 +3,7 @@ namespace BypassNerfados.Scanner.Models;
 public enum FiveMRelation
 {
     DirectInteraction,
+    CoProcessInteraction,   // suspicious loader/co-process running alongside FiveM
     NearSession,
     OutsideSession,
     Unknown

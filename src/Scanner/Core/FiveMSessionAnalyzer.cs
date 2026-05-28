@@ -84,6 +84,8 @@ public static class FiveMSessionAnalyzer
                    or FindingCategory.MemoryAnomaly
                    or FindingCategory.KernelArtifact ||
         f.RuleId?.StartsWith("BAM_COEXEC_") == true ||
+        f.RuleId?.StartsWith("REDENGINE_") == true ||
+        f.RuleId?.StartsWith("ASTRIX_") == true ||
         (f.Entity ?? f.Title).EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
         (f.Entity ?? f.Title).EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
 
@@ -111,6 +113,31 @@ public static class FiveMSessionAnalyzer
                 deltaMinutes = (pivot.Value - closest).TotalMinutes;
             }
             return FiveMRelation.DirectInteraction;
+        }
+
+        // Co-process: random loader with -cf payload, cfg.dat, C2 port, or active Astrix process
+        bool isCoProcess = findings.Any(f =>
+            f.RuleId is "REDENGINE_CFG_DAT_NEAR_LOADER"
+                     or "REDENGINE_CMDLINE_CF_PAYLOAD"
+                     or "REDENGINE_NUMERIC_PAYLOAD_EXECUTED"
+                     or "REDENGINE_ACTIVE_C2_PORT"
+                     or "REDENGINE_RANDOM_LOADER_NET"
+                     or "ASTRIX_ACTIVE_PROCESS"
+                     or "ASTRIX_EXE_USERPATH"
+                     or "ASTRIX_CONFIG_FILE"
+                     or "ASTRIX_PREFETCH_EXECUTED"
+                     or "ASTRIX_BAM_EXECUTED");
+
+        if (isCoProcess)
+        {
+            var pivot = findings.FirstOrDefault(f => f.Timestamp.HasValue)?.Timestamp;
+            if (pivot.HasValue && sessions.Count > 0)
+            {
+                var closest = sessions.MinBy(s => Math.Abs((s - pivot.Value).TotalMinutes));
+                sessionTime  = closest;
+                deltaMinutes = (pivot.Value - closest).TotalMinutes;
+            }
+            return FiveMRelation.CoProcessInteraction;
         }
 
         var timed = findings.Where(f => f.Timestamp.HasValue).ToList();
@@ -178,6 +205,12 @@ public static class FiveMSessionAnalyzer
                 => "String de cheat em memória de processo FiveM/GTA",
             FiveMRelation.DirectInteraction
                 => $"Caminho em FiveM Application Data ({f.Module})",
+            FiveMRelation.CoProcessInteraction when f.RuleId?.StartsWith("ASTRIX_") == true
+                => $"Co-processo Astrix External ({f.Module})",
+            FiveMRelation.CoProcessInteraction when f.RuleId?.StartsWith("REDENGINE_") == true
+                => $"Co-processo RedENGINE loader ({f.Module})",
+            FiveMRelation.CoProcessInteraction
+                => $"Co-processo suspeito junto ao FiveM ({f.Module})",
             FiveMRelation.NearSession
                 => $"Próximo à sessão FiveM ({FormatDelta(delta)})",
             FiveMRelation.OutsideSession

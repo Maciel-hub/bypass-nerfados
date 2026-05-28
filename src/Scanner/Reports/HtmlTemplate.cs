@@ -712,12 +712,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         sb.AppendLine($"""<div class="tab-heading" style="color:var(--critical)">SESSÃO FIVEM<span>{ctxs.Count} executáveis classificados</span></div>""");
 
-        var direct  = ctxs.Where(c => c.Relation == FiveMRelation.DirectInteraction)
-                          .OrderByDescending(c => (int)c.Risk).ToList();
-        var near    = ctxs.Where(c => c.Relation == FiveMRelation.NearSession)
-                          .OrderByDescending(c => (int)c.Risk).ToList();
-        var outside = ctxs.Where(c => c.Relation == FiveMRelation.OutsideSession)
-                          .OrderByDescending(c => (int)c.Risk).ToList();
+        var direct   = ctxs.Where(c => c.Relation == FiveMRelation.DirectInteraction)
+                           .OrderByDescending(c => (int)c.Risk).ToList();
+        var coProc   = ctxs.Where(c => c.Relation == FiveMRelation.CoProcessInteraction)
+                           .OrderByDescending(c => (int)c.Risk).ToList();
+        var near     = ctxs.Where(c => c.Relation == FiveMRelation.NearSession)
+                           .OrderByDescending(c => (int)c.Risk).ToList();
+        var outside  = ctxs.Where(c => c.Relation == FiveMRelation.OutsideSession)
+                           .OrderByDescending(c => (int)c.Risk).ToList();
 
         void Section(string title, string color, List<FiveMSessionContext> list)
         {
@@ -806,6 +808,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
 
         Section("&#9632; Interagiram com FiveM",    "#ef4444", direct);
+        Section("&#9670; Co-processos ativos",       "#c026d3", coProc);
         Section("&#9650; Próximos da sessão",        "#f97316", near);
         Section("&#9679; Fora de contexto",          "#64748b", outside);
 

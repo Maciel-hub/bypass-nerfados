@@ -88,7 +88,9 @@ public class NetworkModule : BaseModule
                                 RiskLevel.Critical, FindingCategory.Cheat, Name,
                                 $"CHEAT COM CONEXÃO ATIVA: {credibleCheat!.Name} ({proc.ProcessName})",
                                 $"Executável suspeito com conexões externas ativas.\nCaminho: {exePath}",
-                                $"Conexões: {remotes}"
+                                $"Conexões: {remotes}",
+                                ruleId: "NET_KNOWN_CHEAT_ACTIVE",
+                                entity: exePath
                             ));
                         }
                         else if (isGenericSuspect)
@@ -99,6 +101,8 @@ public class NetworkModule : BaseModule
                                 $"Nome associado a cheats FiveM, path fora de localização legítima conhecida, com rede ativa.\nCaminho: {exePath}",
                                 $"Conexões: {remotes} | Publisher: {publisher ?? "ausente"}",
                                 confidence: Confidence.Low,
+                                ruleId: "NET_SUSPICIOUS_GENERIC_PROCESS",
+                                entity: exePath,
                                 validationHint: "Verificar hash SHA256, assinatura digital e correlação com Prefetch/BAM/sessão FiveM"
                             ));
                         }
@@ -108,7 +112,9 @@ public class NetworkModule : BaseModule
                                 RiskLevel.High, FindingCategory.NetworkActivity, Name,
                                 $"Conexão suspeita: {proc.ProcessName} (PID {proc.Id})",
                                 $"Executável suspeito com conexões externas ativas.\nCaminho: {exePath}",
-                                $"Conexões: {remotes}"
+                                $"Conexões: {remotes}",
+                                ruleId: "NET_SUSPICIOUS_USERPATH_PROCESS",
+                                entity: exePath
                             ));
                         }
                     }
@@ -119,8 +125,21 @@ public class NetworkModule : BaseModule
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
-                    if (conn.RemotePort is >= 4444 and <= 9999 &&
-                        !IsKnownSafeProcess(nameLower))
+                    // Port 10001 is the RedENGINE C2/licensing port — flag at High for any process
+                    if (conn.RemotePort == 10001 && !IsKnownSafeProcess(nameLower))
+                    {
+                        findings.Add(new Finding(
+                            RiskLevel.High,
+                            FindingCategory.NetworkActivity,
+                            Name,
+                            $"Conexão na porta 10001 (C2 RedENGINE): {proc.ProcessName}",
+                            $"Porta 10001 é usada pelo servidor C2/licenciamento do RedENGINE.\nRemoto: {conn.RemoteAddress}:{conn.RemotePort}\nCaminho: {exePath}",
+                            $"PID: {proc.Id}",
+                            ruleId: "NET_COPROC_NEAR_FIVEM",
+                            entity: exePath
+                        ));
+                    }
+                    else if (conn.RemotePort is >= 4444 and <= 9999 && !IsKnownSafeProcess(nameLower))
                     {
                         findings.Add(new Finding(
                             RiskLevel.Medium,
@@ -128,7 +147,9 @@ public class NetworkModule : BaseModule
                             Name,
                             $"Conexão em porta suspeita: {proc.ProcessName}:{conn.RemotePort}",
                             $"Processo conectando em porta não padrão.\nRemoto: {conn.RemoteAddress}:{conn.RemotePort}",
-                            $"PID: {proc.Id} | Caminho: {exePath}"
+                            $"PID: {proc.Id} | Caminho: {exePath}",
+                            ruleId: "NET_NONSTANDARD_PORT",
+                            entity: exePath
                         ));
                     }
                 }

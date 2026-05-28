@@ -87,6 +87,24 @@ public class MemoryStringScanModule : BaseModule
             if (FiveMPrefixes.Any(pfx => lower.StartsWith(pfx))) Add(p);
         }
 
+        // Also scan suspicious co-processes discovered by SuspiciousCoProcessResolver.
+        try
+        {
+            foreach (var coProc in SuspiciousCoProcessResolver.Resolve())
+            {
+                if (!seen.Contains(coProc.Pid))
+                {
+                    try
+                    {
+                        var p = Process.GetProcessById(coProc.Pid);
+                        Add(p);
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch { }
+
         return result;
     }
 

@@ -28,6 +28,7 @@
   <ItemGroup>
     <Compile Include="..\Scanner\Core\Correlator.cs" />
     <Compile Include="..\Scanner\Core\FiveMSessionAnalyzer.cs" />
+    <Compile Include="..\Scanner\Core\SuspiciousCoProcessResolver.cs" />
     <Compile Include="..\Scanner\Core\EvidenceEnricher.cs" />
     <Compile Include="..\Scanner\Core\FindingDeduplicator.cs" />
     <Compile Include="..\Scanner\Core\LicenseValidator.cs" />
@@ -42,6 +43,7 @@
     <Compile Include="..\Scanner\Models\ModuleCoverageEntry.cs" />
     <Compile Include="..\Scanner\Models\ScanResult.cs" />
     <Compile Include="..\Scanner\Modules\AmcacheModule.cs" />
+    <Compile Include="..\Scanner\Modules\AstrixArtifactsModule.cs" />
     <Compile Include="..\Scanner\Modules\AntiForensicScriptModule.cs" />
     <Compile Include="..\Scanner\Modules\BamDamModule.cs" />
     <Compile Include="..\Scanner\Modules\BaseModule.cs" />

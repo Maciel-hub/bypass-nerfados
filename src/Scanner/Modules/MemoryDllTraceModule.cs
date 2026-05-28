@@ -81,6 +81,25 @@ public class MemoryDllTraceModule : BaseModule
             if (FiveMPrefixes.Any(pfx => lower.StartsWith(pfx))) Add(p);
         }
 
+        // Also scan suspicious co-processes (random-name loaders, Astrix External)
+        // discovered by SuspiciousCoProcessResolver — these are not in CoreTargetNames.
+        try
+        {
+            foreach (var coProc in SuspiciousCoProcessResolver.Resolve())
+            {
+                if (!seen.Contains(coProc.Pid))
+                {
+                    try
+                    {
+                        var p = Process.GetProcessById(coProc.Pid);
+                        Add(p);
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch { }
+
         return result;
     }
 

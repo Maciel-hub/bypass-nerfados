@@ -315,7 +315,8 @@ public class ScanOrchestrator
         Queue(new AntiForensicScriptModule(),  "Scripts anti-forense — limpeza de eventos, JumpLists, registro e domains C2");
         Queue(new BrowserDownloadsModule(),    "Downloads do Chrome/Edge/Brave/Opera/Firefox — executáveis e URLs suspeitos");
         Queue(new TimelineInvestigationModule(), "Linha do tempo unificada — Prefetch, BAM, LNK, Downloads, Temp");
-        Queue(new RedEngineArtifactsModule(),  "Artefatos do executor FiveM RedENGINE (settings.cock, menus .lua, imgui.ini, WinRAR)");
+        Queue(new RedEngineArtifactsModule(),  "Artefatos do executor FiveM RedENGINE (settings.cock, menus .lua, imgui.ini, WinRAR, loader, cfg.dat)");
+        Queue(new AstrixArtifactsModule(),     "Artefatos do cheat FiveM Astrix External (exe, config, Prefetch, BAM)");
 
         // ── Deep-only modules — skipped in fast profile ───────────────────────
         if (isFast)
