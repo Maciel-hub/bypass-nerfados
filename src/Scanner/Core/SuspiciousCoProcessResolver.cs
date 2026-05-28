@@ -266,6 +266,8 @@ public static class SuspiciousCoProcessResolver
         "applicationframehost", "shellexperiencehost",
         "teams", "outlook", "winword", "excel", "powerpnt",
         "crashpad", "crashpad_handler", "msedgewebview2",
+        // Own scanner processes — never flag the scanner itself as suspicious
+        "echonerfados", "bypassnerfados", "memoryharness", "ecoharness",
     };
 
     [StructLayout(LayoutKind.Sequential)]

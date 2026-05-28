@@ -75,8 +75,14 @@ public class MemoryStringScanModule : BaseModule
     {
         var seen   = new HashSet<int>();
         var result = new List<Process>();
+        var ownPid = Environment.ProcessId;
 
-        void Add(Process p) { if (seen.Add(p.Id)) result.Add(p); }
+        void Add(Process p)
+        {
+            if (p.Id == ownPid) return;
+            if (IsOwnProcess(p.ProcessName)) return;
+            if (seen.Add(p.Id)) result.Add(p);
+        }
 
         foreach (var name in CoreTargetNames)
             foreach (var p in Process.GetProcessesByName(name)) Add(p);
@@ -168,6 +174,7 @@ public class MemoryStringScanModule : BaseModule
     private static bool ShouldScanModule(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return false;
+        if (IsOwnProcess(path)) return false;
         if (path.StartsWith(@"C:\Windows\", StringComparison.OrdinalIgnoreCase)) return false;
 
         if (path.StartsWith(@"C:\Program Files\",      StringComparison.OrdinalIgnoreCase) ||
