@@ -6,123 +6,100 @@ Status: Entrega recebida para QA
 
 | Campo | Valor |
 |---|---|
-| Sprint/Fix | Fix P1 — MemoryStringScan self-scan FP (MEMSTR_BR_ANTICHEAT_BYPASS em EchoNerfados) |
-| Commit produto | `f4d5994` |
+| Sprint/Fix | Fix installer — self-contained publish + arquivo completo (.iss wildcard) |
+| Commit produto | `3d1d021` (installer .iss) / binários de `f4d5994` |
 | Branch | `master` |
-| ProductVersion CLI/GUI | `1.0.1+f4d5994` |
-| CLI SHA256 | `B083F8BFB60F935BAD93761BEB512ADD038435E807981A93192B0A6CC8FDF687` |
-| GUI SHA256 | `929CA338829D1E0A5245FD5FE377D3293866C9DFB0E870DFEC0C009441DCE3EC` |
+| ProductVersion CLI/GUI | `1.0.1+3d1d021` |
+| CLI SHA256 (self-contained) | `82AFF7945880288747D928CAC0776C0069D7D63918A38EF992EE915FFF2A56BE` |
+| GUI SHA256 (self-contained) | `80FB8686912EA3EA19F87E6E65517D976EB7D729CA33545ECE78A6D4C39FFECC` |
 | Installer per-user | `dist/EchoNerfadosSetup-RC-User-1.0.1+f4d5994.exe` |
-| Installer per-user SHA256 | `7F978BD8672A054D1939804AD4FBADA57A775A2FAD4EDEA6182662395AD9928E` |
+| Installer per-user SHA256 | `4502B66275E48F9B23E6365FB679C0D52980C6480668D29419B919483CDF4977` |
 | Installer admin | `dist/EchoNerfadosSetup-RC-1.0.1+f4d5994.exe` |
-| Installer admin SHA256 | `8035442308043A9A3E28CF0A17B3F17919FC3214816E50D9B3B59F0D542D1230` |
-| Data/hora | 27/05/2026 |
+| Installer admin SHA256 | `259BC1C8211C9B7AB1C25EFD5736987DD1220116BDBA40DD92EF75C3AD6D605A` |
+| Tamanho esperado | ~74 MB cada installer (self-contained com runtime embutido) |
+| Data/hora | 28/05/2026 |
 
-## 2. Objetivo da entrega
+## 2. Dois bugs corrigidos neste ciclo
 
-Fix de auto-detecção: MemoryStringScanModule estava varrendo a memória do próprio
-scanner (EchoNerfados.exe) e encontrando as strings de cheat embutidas no detector.
-Resultado: MEMSTR_BR_ANTICHEAT_BYPASS com origem em EchoNerfados.Core.dll.
+### Bug 1 — Installer copiava bundle incompleto (P0)
 
-## 3. Causa raiz
+`[Files]` listava arquivos explícitos: `App.exe`, `*.dll` da GUI, `EchoNerfados.exe`.
+Faltavam: `EchoNerfados.dll`, `*.deps.json`, `*.runtimeconfig.json` e assemblies do CLI.
+CLI falhava: "application does not exist: EchoNerfados.dll".
+GUI falhava: "EchoNerfados.App.runtimeconfig.json was not found".
 
-`IsRandomName("EchoNerfados")` = TRUE porque E e N são uppercase (2 upper + 11 lower
-satisfaz o critério mixed-case). Resultado:
+Corrigido em commit `3d1d021`: wildcards `Source: "..\publish\win-x64-gui\*"` e
+`Source: "..\publish\win-x64\*"` com `recursesubdirs createallsubdirs`.
 
-1. `SuspiciousCoProcessResolver.Resolve()` identificava EchoNerfados como co-processo
-   suspeito (user-writable path + nome "aleatório")
-2. `CollectTargetProcesses()` adicionava o PID do scanner à lista de alvos
-3. O scanner varria a sua própria memória — EchoNerfados.Core.dll carrega as strings
-   de cheat como literais para matching, que então eram "detectadas"
+### Bug 2 — Publish era framework-dependent (~2.8 MB) em vez de self-contained (~74 MB)
 
-## 4. Arquivos alterados
+Os últimos publishes foram feitos com `--self-contained false` (comandos manuais desta sessão).
+O BUILD.bat correto usa `--self-contained true -p:PublishSingleFile=true -p:PublishReadyToRun=true`.
 
-| Arquivo | Commit | Descricao |
-|---|---|---|
-| `src/Scanner/Core/SuspiciousCoProcessResolver.cs` | `f4d5994` | "echonerfados" + aliases adicionados ao s_knownSafe |
-| `src/Scanner/Modules/MemoryStringScanModule.cs` | `f4d5994` | CollectTargetProcesses: filtro duplo ownPid + IsOwnProcess; ShouldScanModule: IsOwnProcess(path) |
-| `src/Scanner/Modules/MemoryDllTraceModule.cs` | `f4d5994` | CollectTargetProcesses: mesmo filtro duplo |
+Corrigido: publish dirs limpos e republicados com as flags corretas antes de gerar os installers.
 
-## 5. Mudancas tecnicas
+## 3. Publish flags corretas (conforme BUILD.bat)
 
-### Layer 1 — SuspiciousCoProcessResolver.s_knownSafe
+```
+dotnet publish src/Scanner/Scanner.csproj
+    -c Release -r win-x64
+    --self-contained true
+    -p:PublishSingleFile=true
+    -p:PublishReadyToRun=true
+    -o publish/win-x64
 
-Adicionados ao conjunto de nomes seguros (matcheado por stem em lowercase):
-- `"echonerfados"` — CLI scanner
-- `"bypassnerfados"` — nome historico
-- `"memoryharness"` — harness de teste
-- `"ecoharness"` — variante de harness
-
-### Layer 2 — CollectTargetProcesses (MemoryStringScan + MemoryDllTrace)
-
-```csharp
-var ownPid = Environment.ProcessId;
-
-void Add(Process p)
-{
-    if (p.Id == ownPid) return;             // nunca varrer o proprio processo
-    if (IsOwnProcess(p.ProcessName)) return; // cobre EchoNerfados, EchoNerfados.App, etc.
-    if (seen.Add(p.Id)) result.Add(p);
-}
+dotnet publish src/EchoNerfados.App/EchoNerfados.App.csproj
+    -c Release -r win-x64
+    --self-contained true
+    -p:PublishSingleFile=true
+    -p:PublishReadyToRun=true
+    -o publish/win-x64-gui
 ```
 
-`IsOwnProcess` (definido em BaseModule) verifica:
-- Nome exato do processo atual
-- Aliases historicos (_selfExeAliases): "echonerfados.exe", "bypassnerfados.exe"
-- Fragmentos de path de build (_selfPathFragments): \bypassnerfados\, \echonerfados\
+Tamanhos corretos: CLI ~82 MB, GUI ~167 MB (runtime .NET embutido).
+Installers LZMA2 comprimem para ~74 MB.
 
-### Layer 3 — ShouldScanModule (MemoryStringScan)
+## 4. Criterios de aceite
 
-```csharp
-if (IsOwnProcess(path)) return false;
-```
+- [x] Installers ~74 MB (self-contained, não depende de .NET instalado)
+- [x] SHA256 documentados
+- [ ] Instalar per-user em VM limpa (sem .NET SDK/runtime)
+- [ ] EchoNerfados.App.exe abre sem erro
+- [ ] EchoNerfados.exe --help executa sem erro
+- [ ] Scan gera report.html, evidence.json, manifest.json
+- [ ] Memory String Scan: sem self-hit em EchoNerfados
 
-Adicionado como primeira verificacao — impede que EchoNerfados.Core.dll seja varrido
-mesmo que o assembly esteja carregado em outro processo (cenario improvavel mas seguro).
-
-MemoryDllTraceModule ja tinha `IsOwnProcess(path)` no filtro de modulo (linha 300) —
-nenhuma alteracao necessaria la.
-
-## 6. Criterios de aceite
-
-- [x] Build 0 erros (9 avisos pre-existentes)
-- [x] Commit `f4d5994` com ProductVersion `1.0.1+f4d5994`
-- [x] Installers gerados e SHA256 documentados
-- [ ] Varredura pos-limpeza: MEMSTR_BR_ANTICHEAT_BYPASS NAO aparece para EchoNerfados
-- [ ] EchoNerfados.Core.dll NAO aparece em findings de Memory String Scan / Memory DLL Trace
-- [ ] Processo EchoNerfados NAO aparece em "Co-processos ativos" na aba Sessao FiveM
-
-## 7. Comandos para QA
+## 5. Smoke test recomendado
 
 ```powershell
-# 1. Verificar allowlist
-Select-String "echonerfados" src\Scanner\Core\SuspiciousCoProcessResolver.cs
-# Esperado: 1 match em s_knownSafe
+# 1. Instalar em VM limpa (sem .NET runtime)
+EchoNerfadosSetup-RC-User-1.0.1+f4d5994.exe /SILENT
 
-# 2. Verificar filtro duplo em CollectTargetProcesses
-Select-String "ownPid|IsOwnProcess" src\Scanner\Modules\MemoryStringScanModule.cs
-# Esperado: 3 matches (var ownPid, if p.Id == ownPid, if IsOwnProcess)
+# 2. Verificar CLI
+& "$env:LOCALAPPDATA\Programs\EchoNerfados\EchoNerfados.exe" --help
+# Deve mostrar usage sem erro de runtime
 
-# 3. Verificar ShouldScanModule
-Select-String "IsOwnProcess" src\Scanner\Modules\MemoryStringScanModule.cs
-# Esperado: 2 matches (CollectTargetProcesses + ShouldScanModule)
+# 3. Verificar GUI (abrir e rodar scan)
+& "$env:LOCALAPPDATA\Programs\EchoNerfados\EchoNerfados.App.exe"
 
-# 4. Teste funcional:
-# - Executar varredura com admin em maquina pos-limpeza
-# - Verificar: nenhum finding com Module="Memory String Scan" e Title contendo "EchoNerfados"
-# - Verificar: EchoNerfados.Core.dll NAO aparece em findings
+# 4. Verificar relatório gerado
+ls $env:LOCALAPPDATA\Programs\EchoNerfados\..\..\EchoNerfados\reports\*
+# report.html, evidence.json, manifest.json, stan_90d.json, etc.
 
-# 5. SHA256 installers
+# 5. Confirmar SHA256 do installer
 certutil -hashfile dist\EchoNerfadosSetup-RC-User-1.0.1+f4d5994.exe SHA256
-# Esperado: 7F978BD8672A054D1939804AD4FBADA57A775A2FAD4EDEA6182662395AD9928E
+# Esperado: 4502B66275E48F9B23E6365FB679C0D52980C6480668D29419B919483CDF4977
 ```
 
-## 8. Observacoes para o Codex
+## 6. Observacoes para o Codex
 
-- Installer anterior (a17f02e) invalido para este QA — usar f4d5994.
-- A causa raiz e o criterio mixed-case em IsRandomName: 2+ uppercase + 2+ lowercase.
-  "EchoNerfados" tem E,N uppercase (2) + 11 lowercase → trigava. Corrigido na allowlist.
-- O filtro duplo em CollectTargetProcesses (ownPid + IsOwnProcess) e defense-in-depth:
-  a allowlist em s_knownSafe e a correcao primaria; os filtros de colecao e modulo
-  garantem que mesmo uma renomeacao do scanner nao resulte em auto-varredura.
-- MemoryDllTraceModule.ShouldInspectModule ja tinha IsOwnProcess(path) — nao alterado.
+- Para entregas futuras, SEMPRE usar BUILD.bat --gui (ou as flags self-contained acima).
+  Nunca usar `dotnet publish --self-contained false` para installers de tester.
+- O atalho de Desktop agora e marcado por padrao em ambos os installers
+  (removido Flags: unchecked do [Tasks]).
+- O installer admin exclui license.nerf do wildcard CLI (`Excludes: "license.nerf"`)
+  porque o license.nerf e gerenciado pela secao #ifdef IncludeLicense separada.
+- Commit de código: f4d5994 (self-scan FP fix).
+  Commit de installer .iss: 3d1d021 (wildcard file copy + desktop icon default).
+  Os binários publicados embedam 3d1d021 como ProductVersion porque o rebuild
+  foi feito após o commit dos .iss.
