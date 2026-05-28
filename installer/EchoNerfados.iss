@@ -54,7 +54,7 @@ CloseApplications=force
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
-Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"; Flags: unchecked
+Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"
 
 [Dirs]
 ; ProgramData: license.nerf is placed here by the operator (admin).
@@ -64,17 +64,14 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 Name: "{commonappdata}\{#AppShortName}"; Permissions: users-readexec admins-full
 
 [Files]
-; GUI — main application (WPF) + native DLLs required by .NET WPF single-file publish
-Source: "..\publish\win-x64-gui\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\publish\win-x64-gui\*.dll";         DestDir: "{app}"; Flags: ignoreversion
+; GUI — full WPF application bundle (App.exe, App.dll, App.deps.json, App.runtimeconfig.json, rules\, all assemblies)
+Source: "..\publish\win-x64-gui\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
-; CLI — advanced forensic tool (verify-report, --machine-id, automation)
-Source: "..\publish\win-x64\{#AppCliName}";  DestDir: "{app}"; Flags: ignoreversion
+; CLI — full forensic CLI bundle (EchoNerfados.exe, EchoNerfados.dll, deps.json, runtimeconfig.json, all assemblies)
+; Excludes license.nerf — managed separately via #ifdef IncludeLicense below
+Source: "..\publish\win-x64\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "license.nerf"
 
-; Detection rules — use GUI publish output (same content; avoids duplication)
-Source: "..\publish\win-x64-gui\rules\*"; DestDir: "{app}\rules"; Flags: ignoreversion recursesubdirs createallsubdirs
-
-; Verification scripts
+; Verification scripts (not in publish dirs)
 Source: "..\scripts\verify-report.ps1"; DestDir: "{app}\scripts"; Flags: ignoreversion
 Source: "verify-report-shortcut.bat";  DestDir: "{app}";         Flags: ignoreversion
 
