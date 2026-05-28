@@ -12,9 +12,9 @@ Status: Entrega recebida para QA
 | ProductVersion CLI/GUI | `1.0.1+3d1d021` |
 | CLI SHA256 (self-contained) | `82AFF7945880288747D928CAC0776C0069D7D63918A38EF992EE915FFF2A56BE` |
 | GUI SHA256 (self-contained) | `80FB8686912EA3EA19F87E6E65517D976EB7D729CA33545ECE78A6D4C39FFECC` |
-| Installer per-user | `dist/EchoNerfadosSetup-RC-User-1.0.1+f4d5994.exe` |
+| Installer per-user | `dist/EchoNerfadosSetup-RC-User-1.0.1+3d1d021.exe` |
 | Installer per-user SHA256 | `4502B66275E48F9B23E6365FB679C0D52980C6480668D29419B919483CDF4977` |
-| Installer admin | `dist/EchoNerfadosSetup-RC-1.0.1+f4d5994.exe` |
+| Installer admin | `dist/EchoNerfadosSetup-RC-1.0.1+3d1d021.exe` |
 | Installer admin SHA256 | `259BC1C8211C9B7AB1C25EFD5736987DD1220116BDBA40DD92EF75C3AD6D605A` |
 | Tamanho esperado | ~74 MB cada installer (self-contained com runtime embutido) |
 | Data/hora | 28/05/2026 |
