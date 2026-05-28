@@ -86,6 +86,7 @@ public static class FiveMSessionAnalyzer
         f.RuleId?.StartsWith("BAM_COEXEC_") == true ||
         f.RuleId?.StartsWith("REDENGINE_") == true ||
         f.RuleId?.StartsWith("ASTRIX_") == true ||
+        f.RuleId?.StartsWith("STAN_") == true ||
         (f.Entity ?? f.Title).EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ||
         (f.Entity ?? f.Title).EndsWith(".dll", StringComparison.OrdinalIgnoreCase);
 
@@ -115,7 +116,7 @@ public static class FiveMSessionAnalyzer
             return FiveMRelation.DirectInteraction;
         }
 
-        // Co-process: random loader with -cf payload, cfg.dat, C2 port, or active Astrix process
+        // Co-process: random loader with -cf payload, cfg.dat, C2 port, Astrix, or Stan with credentials/prefetch/BAM
         bool isCoProcess = findings.Any(f =>
             f.RuleId is "REDENGINE_CFG_DAT_NEAR_LOADER"
                      or "REDENGINE_CMDLINE_CF_PAYLOAD"
@@ -126,7 +127,11 @@ public static class FiveMSessionAnalyzer
                      or "ASTRIX_EXE_USERPATH"
                      or "ASTRIX_CONFIG_FILE"
                      or "ASTRIX_PREFETCH_EXECUTED"
-                     or "ASTRIX_BAM_EXECUTED");
+                     or "ASTRIX_BAM_EXECUTED"
+                     or "STAN_LOADER_WITH_CREDENTIAL"
+                     or "STAN_CREDENTIALS_NEAR_LOADER"
+                     or "STAN_PREFETCH_EXECUTED"
+                     or "STAN_BAM_EXECUTED");
 
         if (isCoProcess)
         {
@@ -209,6 +214,8 @@ public static class FiveMSessionAnalyzer
                 => $"Co-processo Astrix External ({f.Module})",
             FiveMRelation.CoProcessInteraction when f.RuleId?.StartsWith("REDENGINE_") == true
                 => $"Co-processo RedENGINE loader ({f.Module})",
+            FiveMRelation.CoProcessInteraction when f.RuleId?.StartsWith("STAN_") == true
+                => $"Co-processo Stan loader ({f.Module})",
             FiveMRelation.CoProcessInteraction
                 => $"Co-processo suspeito junto ao FiveM ({f.Module})",
             FiveMRelation.NearSession

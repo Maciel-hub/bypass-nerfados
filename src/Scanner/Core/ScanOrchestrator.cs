@@ -317,6 +317,7 @@ public class ScanOrchestrator
         Queue(new TimelineInvestigationModule(), "Linha do tempo unificada — Prefetch, BAM, LNK, Downloads, Temp");
         Queue(new RedEngineArtifactsModule(),  "Artefatos do executor FiveM RedENGINE (settings.cock, menus .lua, imgui.ini, WinRAR, loader, cfg.dat)");
         Queue(new AstrixArtifactsModule(),     "Artefatos do cheat FiveM Astrix External (exe, config, Prefetch, BAM)");
+        Queue(new StanArtifactsModule(),       "Artefatos do loader Stan/genérico (loader.exe, .credentials, Loader-*.zip, Prefetch, BAM)");
 
         // ── Deep-only modules — skipped in fast profile ───────────────────────
         if (isFast)

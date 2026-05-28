@@ -14,6 +14,7 @@ public static class Correlator
         DetectSystemServiceTampering(result);
         CorrelateDriverWithCheat(result);
         CorrelateFiveMSession(result);
+        CorrelateCheatLoaderChain(result);
     }
 
     private static void DetectAntiForensicsPattern(ScanResult result)
@@ -309,6 +310,77 @@ public static class Correlator
             ruleId: "CORR_KERNEL_CHEAT",
             entity: "kernel-cheat"
         ));
+    }
+
+    // Correlates Stan/generic loader credential chain:
+    // - Portal download + loader execution → CHEAT_GENERIC_LOADER_FROM_PORTAL_DOWNLOAD (Critical)
+    // - Loader co-located with .credentials → CHEAT_GENERIC_LOADER_WITH_CREDENTIAL (High)
+    private static void CorrelateCheatLoaderChain(ScanResult result)
+    {
+        bool hasPortalDownload = result.Findings.Any(f =>
+            f.RuleId is "BROWSER_DL_REDENGINE_PORTAL" or "BROWSER_DL_CHEAT_PORTAL_ARCHIVE");
+
+        bool hasLoaderExecution = result.Findings.Any(f =>
+            f.RuleId is "STAN_LOADER_EXE"
+                     or "STAN_LOADER_WITH_CREDENTIAL"
+                     or "STAN_PREFETCH_EXECUTED"
+                     or "STAN_BAM_EXECUTED");
+
+        if (hasPortalDownload && hasLoaderExecution)
+        {
+            var portalSample = result.Findings.First(f =>
+                f.RuleId is "BROWSER_DL_REDENGINE_PORTAL" or "BROWSER_DL_CHEAT_PORTAL_ARCHIVE");
+            var loaderSample = result.Findings.First(f =>
+                f.RuleId is "STAN_LOADER_EXE"
+                         or "STAN_LOADER_WITH_CREDENTIAL"
+                         or "STAN_PREFETCH_EXECUTED"
+                         or "STAN_BAM_EXECUTED");
+
+            result.Findings.Add(new Finding(
+                RiskLevel.Critical,
+                FindingCategory.Cheat,
+                "Correlação",
+                "CADEIA STAN: download de portal cheat + execução de loader",
+                "Download rastreado em portal de cheat (redengine.net) correlacionado com execução de loader.exe.\n" +
+                $"Portal: {portalSample.Entity ?? portalSample.Title}\n" +
+                $"Loader: {loaderSample.Entity ?? loaderSample.Title}",
+                $"Download: {portalSample.RuleId} | Loader: {loaderSample.RuleId}",
+                timestamp: loaderSample.Timestamp ?? portalSample.Timestamp,
+                confidence: Confidence.High,
+                ruleId: "CHEAT_GENERIC_LOADER_FROM_PORTAL_DOWNLOAD",
+                entity: loaderSample.Entity ?? "loader.exe"
+            ));
+        }
+
+        bool hasCredential = result.Findings.Any(f =>
+            f.RuleId is "STAN_LOADER_WITH_CREDENTIAL" or "STAN_CREDENTIALS_NEAR_LOADER");
+
+        bool hasLoaderEvidence = result.Findings.Any(f =>
+            f.RuleId is "STAN_LOADER_EXE"
+                     or "STAN_LOADER_WITH_CREDENTIAL"
+                     or "STAN_PREFETCH_EXECUTED"
+                     or "STAN_BAM_EXECUTED");
+
+        if (hasCredential && hasLoaderEvidence)
+        {
+            var credSample = result.Findings.First(f =>
+                f.RuleId is "STAN_LOADER_WITH_CREDENTIAL" or "STAN_CREDENTIALS_NEAR_LOADER");
+
+            result.Findings.Add(new Finding(
+                RiskLevel.High,
+                FindingCategory.Cheat,
+                "Correlação",
+                "CADEIA STAN: loader + arquivo .credentials de assinante",
+                "loader.exe e arquivo .credentials de assinante encontrados em conjunto.\n" +
+                "Padrão de entrega Stan Menu: loader.exe + <hex>.credentials no mesmo diretório.\n" +
+                $"Credencial: {credSample.Entity ?? credSample.Title}",
+                $"Credencial: {credSample.RuleId}",
+                timestamp: credSample.Timestamp,
+                confidence: Confidence.High,
+                ruleId: "CHEAT_GENERIC_LOADER_WITH_CREDENTIAL",
+                entity: credSample.Entity ?? ".credentials"
+            ));
+        }
     }
 
     private static void DetectSystemServiceTampering(ScanResult result)

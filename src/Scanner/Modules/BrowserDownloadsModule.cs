@@ -102,6 +102,30 @@ public class BrowserDownloadsModule : BaseModule
         "susano.",
     ];
 
+    // Cheat portal URL paths — specific enough to confirm portal access, not just keyword match.
+    // Returns the family name if matched; null otherwise.
+    private static string? MatchCheatPortalUrl(string urlLower)
+    {
+        if (urlLower.Contains("redengine.net/customer-area") ||
+            urlLower.Contains("redengine.net/orders") ||
+            urlLower.Contains("redengine.net/download"))
+            return "RedENGINE";
+        return null;
+    }
+
+    // Cheat archive filename patterns (case-insensitive match on the filename portion).
+    private static bool IsCheatPortalArchive(string fileNameLower)
+    {
+        if (!fileNameLower.EndsWith(".zip") && !fileNameLower.EndsWith(".rar")) return false;
+        // Loader-<hash>.zip (Stan/RedENGINE delivery pattern)
+        if (fileNameLower.StartsWith("loader-")) return true;
+        // Executor V2.zip, Executor+Spoofer.zip
+        if (fileNameLower.StartsWith("executor")) return true;
+        // *spoofer*.zip
+        if (fileNameLower.Contains("spoofer")) return true;
+        return false;
+    }
+
     // Executable-type extensions that are flagged if not from a safe domain
     private static readonly HashSet<string> ExecExtensions =
         new(StringComparer.OrdinalIgnoreCase)
@@ -401,8 +425,20 @@ public class BrowserDownloadsModule : BaseModule
                 entity: targetPath));
         }
 
-        var matchedKw = SuspiciousUrlKeywords.FirstOrDefault(kw => urlLower.Contains(kw));
-        if (matchedKw != null)
+        var portalFamily = MatchCheatPortalUrl(urlLower);
+        var matchedKw    = SuspiciousUrlKeywords.FirstOrDefault(kw => urlLower.Contains(kw));
+
+        if (portalFamily != null)
+        {
+            findings.Add(new Finding(
+                RiskLevel.High, FindingCategory.Cheat, Name,
+                $"{portalFamily}: download do portal de compra detectado ({browser})",
+                $"Arquivo baixado do portal de assinantes {portalFamily}.\nArquivo: {targetPath}\nURL: {tabUrl}",
+                $"URL: {tabUrl} | Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}",
+                timestamp: startTime, confidence: Confidence.High,
+                ruleId: "BROWSER_DL_REDENGINE_PORTAL", entity: targetPath));
+        }
+        else if (matchedKw != null)
         {
             findings.Add(new Finding(
                 RiskLevel.High, FindingCategory.Cheat, Name,
@@ -411,6 +447,17 @@ public class BrowserDownloadsModule : BaseModule
                 $"URL: {tabUrl} | Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}",
                 timestamp: startTime, confidence: Confidence.Medium,
                 ruleId: "BROWSER_DL_SUSPICIOUS_URL", entity: targetPath));
+        }
+
+        if (IsCheatPortalArchive(fileName) && portalFamily == null)
+        {
+            findings.Add(new Finding(
+                RiskLevel.High, FindingCategory.Cheat, Name,
+                $"Download de arquivo de loader/executor: {fileName} ({browser})",
+                $"Arquivo com padrão de loader/executor cheat.\nArquivo: {targetPath}\nURL: {tabUrl}",
+                $"URL: {tabUrl} | Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}",
+                timestamp: startTime, confidence: Confidence.Medium,
+                ruleId: "BROWSER_DL_CHEAT_PORTAL_ARCHIVE", entity: targetPath));
         }
 
         if (ExecExtensions.Contains(ext) && !IsFromSafeDomain(tabUrl))
@@ -469,7 +516,28 @@ public class BrowserDownloadsModule : BaseModule
 
         // ── Condition B: suspicious URL or referrer ───────────────────────────
         var matchedUrlKw = SuspiciousUrlKeywords.FirstOrDefault(kw => urlLower.Contains(kw));
-        if (matchedUrlKw != null)
+        // Portal-specific match (D) supersedes the generic B finding when URL is a confirmed portal.
+        var portalFamily = MatchCheatPortalUrl(urlLower);
+
+        if (portalFamily != null)
+        {
+            // ── Condition D: confirmed cheat portal URL ───────────────────────
+            findings.Add(new Finding(
+                RiskLevel.High,
+                FindingCategory.Cheat,
+                Name,
+                $"{portalFamily}: download do portal de compra detectado ({browser})",
+                $"Arquivo baixado do portal de assinantes {portalFamily} — confirma compra/acesso ao serviço cheat.\n" +
+                $"Arquivo: {targetPath}\nURL: {tabUrl}\nReferência: {referrer}",
+                $"URL: {tabUrl} | Referrer: {referrer} | " +
+                $"Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}",
+                timestamp: startTime,
+                confidence: Confidence.High,
+                ruleId: "BROWSER_DL_REDENGINE_PORTAL",
+                entity: targetPath
+            ));
+        }
+        else if (matchedUrlKw != null)
         {
             findings.Add(new Finding(
                 RiskLevel.High,
@@ -483,6 +551,25 @@ public class BrowserDownloadsModule : BaseModule
                 timestamp: startTime,
                 confidence: Confidence.Medium,
                 ruleId: "BROWSER_DL_SUSPICIOUS_URL",
+                entity: targetPath
+            ));
+        }
+
+        // ── Condition D2: cheat portal archive by filename pattern ────────────
+        if (IsCheatPortalArchive(fileName) && portalFamily == null)
+        {
+            findings.Add(new Finding(
+                RiskLevel.High,
+                FindingCategory.Cheat,
+                Name,
+                $"Download de arquivo de loader/executor: {fileName} ({browser})",
+                $"Arquivo com padrão de nome de loader/executor cheat baixado pelo {browser}.\n" +
+                $"Padrão: Loader-<hash>.zip, Executor*.zip, *spoofer*.zip\n" +
+                $"Arquivo: {targetPath}\nURL: {tabUrl}",
+                $"URL: {tabUrl} | Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}",
+                timestamp: startTime,
+                confidence: Confidence.Medium,
+                ruleId: "BROWSER_DL_CHEAT_PORTAL_ARCHIVE",
                 entity: targetPath
             ));
         }
