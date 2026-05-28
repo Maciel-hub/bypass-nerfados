@@ -48,12 +48,18 @@ public static class FiveMSessionAnalyzer
             var path = ExtractPath(representative);
             var fileName = ExtractFileName(group.Key);
 
+            // EventTime must be consistent with deltaMinutes: reconstruct from session + delta
+            // so CoProcessInteraction entries don't show the old disk-artifact mtime.
+            var eventTime = (sessionTime.HasValue && deltaMinutes.HasValue)
+                ? (DateTime?)sessionTime.Value.AddMinutes(deltaMinutes.Value)
+                : representative.Timestamp;
+
             result.FiveMSessionContexts.Add(new FiveMSessionContext(
                 Entity:         group.Key,
                 FileName:       fileName,
                 Path:           path,
                 Relation:       relation,
-                EventTime:      representative.Timestamp,
+                EventTime:      eventTime,
                 SessionTime:    sessionTime,
                 DeltaMinutes:   deltaMinutes,
                 Sources:        sources,

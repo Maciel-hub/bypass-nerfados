@@ -38,6 +38,7 @@ public class AntiForensicScriptModule : BaseModule
         @"\Microsoft\Windows\INetCache\",
         @"\Microsoft\Windows\Temporary Internet Files\",
         @"\AppData\Local\Packages\",
+        @"\AppData\Local\Microsoft\OneDrive\",
         @"\npm-cache\",
         @"\pip\http\",
     ];

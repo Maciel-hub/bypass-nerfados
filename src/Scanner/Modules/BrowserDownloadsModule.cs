@@ -427,14 +427,18 @@ public class BrowserDownloadsModule : BaseModule
 
         var portalFamily = MatchCheatPortalUrl(urlLower);
         var matchedKw    = SuspiciousUrlKeywords.FirstOrDefault(kw => urlLower.Contains(kw));
+        var isArchive    = IsCheatPortalArchive(fileName);
 
         if (portalFamily != null)
         {
             findings.Add(new Finding(
                 RiskLevel.High, FindingCategory.Cheat, Name,
                 $"{portalFamily}: download do portal de compra detectado ({browser})",
-                $"Arquivo baixado do portal de assinantes {portalFamily}.\nArquivo: {targetPath}\nURL: {tabUrl}",
-                $"URL: {tabUrl} | Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}",
+                isArchive
+                    ? $"Arquivo baixado do portal de assinantes {portalFamily}.\nArquivo: {fileName} (padrão Loader-*.zip — entrega Stan/RedENGINE).\nURL: {tabUrl}"
+                    : $"Arquivo baixado do portal de assinantes {portalFamily}.\nArquivo: {targetPath}\nURL: {tabUrl}",
+                $"URL: {tabUrl} | Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}" +
+                (isArchive ? $" | Loader: {fileName}" : ""),
                 timestamp: startTime, confidence: Confidence.High,
                 ruleId: "BROWSER_DL_REDENGINE_PORTAL", entity: targetPath));
         }
@@ -449,7 +453,7 @@ public class BrowserDownloadsModule : BaseModule
                 ruleId: "BROWSER_DL_SUSPICIOUS_URL", entity: targetPath));
         }
 
-        if (IsCheatPortalArchive(fileName))
+        if (isArchive && portalFamily == null)
         {
             findings.Add(new Finding(
                 RiskLevel.High, FindingCategory.Cheat, Name,
@@ -518,19 +522,27 @@ public class BrowserDownloadsModule : BaseModule
         var matchedUrlKw = SuspiciousUrlKeywords.FirstOrDefault(kw => urlLower.Contains(kw));
         // Portal-specific match (D) supersedes the generic B finding when URL is a confirmed portal.
         var portalFamily = MatchCheatPortalUrl(urlLower);
+        var isArchiveFile = IsCheatPortalArchive(fileName);
 
         if (portalFamily != null)
         {
             // ── Condition D: confirmed cheat portal URL ───────────────────────
+            // When the downloaded filename also matches a loader archive pattern, enrich the
+            // finding inline — a separate CHEAT_PORTAL_ARCHIVE finding would share the same
+            // EvidenceKey (Category|entity|timebucket) and be collapsed by the deduplicator.
             findings.Add(new Finding(
                 RiskLevel.High,
                 FindingCategory.Cheat,
                 Name,
                 $"{portalFamily}: download do portal de compra detectado ({browser})",
                 $"Arquivo baixado do portal de assinantes {portalFamily} — confirma compra/acesso ao serviço cheat.\n" +
-                $"Arquivo: {targetPath}\nURL: {tabUrl}\nReferência: {referrer}",
+                (isArchiveFile
+                    ? $"Arquivo: {fileName} (padrão Loader-*.zip — entrega Stan/RedENGINE).\n"
+                    : $"Arquivo: {targetPath}\n") +
+                $"URL: {tabUrl}\nReferência: {referrer}",
                 $"URL: {tabUrl} | Referrer: {referrer} | " +
-                $"Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}",
+                $"Data: {startTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A"}" +
+                (isArchiveFile ? $" | Loader: {fileName}" : ""),
                 timestamp: startTime,
                 confidence: Confidence.High,
                 ruleId: "BROWSER_DL_REDENGINE_PORTAL",
@@ -556,8 +568,10 @@ public class BrowserDownloadsModule : BaseModule
         }
 
         // ── Condition D2: cheat portal archive by filename pattern ────────────
-        // Fires even when D (portal URL) already matched — both signals are complementary.
-        if (IsCheatPortalArchive(fileName))
+        // Only fires when the portal URL did NOT match — when portal matched, the archive
+        // info is already embedded in BROWSER_DL_REDENGINE_PORTAL (same EvidenceKey, dedup
+        // would discard a lower-confidence duplicate anyway).
+        if (isArchiveFile && portalFamily == null)
         {
             findings.Add(new Finding(
                 RiskLevel.High,
