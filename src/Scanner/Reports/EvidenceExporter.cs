@@ -108,6 +108,8 @@ public static class EvidenceExporter
 
         // Cheat-family artifact modules
         WriteModuleJson(result, runFolder, "RedENGINE Artifacts",   $"redengine_{d}.json",           lookback);
+        WriteModuleJson(result, runFolder, "Astrix Artifacts",      $"astrix_{d}.json",              lookback);
+        WriteModuleJson(result, runFolder, "Stan Artifacts",        $"stan_{d}.json",                lookback);
 
         // Optional modules — always written so investigator can confirm whether they ran
         WriteModuleJson(result, runFolder, "USN Journal",           $"usnjournal_{d}.json",          lookback);
@@ -154,7 +156,7 @@ public static class EvidenceExporter
     // Always report full lookback for these to avoid coverageOk=false on clean/synthetic runs.
     private static readonly HashSet<string> _fullCoverageModules = new(StringComparer.OrdinalIgnoreCase)
     {
-        "Known Cheats", "File System", "RedENGINE Artifacts",
+        "Known Cheats", "File System", "RedENGINE Artifacts", "Astrix Artifacts", "Stan Artifacts",
         "Registry Artifacts", "RegistryPersistence", "SystemTampering",
         "System Reset/Restore", "System Info", "Services",
         "Process Memory", "Memory DLL Trace", "Memory String Scan", "Network Usage",

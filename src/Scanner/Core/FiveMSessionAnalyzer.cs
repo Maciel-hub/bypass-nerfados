@@ -135,12 +135,21 @@ public static class FiveMSessionAnalyzer
 
         if (isCoProcess)
         {
-            var pivot = findings.FirstOrDefault(f => f.Timestamp.HasValue)?.Timestamp;
-            if (pivot.HasValue && sessions.Count > 0)
+            if (sessions.Count > 0)
             {
-                var closest = sessions.MinBy(s => Math.Abs((s - pivot.Value).TotalMinutes));
-                sessionTime  = closest;
-                deltaMinutes = (pivot.Value - closest).TotalMinutes;
+                // Pick the finding timestamp closest to any FiveM session.
+                // Prefers execution-trace timestamps (Prefetch/BAM) over disk-artifact modification times.
+                var best = findings
+                    .Where(f => f.Timestamp.HasValue)
+                    .SelectMany(f => sessions.Select(s =>
+                        (Finding: f, Session: s, Delta: (f.Timestamp!.Value - s).TotalMinutes)))
+                    .OrderBy(t => Math.Abs(t.Delta))
+                    .FirstOrDefault();
+                if (best.Finding != null)
+                {
+                    sessionTime  = best.Session;
+                    deltaMinutes = best.Delta;
+                }
             }
             return FiveMRelation.CoProcessInteraction;
         }

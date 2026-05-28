@@ -449,7 +449,7 @@ public class BrowserDownloadsModule : BaseModule
                 ruleId: "BROWSER_DL_SUSPICIOUS_URL", entity: targetPath));
         }
 
-        if (IsCheatPortalArchive(fileName) && portalFamily == null)
+        if (IsCheatPortalArchive(fileName))
         {
             findings.Add(new Finding(
                 RiskLevel.High, FindingCategory.Cheat, Name,
@@ -556,7 +556,8 @@ public class BrowserDownloadsModule : BaseModule
         }
 
         // ── Condition D2: cheat portal archive by filename pattern ────────────
-        if (IsCheatPortalArchive(fileName) && portalFamily == null)
+        // Fires even when D (portal URL) already matched — both signals are complementary.
+        if (IsCheatPortalArchive(fileName))
         {
             findings.Add(new Finding(
                 RiskLevel.High,

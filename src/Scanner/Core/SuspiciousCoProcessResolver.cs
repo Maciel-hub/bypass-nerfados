@@ -140,7 +140,7 @@ public static class SuspiciousCoProcessResolver
         return false;
     }
 
-    // User-writable: not under Windows, Program Files, or known game install dirs.
+    // User-writable: not under Windows, Program Files, known game install dirs, or Microsoft app dirs.
     public static bool IsUserWritablePath(string path)
     {
         var lower = path.ToLowerInvariant();
@@ -150,6 +150,8 @@ public static class SuspiciousCoProcessResolver
         if (lower.Contains(@"\steamapps\")) return false;
         if (lower.Contains(@"\epic games\")) return false;
         if (lower.Contains(@"\rockstar games\")) return false;
+        if (lower.Contains(@"\microsoft\onedrive\")) return false;
+        if (lower.Contains(@"\windowsapps\")) return false;
         return true;
     }
 
@@ -257,6 +259,13 @@ public static class SuspiciousCoProcessResolver
         "winrar", "7zfm", "vlc", "obs64", "obs32", "code", "git", "curl",
         "wget", "ping", "cmd", "powershell", "pwsh", "explorer", "fivem",
         "gta5", "gtav", "cfx", "rockstar", "launcher", "installer", "setup",
+        // Microsoft system / OneDrive / Office processes with mixed-case names
+        "filecoauth", "onedrive", "onedrivesetup", "microsoftedge",
+        "searchhost", "searchindexer", "runtimebroker", "sihost",
+        "textinputhost", "startmenuexperiencehost", "lockapp",
+        "applicationframehost", "shellexperiencehost",
+        "teams", "outlook", "winword", "excel", "powerpnt",
+        "crashpad", "crashpad_handler", "msedgewebview2",
     };
 
     [StructLayout(LayoutKind.Sequential)]
